@@ -26,6 +26,40 @@ share/python-wheels/
 *.egg
 MANIFEST
 
+# Development environments
+.idea/
+.vscode/
+
+# Node modules
+node_modules/
+
+# Virtual environments
+.env
+.envrc
+.venv/
+venv/
+ENV/
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Log files
+*.log
+logs/
+
+# Resume files
+backend/resumes/
+
+# Avatar files
+backend/avatars/
+
+# Python cache
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
 # PyInstaller
 #  Usually these files are written by a python script from a template
 #  before PyInstaller builds the exe, so as to inject date/other infos into it.
