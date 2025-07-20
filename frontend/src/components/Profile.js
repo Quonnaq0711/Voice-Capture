@@ -924,6 +924,19 @@ const ResumeUpload = ({ onUploadSuccess }) => {
   const [isUploading, setIsUploading] = useState(false);
   const [toast, setToast] = useState(null);
   const fileInputRef = useRef(null);
+  const timersRef = useRef({ progressInterval: null, completionTimeout: null });
+
+  // Cleanup timers on component unmount
+  useEffect(() => {
+    return () => {
+      if (timersRef.current.progressInterval) {
+        clearInterval(timersRef.current.progressInterval);
+      }
+      if (timersRef.current.completionTimeout) {
+        clearTimeout(timersRef.current.completionTimeout);
+      }
+    };
+  }, []);
 
   const showToast = (message, type) => {
     setToast({ message, type });
@@ -950,10 +963,11 @@ const ResumeUpload = ({ onUploadSuccess }) => {
 
     try {
       // Simulate upload progress
-      const progressInterval = setInterval(() => {
+      timersRef.current.progressInterval = setInterval(() => {
         setUploadProgress(prev => {
           if (prev >= 90) {
-            clearInterval(progressInterval);
+            clearInterval(timersRef.current.progressInterval);
+            timersRef.current.progressInterval = null;
             return 90;
           }
           return prev + 10;
@@ -962,18 +976,30 @@ const ResumeUpload = ({ onUploadSuccess }) => {
 
       await auth.uploadResume(file);
       
-      clearInterval(progressInterval);
+      if (timersRef.current.progressInterval) {
+        clearInterval(timersRef.current.progressInterval);
+        timersRef.current.progressInterval = null;
+      }
       setUploadProgress(100);
-      
-      setTimeout(() => {
+
+      timersRef.current.completionTimeout = setTimeout(() => {
         setIsUploading(false);
         setUploadProgress(0);
         showToast('Resume uploaded successfully!', 'success');
         if (onUploadSuccess) {
           onUploadSuccess();
         }
+        timersRef.current.completionTimeout = null;
       }, 500);
     } catch (error) {
+      if (timersRef.current.progressInterval) {
+        clearInterval(timersRef.current.progressInterval);
+        timersRef.current.progressInterval = null;
+      }
+      if (timersRef.current.completionTimeout) {
+        clearTimeout(timersRef.current.completionTimeout);
+        timersRef.current.completionTimeout = null;
+      }
       setIsUploading(false);
       setUploadProgress(0);
       showToast('Failed to upload resume: ' + error.message, 'error');

@@ -2,6 +2,7 @@ from datetime import datetime
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, JSON
 from sqlalchemy.orm import relationship
 from backend.db.database import Base
+from backend.models.user import User
 
 class UserProfile(Base):
     __tablename__ = "user_profiles"

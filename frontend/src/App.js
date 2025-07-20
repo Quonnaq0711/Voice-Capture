@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import AutoLogoutProvider from './contexts/AutoLogoutProvider';
@@ -8,6 +8,7 @@ import Register from './components/Register';
 import Dashboard from './components/Dashboard';
 import Profile from './components/Profile';
 import OnboardingWizard from './components/OnboardingWizard';
+import memoryMonitor from './utils/memoryMonitor';
 
 // Placeholder components for agent routes
 const AgentPage = ({ agentName }) => (
@@ -18,6 +19,23 @@ const AgentPage = ({ agentName }) => (
 );
 
 function App() {
+  // Set up global memory monitoring and cleanup
+  useEffect(() => {
+    // Global cleanup function for when the app unmounts
+    const handleBeforeUnload = () => {
+      memoryMonitor.cleanup();
+    };
+
+    // Listen for page unload to cleanup resources
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    // Cleanup function for component unmount
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      memoryMonitor.cleanup();
+    };
+  }, []);
+
   return (
     <Router>
       <AuthProvider>

@@ -374,7 +374,11 @@ const PersonalAssistant = ({ user, isDialogOpen: externalIsDialogOpen, setIsDial
       <AssistantAvatar />
       
       {isDialogOpen && (
-        <ChatDialog onClose={() => setIsDialogOpen(false)} assistantPosition={position} />
+        <ChatDialog 
+          onClose={() => setIsDialogOpen(false)} 
+          assistantPosition={position} 
+          setAssistantPosition={setPosition} 
+        />
       )}
     </div>
   );
