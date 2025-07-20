@@ -19,6 +19,7 @@ class SessionResponse(BaseModel):
     created_at: datetime
     is_active: bool
     message_count: int
+    unread: bool
 
 class CreateSessionRequest(BaseModel):
     session_name: str
@@ -85,6 +86,7 @@ async def get_user_sessions(
                 s.first_message_time,
                 s.created_at,
                 s.is_active,
+                s.unread,
                 COUNT(m.id) as message_count
             FROM chat_sessions s
             LEFT JOIN chat_messages m ON s.id = m.session_id
@@ -103,15 +105,106 @@ async def get_user_sessions(
                 "first_message_time": row[2],
                 "created_at": row[3],
                 "is_active": bool(row[4]),
-                "message_count": row[5]
+                "unread": bool(row[5]),
+                "message_count": row[6]
             })
         
+        # Mark the active session as read
+        active_session = next((s for s in sessions if s['is_active']), None)
+        if active_session:
+            db.execute(
+                text("UPDATE chat_sessions SET unread = 0 WHERE id = :session_id"),
+                {"session_id": active_session['id']}
+            )
+            db.commit()
+            active_session['unread'] = False
+
         return sessions
         
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get sessions: {str(e)}"
+        )
+
+@router.put("/sessions/{session_id}/read")
+async def mark_session_as_read(
+    session_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Mark a specific session as read (unread = false)
+    """
+    try:
+        # Verify session belongs to current user
+        session_check = db.execute(
+            text("SELECT id FROM chat_sessions WHERE id = :session_id AND user_id = :user_id"),
+            {"session_id": session_id, "user_id": current_user.id}
+        ).fetchone()
+        
+        if not session_check:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Session not found"
+            )
+        
+        # Mark session as read
+        db.execute(
+            text("UPDATE chat_sessions SET unread = 0 WHERE id = :session_id"),
+            {"session_id": session_id}
+        )
+        db.commit()
+        
+        return {"message": "Session marked as read"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to mark session as read: {str(e)}"
+        )
+
+@router.put("/sessions/{session_id}/unread")
+async def mark_session_as_unread(
+    session_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Mark a specific session as unread (unread = true)
+    """
+    try:
+        # Verify session belongs to current user
+        session_check = db.execute(
+            text("SELECT id FROM chat_sessions WHERE id = :session_id AND user_id = :user_id"),
+            {"session_id": session_id, "user_id": current_user.id}
+        ).fetchone()
+        
+        if not session_check:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Session not found"
+            )
+        
+        # Mark session as unread
+        db.execute(
+            text("UPDATE chat_sessions SET unread = 1 WHERE id = :session_id"),
+            {"session_id": session_id}
+        )
+        db.commit()
+        
+        return {"message": "Session marked as unread"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to mark session as unread: {str(e)}"
         )
 
 @router.get("/sessions/{session_id}/messages", response_model=SessionMessagesResponse)
@@ -214,6 +307,51 @@ async def activate_session(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to activate session: {str(e)}"
+        )
+
+class UpdateSessionRequest(BaseModel):
+    session_name: str
+
+@router.put("/sessions/{session_id}/name")
+async def update_session_name(
+    session_id: int,
+    request: UpdateSessionRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Update the name of a specific session
+    """
+    try:
+        # Verify session belongs to current user
+        session_check = db.execute(
+            text("SELECT id FROM chat_sessions WHERE id = :session_id AND user_id = :user_id"),
+            {"session_id": session_id, "user_id": current_user.id}
+        ).fetchone()
+        
+        if not session_check:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Session not found"
+            )
+        
+        # Update session name
+        db.execute(
+            text("UPDATE chat_sessions SET session_name = :session_name WHERE id = :session_id"),
+            {"session_name": request.session_name, "session_id": session_id}
+        )
+        
+        db.commit()
+        
+        return {"message": "Session name updated successfully"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update session name: {str(e)}"
         )
 
 @router.get("/sessions/active")
