@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useAuth } from '../contexts/AuthContext';
+// import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { profile as profileAPI, auth } from '../services/api';
 import {
@@ -2086,7 +2086,7 @@ const SpiritualProfile = ({ profile, setProfile, onSave, loading }) => {
 
 // Main Profile Component
 const Profile = () => {
-  const { user, token } = useAuth();
+  // const { user, token } = useAuth();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('account');
   const [activeAgentTab, setActiveAgentTab] = useState('career');
@@ -2110,7 +2110,7 @@ const Profile = () => {
   
   // Avatar state
   const [avatarUrl, setAvatarUrl] = useState(null);
-  const [avatarFile, setAvatarFile] = useState(null);
+  // const [avatarFile, setAvatarFile] = useState(null);
   const [isImgError, setImgError] = useState(false);
   
   // Profile state
