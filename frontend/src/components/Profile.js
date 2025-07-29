@@ -2111,6 +2111,7 @@ const Profile = () => {
   // Avatar state
   const [avatarUrl, setAvatarUrl] = useState(null);
   const [avatarFile, setAvatarFile] = useState(null);
+  const [isImgError, setImgError] = useState(false);
   
   // Profile state
   const [profile, setProfile] = useState({
@@ -2232,6 +2233,7 @@ const Profile = () => {
     const file = e.target.files[0];
     if (!file) return;
     
+    setImgError(false);
     setLoading(true);
     setError('');
     setMessage('');
@@ -2249,7 +2251,7 @@ const Profile = () => {
 
   const handleAvatarDelete = async () => {
     setLoading(true);
-    setError('');
+    setImgError(true);
     setMessage('');
     
     try {
@@ -2407,10 +2409,11 @@ const Profile = () => {
                   <div className="flex items-center justify-between mb-6">
                     <div className="flex items-center space-x-4">
                       <div className="relative">
-                        {avatarUrl ? (
+                        {avatarUrl && !isImgError? (
                           <img
                             src={avatarUrl}
                             alt="Profile"
+                            onError={()=> setImgError(true)}
                             className="h-24 w-24 rounded-full object-cover border-4 border-white shadow-lg ring-4 ring-blue-100"
                           />
                         ) : (
@@ -2442,7 +2445,7 @@ const Profile = () => {
                           className="hidden"
                         />
                       </label>
-                      {avatarUrl && (
+                      {avatarUrl &&  (
                         <button
                           onClick={handleAvatarDelete}
                           className="bg-gradient-to-r from-red-500 to-pink-500 text-white px-6 py-3 rounded-xl hover:from-red-600 hover:to-pink-600 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"

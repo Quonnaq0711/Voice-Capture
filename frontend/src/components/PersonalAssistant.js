@@ -64,7 +64,7 @@ const PersonalAssistant = ({ user, isDialogOpen: externalIsDialogOpen, setIsDial
     if (mouseTravel < 5) {
       setIsDialogOpen(true);
     }
-  }, [initialMousePos]);
+  }, [initialMousePos, setIsDialogOpen]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -217,7 +217,7 @@ const PersonalAssistant = ({ user, isDialogOpen: externalIsDialogOpen, setIsDial
     if (onCountdownMessage) {
       onCountdownMessage(`Redirecting to ${agent.displayName} Agent in 3 seconds...`);
     }
-  }, [location.pathname, agents, getCurrentAgent, showCountdown]);
+  }, [location.pathname, agents, getCurrentAgent, showCountdown, targetAgent]);
   
   // Expose functions and state to global window object
   useEffect(() => {
