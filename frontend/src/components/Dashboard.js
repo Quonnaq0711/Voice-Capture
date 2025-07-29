@@ -21,6 +21,7 @@ const Dashboard = () => {
   const [isAssistantDialogOpen, setIsAssistantDialogOpen] = useState(false);
   const [personalizedInsights, setPersonalizedInsights] = useState([]);
   const [recommendedAgents, setRecommendedAgents] = useState([]);
+  const [isImgError, setImgError] = useState(false);
 
   // Fetch user data and avatar on component mount
   useEffect(() => {
@@ -239,10 +240,11 @@ const Dashboard = () => {
                 className="flex items-center space-x-3 bg-gray-50 rounded-lg px-3 py-2 hover:bg-gray-100 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
               >
                 <div className="flex-shrink-0">
-                  {avatarUrl ? (
+                  {avatarUrl && !isImgError? (
                     <img
                       src={avatarUrl}
                       alt="User Avatar"
+                      onError={() => setImgError(true)}
                       className="h-8 w-8 rounded-full object-cover border-2 border-blue-200"
                     />
                   ) : (
