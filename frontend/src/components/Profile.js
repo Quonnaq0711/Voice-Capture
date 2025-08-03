@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 // import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import { usePasswordCountDown } from '../contexts/PasswordReset';
 import { profile as profileAPI, auth } from '../services/api';
 import {
   UserCircleIcon,
@@ -2093,6 +2094,7 @@ const Profile = () => {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const { banner, daysLeft, closeBanner } = usePasswordCountDown();
   
   // User data state
   const [userData, setUserData] = useState({
@@ -2317,7 +2319,7 @@ const Profile = () => {
     }
   };
 
-  return (
+   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
@@ -2325,7 +2327,7 @@ const Profile = () => {
           <button
             onClick={() => navigate('/dashboard')}
             className="flex items-center text-gray-600 hover:text-gray-900 mb-4 transition-colors"
-          >
+            >
             <ArrowLeftIcon className="h-5 w-5 mr-2" />
             Back to Dashboard
           </button>
@@ -2350,10 +2352,25 @@ const Profile = () => {
               <span className="text-red-800">{error}</span>
             </div>
           </div>
-        )}
+         )}
+         
+        {banner && (
+          <div className="relative bg-yellow-200 text-yellow-900 px-4 py-3 border border-black flex items-center justify-between rounded-md">
+            <p className="text-sm sm:text-base">
+              ⚠️ Your password needs to be updated in {daysLeft} day {daysLeft !== 1 ? 's' : ''}.
+            </p>
+            <button
+              onClick={closeBanner}
+              className="absolute right-4 top-3 bg-transparent border-0 text-yellow-900 hover:text-yellow-950 cursor-pointer text-lg leading-none"
+              aria-label="Close banner"
+            >
+              ×
+            </button>
+          </div>
+        )}                            
 
         {/* Main Tabs */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden top-8">
           <div className="border-b border-gray-200">
             <nav className="flex space-x-8 px-6">
               <button
@@ -2522,8 +2539,7 @@ const Profile = () => {
                         <div className="flex items-center">
                           <div className="w-3 h-3 bg-green-500 rounded-full mr-3"></div>
                           <div>
-                            <p className="font-semibold text-gray-900">Password Protection</p>
-                            <p className="text-sm text-gray-600">Last updated 30 days ago</p>
+                             <p className="font-semibold text-gray-900">Password Protection</p>
                           </div>
                         </div>
                         <button
@@ -2531,7 +2547,7 @@ const Profile = () => {
                           className="bg-gradient-to-r from-green-600 to-emerald-600 text-white px-6 py-2 rounded-xl hover:from-green-700 hover:to-emerald-700 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
                         >
                           <KeyIcon className="h-4 w-4 inline mr-2" />
-                          Change
+                          Change Password
                         </button>
                       </div>
                       
