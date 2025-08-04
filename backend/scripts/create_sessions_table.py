@@ -22,6 +22,7 @@ def create_sessions_table():
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 is_active BOOLEAN DEFAULT FALSE,
+                unread BOOLEAN DEFAULT 0,
                 FOREIGN KEY (user_id) REFERENCES users (id)
             )
         ''')
@@ -37,6 +38,16 @@ def create_sessions_table():
             ''')
             print("Added session_id column to chat_messages table")
         
+        # Add unread column if not exists
+        cursor.execute("PRAGMA table_info(chat_sessions)")
+        columns = [column[1] for column in cursor.fetchall()]
+        if 'unread' not in columns:
+            cursor.execute('''
+                ALTER TABLE chat_sessions 
+                ADD COLUMN unread BOOLEAN DEFAULT 0
+            ''')
+            print("Added unread column to chat_sessions table")
+
         # Create index for better performance
         cursor.execute('''
             CREATE INDEX IF NOT EXISTS idx_chat_sessions_user_id 

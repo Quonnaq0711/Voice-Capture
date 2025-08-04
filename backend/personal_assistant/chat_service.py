@@ -312,9 +312,17 @@ class ChatService:
             True if messages were removed successfully
         """
         try:
+            # Ensure we have the session history loaded; attempt to hydrate from the database
             if session_id not in self.store:
-                return True  # No messages to remove
-                
+                try:
+                    self.get_session_history(session_id)
+                except Exception as e:
+                    logger.error(f"Failed to hydrate history for session {session_id}: {str(e)}")
+                    return True  # Cannot load history, treat as nothing to remove
+
+            if session_id not in self.store:
+                return True  # Still no messages to remove after hydration
+            
             messages = self.store[session_id].messages
             if message_index < len(messages):
                 # Keep only messages up to the specified index
@@ -339,7 +347,15 @@ class ChatService:
         """
         try:
             if session_id not in self.store:
-                return False
+                # Attempt to hydrate history so we can update correct messages
+                try:
+                    self.get_session_history(session_id)
+                except Exception as e:
+                    logger.error(f"Failed to hydrate history for session {session_id}: {str(e)}")
+                    return True  # Cannot load history, treat as nothing to update
+
+            if session_id not in self.store:
+                return True  # Still no messages to update after hydration
                 
             messages = self.store[session_id].messages
             if 0 <= message_index < len(messages):
@@ -786,30 +802,39 @@ class ChatService:
             Health status information
         """
         try:
-            # Test with a simple prompt
+            # Test with a simple prompt to verify Ollama connection
+            logger.info("Health check: Testing Ollama connection...")
             test_response = await self.generate_response("Hello")
+            logger.info(f"Health check: Test response received: {test_response}")
             
             if test_response["status"] == "success":
-                return {
+                result = {
                     "status": "healthy",
                     "model": self.model_name,
                     "base_url": self.base_url
                 }
+                logger.info(f"Health check: Returning healthy status: {result}")
+                return result
             else:
-                return {
+                result = {
                     "status": "unhealthy",
                     "model": self.model_name,
                     "base_url": self.base_url,
                     "error": test_response.get("error", "Unknown error")
                 }
+                logger.warning(f"Health check: Returning unhealthy status: {result}")
+                return result
                 
         except Exception as e:
-            return {
+            result = {
                 "status": "unhealthy",
                 "model": self.model_name,
                 "base_url": self.base_url,
                 "error": str(e)
             }
+            logger.error(f"Health check: Exception occurred: {e}")
+            logger.error(f"Health check: Returning error status: {result}")
+            return result
 
 # Global chat service instance
 chat_service = None

@@ -11,7 +11,7 @@ import OnboardingWizard from './components/OnboardingWizard';
 import ResetPasswordRequest from './components/ResetPasswordRequest';
 import VerifyPasswordOTP from './components/VerifyPasswordOTP';
 import VerifyRegistration from './components/VerifyRegistration';
-
+import CareerAgent from './components/CareerAgent';
 import memoryMonitor from './utils/memoryMonitor';
 
 // Placeholder components for agent routes
@@ -71,16 +71,14 @@ function App() {
                 <Profile />
               </PrivateRoute>
             }
-            />
-            {/* OTP Routes */}
-            <Route path="/request-password" element={<ResetPasswordRequest />} />
-            <Route path="/confirm-password" element={<VerifyPasswordOTP />} />
-            <Route path="/confirm-registration" element={<VerifyRegistration />} /> 
-
-
+          />
+          {/* OTP Routes */}
+          <Route path="/request-password" element={<ResetPasswordRequest />} />
+          <Route path="/confirm-password" element={<VerifyPasswordOTP />} />
+          <Route path="/confirm-registration" element={<VerifyRegistration />} /> 
 
           {/* Agent Routes */}
-          <Route path="/agents/career" element={<PrivateRoute><AgentPage agentName="Career" /></PrivateRoute>} />
+          <Route path="/agents/career" element={<PrivateRoute><CareerAgent /></PrivateRoute>} />
           <Route path="/agents/money" element={<PrivateRoute><AgentPage agentName="Money" /></PrivateRoute>} />
           <Route path="/agents/mind" element={<PrivateRoute><AgentPage agentName="Mind" /></PrivateRoute>} />
           <Route path="/agents/travel" element={<PrivateRoute><AgentPage agentName="Travel" /></PrivateRoute>} />

@@ -48,10 +48,15 @@ async def create_session(
         # Create new session
         cursor = db.execute(
             text("""
-            INSERT INTO chat_sessions (user_id, session_name, first_message_time, is_active)
-            VALUES (:user_id, :session_name, :first_message_time, 1)
+            INSERT INTO chat_sessions (user_id, session_name, first_message_time, created_at, is_active, unread)
+            VALUES (:user_id, :session_name, :first_message_time, :created_at, 1, 0)
             """),
-            {"user_id": current_user.id, "session_name": request.session_name, "first_message_time": request.first_message_time}
+            {
+                "user_id": current_user.id, 
+                "session_name": request.session_name, 
+                "first_message_time": request.first_message_time,
+                "created_at": datetime.now()
+            }
         )
         
         session_id = cursor.lastrowid
@@ -232,7 +237,7 @@ async def get_session_messages(
         # Get messages for this session
         cursor = db.execute(
             text("""
-            SELECT id, message_text, sender, created_at
+            SELECT id, message_text, sender, created_at, agent_type
             FROM chat_messages
             WHERE session_id = :session_id
             ORDER BY created_at ASC
@@ -246,7 +251,8 @@ async def get_session_messages(
                 "id": row[0],
                 "message_text": row[1],
                 "sender": row[2],
-                "created_at": row[3]
+                "created_at": row[3],
+                "agent_type": row[4]
             })
         
         return {
@@ -434,4 +440,31 @@ async def delete_session(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to delete session: {str(e)}"
+        )
+
+@router.get("/sessions/unread/count")
+async def get_unread_sessions_count(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Get the count of unread chat sessions for the current user
+    """
+    try:
+        result = db.execute(
+            text("""
+                SELECT COUNT(*) as unread_count
+                FROM chat_sessions 
+                WHERE user_id = :user_id AND unread = 1
+            """),
+            {"user_id": current_user.id}
+        )
+        
+        count = result.fetchone()[0]
+        return {"unread_count": count}
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get unread sessions count: {str(e)}"
         )

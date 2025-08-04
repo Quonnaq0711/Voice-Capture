@@ -2,6 +2,7 @@ from datetime import datetime
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
 from backend.db.database import Base
+from backend.models.career_insight import CareerInsight
 
 class Resume(Base):
     __tablename__ = "resumes"
@@ -15,5 +16,6 @@ class Resume(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    # Relationship with User model
+    # Relationships
     user = relationship("User", back_populates="resumes")
+    career_insights = relationship("CareerInsight", back_populates="resume")
