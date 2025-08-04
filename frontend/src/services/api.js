@@ -112,6 +112,14 @@ resendRegistrationOTP: async (email) => {
   return response.data;
 },
 
+  // Get user profile
+  getProfile: async (token) => {
+    const response = await api.get('/profile/me', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return response.data;
+  },
+
   // User login
   login: async (email, password) => {
     const formData = new FormData();
@@ -178,10 +186,11 @@ resendRegistrationOTP: async (email) => {
 // Chat related API
 export const chat = {
   // Save chat message
-  saveMessage: async (messageText, sender, sessionId = null) => {
+  saveMessage: async (messageText, sender, sessionId = null, agentType = 'dashboard') => {
     const payload = {
       message_text: messageText,
       sender: sender,
+      agent_type: agentType,
     };
     if (sessionId) {
       payload.session_id = sessionId;
@@ -225,11 +234,13 @@ export const chat = {
 export const sessions = {
   // Create new session
   createSession: async (sessionName, firstMessageTime) => {
-    const response = await api.post('/chat/sessions', {
+    // The backend marks the newly created session as active, so create it first and then fetch the active session details
+    await api.post('/chat/sessions', {
       session_name: sessionName,
       first_message_time: firstMessageTime
     });
-    return response.data;
+    const activeSessionResponse = await api.get('/chat/sessions/active');
+    return activeSessionResponse.data;
   },
 
   // Get all user sessions
@@ -279,6 +290,12 @@ export const sessions = {
   // Mark a session as unread
   markSessionAsUnread: async (sessionId) => {
     const response = await api.put(`/chat/sessions/${sessionId}/unread`);
+    return response.data;
+  },
+
+  // Get count of unread sessions
+  getUnreadSessionsCount: async () => {
+    const response = await api.get('/chat/sessions/unread/count');
     return response.data;
   }
 }

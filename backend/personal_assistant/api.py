@@ -155,6 +155,7 @@ async def health_check(
 ):
     """
     Check the health status of the chat service.
+    Lightweight check for faster response.
     
     Args:
         chat_service: Injected chat service instance
@@ -163,11 +164,58 @@ async def health_check(
         Health status information
     """
     try:
+        # Lightweight health check - just verify service is available
+        # Skip the actual Ollama model test for faster response
+        logger.info("Health check: Performing lightweight service check...")
+        
+        # Check if chat service is properly initialized
+        if hasattr(chat_service, 'model_name') and hasattr(chat_service, 'base_url'):
+            result = {
+                "status": "healthy",
+                "model": chat_service.model_name,
+                "base_url": chat_service.base_url
+            }
+            logger.info(f"Health check: Returning healthy status: {result}")
+            return HealthResponse(**result)
+        else:
+            result = {
+                "status": "unhealthy",
+                "model": "unknown",
+                "base_url": "unknown",
+                "error": "Chat service not properly initialized"
+            }
+            logger.warning(f"Health check: Returning unhealthy status: {result}")
+            return HealthResponse(**result)
+            
+    except Exception as e:
+        logger.error(f"Error during health check: {str(e)}")
+        return HealthResponse(
+            status="unhealthy",
+            model="unknown",
+            base_url="unknown",
+            error=str(e)
+        )
+
+@router.get("/health/deep", response_model=HealthResponse)
+async def deep_health_check(
+    chat_service: ChatService = Depends(get_chat_service)
+):
+    """
+    Perform a deep health check of the chat service.
+    This includes testing the actual Ollama model connection.
+    
+    Args:
+        chat_service: Injected chat service instance
+        
+    Returns:
+        Comprehensive health status information
+    """
+    try:
         health_info = await chat_service.health_check()
         return HealthResponse(**health_info)
         
     except Exception as e:
-        logger.error(f"Error during health check: {str(e)}")
+        logger.error(f"Error during deep health check: {str(e)}")
         return HealthResponse(
             status="unhealthy",
             model="unknown",
