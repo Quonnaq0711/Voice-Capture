@@ -32,6 +32,7 @@ const CircularAgents = ({ agents, avatarUrl, user, triggerAnimation = false }) =
   const containerRef = useRef(null);
   const [radius, setRadius] = useState(280);
   const [isAnimating, setIsAnimating] = useState(false);
+  const [isImgError, setImgError] = useState(false);
 
   useEffect(() => {
     const updateRadius = () => {
@@ -79,13 +80,17 @@ const CircularAgents = ({ agents, avatarUrl, user, triggerAnimation = false }) =
       {/* Center Avatar */}
       <div className="absolute z-10 flex flex-col items-center" style={{ transform: 'translateY(-30px)' }}>
         <div className="h-36 w-36 md:h-40 md:w-40 rounded-full bg-gray-200 flex items-center justify-center">
-          {avatarUrl && (
+          {avatarUrl && !isImgError ? (
             <img
               src={avatarUrl}
               alt="User Avatar"
+              onError={() => setImgError(true)}
               className="h-full w-full rounded-full object-cover border-4 border-white shadow-lg"
             />
+          ) : (
+            <UserCircleIcon className="h-24 w-24 text-grey-400" />
           )}
+          
         </div>
         <p className="mt-4 text-lg font-semibold text-gray-800">{user?.username || 'User'}</p>
       </div>
