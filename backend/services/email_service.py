@@ -13,6 +13,8 @@ class Email_Service:
 
     You requested a password reset for your {os.getenv('APP_NAME')} account.
 
+    Here's your one-time Password (OTP):  {otp}
+
     If you have not requested this password, you can just ignore this message. 
 
     ⚠️ This password is only valid for the next {valid_time} minutes. 
