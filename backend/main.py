@@ -7,8 +7,8 @@ from .models.chat import ChatMessage
 from .models.session import ChatSession
 from .models.resume import Resume
 from .models.profile import UserProfile
-from .email_service import EmailService
-from .password_reset_service import PasswordResetService
+from services.email_service import EmailService
+from services.password_reset_service import PasswordResetService
 from .db.database import engine
 import os
 
