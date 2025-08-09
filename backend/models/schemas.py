@@ -1,3 +1,4 @@
+from httpx import request
 from pydantic import BaseModel, EmailStr
 from datetime import datetime
 from typing import Optional, List
@@ -75,6 +76,12 @@ class ChatMessage(ChatMessageBase):
 class ChatHistoryResponse(BaseModel):
     messages: List[ChatMessage]
     total_count: int
+
+class OTPResponse(UserBase):
+    requested_at: datetime
+    valid_time: int
+class ResetPasswordConfirm(UserBase):
+    resset_at: datetime
 
 # User Profile schemas
 class UserProfileBase(BaseModel):
