@@ -1,5 +1,5 @@
 import os
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from fastapi import APIRouter, Body, Depends, HTTPException, status, UploadFile, File
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from datetime import timedelta
@@ -68,10 +68,23 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = 
     return {"access_token": access_token, "token_type": "bearer"}
 
 # Password reset 
-from ..services import email_service, password_rest_service
+from ..services import email_service, password_reset_service
+email_service = email_service.EmailService()
+password_reset_service = (email_service)
 
+@router.post("/reset_password/request", response_model=schemas.OTPRequestResponse)
+async def OTP_request(email:str = Body(...), db: Session = Depends(get_db)):
+    return await password_reset_service.password_reset_request(db, email)
 
+@router.post("/reset_password/confirm", response_modal=schemas.OTPConfirmRequest)
+async def OTP_confirm(email: str = Body(...),
+                      otp: str = Body(...),
+                      new_password: str = Body(...),
+                      db: Session = Depends(get_db),
+                      ):
+    return await password_reset_service.verify_otp_and_reset_password(db, otp, new_password, email)
 
+# Resume Functions
 import uuid
 from ..models.resume import Resume
 

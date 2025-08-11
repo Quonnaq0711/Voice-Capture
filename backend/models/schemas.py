@@ -29,6 +29,13 @@ class Token(BaseModel):
 class TokenData(BaseModel):
     email: Optional[str] = None
 
+class OTPRequestResponse(UserBase):
+    requested_at: datetime
+    valid_time: int
+
+class OTPConfirmRequest(UserBase):
+    reset_at: datetime
+
 class ResumeBase(BaseModel):
     filename: str
     original_filename: str
