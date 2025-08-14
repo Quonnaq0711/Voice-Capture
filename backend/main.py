@@ -8,13 +8,10 @@ from .models.session import ChatSession
 from .models.resume import Resume
 from .models.profile import UserProfile
 from services.email_service import EmailService
-from services.password_reset_service import PasswordResetService
+from backend.services.otp_service import PasswordResetService
 from .db.database import engine
 import os
 
-# Load Env Varibles
-from dotenv import load_dotenv
-load_dotenv()
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
