@@ -6,6 +6,8 @@ from datetime import timedelta
 from typing import List
 import aiofiles
 
+from ..services.email_service import EmailService
+from ..services.otp_service import OTPPurpose, OTPService
 from ..models import schemas
 from ..models.user import User
 from ..utils.auth import (
@@ -18,26 +20,22 @@ from ..utils.auth import (
 from ..db.database import get_db
 
 router = APIRouter()
+otp_service = OTPService(EmailService())
+
 
 @router.post("/signup", response_model=schemas.User)
 async def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
     # Check if email already exists
     db_user = db.query(User).filter(User.email == user.email).first()
     if db_user:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email already registered"
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered")
     
     # Check if username already exists
     db_user = db.query(User).filter(User.username == user.username).first()
     if db_user:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Username already taken"
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Username already taken")
     
-    # Create new user
+    # Create new user (unverified)
     hashed_password = get_password_hash(user.password)
     db_user = User(
         username=user.username,
@@ -47,7 +45,15 @@ async def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
     db.add(db_user)
     db.commit()
     db.refresh(db_user)
+
+    # Send registration otp
+    await otp_service.otp_request(db, db_user.email, OTPPurpose.REGISTRATION)
     return db_user
+
+@router.post("/verify-registration")
+async def confirm_registration_otp(email:str, otp:str, db:Session = Depends(get_db)):
+    return await otp_service.verify_otp(db, email, otp, OTPPurpose.REGISTRATION)
+
 
 @router.post("/token", response_model=schemas.Token)
 async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
@@ -68,21 +74,18 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = 
     return {"access_token": access_token, "token_type": "bearer"}
 
 # Password reset 
-from ..services import email_service, password_reset_service
-email_service = email_service.EmailService()
-password_reset_service = (email_service)
 
-@router.post("/reset_password/request", response_model=schemas.OTPRequestResponse)
-async def OTP_request(email:str = Body(...), db: Session = Depends(get_db)):
-    return await password_reset_service.password_reset_request(db, email)
+@router.post("/reset-password-request")
+async def reset_password_request(email:str = Body(...), db: Session = Depends(get_db)):
+    return await otp_service.otp_request(db, email, OTPPurpose.PASSWORD_RESET)
 
-@router.post("/reset_password/confirm", response_modal=schemas.OTPConfirmRequest)
-async def OTP_confirm(email: str = Body(...),
+@router.post("/reset_password-confirm")
+async def reset_password_confirm(email: str = Body(...),
                       otp: str = Body(...),
                       new_password: str = Body(...),
                       db: Session = Depends(get_db),
                       ):
-    return await password_reset_service.verify_otp_and_reset_password(db, otp, new_password, email)
+    return await otp_service.verify_otp(db, otp, email, OTPPurpose.PASSWORD_RESET, new_password=new_password )
 
 # Resume Functions
 import uuid

@@ -2,6 +2,11 @@ import aiosmtplib
 from email.mime.text import MIMEText
 import os
 
+# Load Env Varibles
+from dotenv import load_dotenv
+load_dotenv()
+
+
 class EmailService:
     async def send_password_rest_otp(self, to_email: str, otp: str, valid_time: int):
         
