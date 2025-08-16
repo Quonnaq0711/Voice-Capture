@@ -100,7 +100,7 @@ Stay Safe,
 {self.app_name} Security Team
 """
 
-            # HTML version (optional but recommended)
+            # HTML version 
             html_content = f"""
 <!DOCTYPE html>
 <html>
