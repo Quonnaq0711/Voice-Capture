@@ -29,12 +29,24 @@ class Token(BaseModel):
 class TokenData(BaseModel):
     email: Optional[str] = None
 
-class OTPRequestResponse(UserBase):
-    requested_at: datetime
-    valid_time: int
+class VerifyRegistrationRequest(BaseModel):
+    email: str
+    otp: str
 
-class OTPConfirmRequest(UserBase):
-    reset_at: datetime
+class RegistrationVerificationResponse(BaseModel):
+    message: str
+
+class PasswordResetRequestModel(BaseModel):
+    email: EmailStr
+
+class PasswordResetConfirmModel(BaseModel):
+    email: EmailStr
+    otp: str
+    new_password: str
+
+class PasswordResetResponse(BaseModel):
+    message: str
+
 
 class ResumeBase(BaseModel):
     filename: str

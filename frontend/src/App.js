@@ -8,6 +8,8 @@ import Register from './components/Register';
 import Dashboard from './components/Dashboard';
 import Profile from './components/Profile';
 import OnboardingWizard from './components/OnboardingWizard';
+import ResetPasswordRequest from './components/ResetPasswordRequest';
+import VerifyPasswordOTP from './components/VerifyPasswordOTP';
 
 // Placeholder components for agent routes
 const AgentPage = ({ agentName }) => (
@@ -49,7 +51,15 @@ function App() {
                 <Profile />
               </PrivateRoute>
             }
-          />
+            />
+            {/* OTP Routes */}
+            <Route path="/password-request-otp" element={<ResetPasswordRequest />} />
+            <Route path="/password-confirm-otp" element={<VerifyPasswordOTP />} />
+            {/* <Route path="/registration-otp" element={<RegistrationRequest />} /> */}
+            {/* <Route path="/confirm-registration-otp" element={<VerifyRegistrationOTP />} /> */}
+
+
+
           {/* Agent Routes */}
           <Route path="/agents/career" element={<PrivateRoute><AgentPage agentName="Career" /></PrivateRoute>} />
           <Route path="/agents/money" element={<PrivateRoute><AgentPage agentName="Money" /></PrivateRoute>} />
