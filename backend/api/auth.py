@@ -40,7 +40,15 @@ async def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
     db_user = User(
         username=user.username,
         email=user.email,
-        hashed_password=hashed_password
+        hashed_password=hashed_password,
+        is_active=False,
+        # Initialize OTP-related fields
+        hotp_secret=None,
+        hotp_counter=0,
+        otp_requested_at=None,
+        otp_failed_attempts=0,
+        otp_locked_until=None,
+        otp_purpose=None
     )
     db.add(db_user)
     db.commit()
@@ -50,10 +58,59 @@ async def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
     await otp_service.otp_request(db, db_user.email, OTPPurpose.REGISTRATION)
     return db_user
 
-@router.post("/verify-registration")
-async def confirm_registration_otp(email:str, otp:str, db:Session = Depends(get_db)):
-    return await otp_service.verify_otp(db, email, otp, OTPPurpose.REGISTRATION)
+@router.post("/verify-registration", response_model=schemas.RegistrationVerificationResponse)
+async def confirm_registration_otp(
+    request: schemas.VerifyRegistrationRequest,
+    db: Session = Depends(get_db)
+):
 
+    # Verify the registration OTP and activate the user account.
+
+    try:
+        result = await otp_service.verify_otp(
+            db, 
+            request.email, 
+            request.otp, 
+            OTPPurpose.REGISTRATION
+        )
+        return result
+    except HTTPException as e:
+        # Re-raise the HTTPException from the OTP service
+        raise e
+    except Exception as e:
+        # Handle any unexpected errors
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="An error occurred during verification")
+
+# Resend verification OTP for users who didn't receive it or it expired.
+@router.post("/resend-verification-otp")
+async def resend_verification_otp(
+    email: str,
+    db: Session = Depends(get_db)
+):    
+    # Check if user exists and is not already verified
+    user = db.query(User).filter(User.email == email).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    
+    if user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="User is already verified"
+        )
+    
+    try:
+        result = await otp_service.otp_request(db, email, OTPPurpose.REGISTRATION)
+        return result
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to send verification email"
+        )
 
 @router.post("/token", response_model=schemas.Token)
 async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
@@ -73,19 +130,61 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = 
     )
     return {"access_token": access_token, "token_type": "bearer"}
 
-# Password reset 
+# Password reset endpoints
+@router.post("/reset-password-request", response_model=schemas.PasswordResetResponse)
+async def reset_password_request(
+    request: schemas.PasswordResetRequestModel,  
+    db: Session = Depends(get_db)
+):
+    
+   # Request a password reset OTP for the given email address.
+    
+    try:
+        result = await otp_service.otp_request(db, request.email, OTPPurpose.PASSWORD_RESET)
+        return result
+    except HTTPException as e:
+        # Re-raise HTTP exceptions from the OTP service
+        raise e
+    except Exception as e:
+        # Handle unexpected errors
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to send password reset email"
+        )
 
-@router.post("/reset-password-request")
-async def reset_password_request(email:str = Body(...), db: Session = Depends(get_db)):
-    return await otp_service.otp_request(db, email, OTPPurpose.PASSWORD_RESET)
-
-@router.post("/reset_password-confirm")
-async def reset_password_confirm(email: str = Body(...),
-                      otp: str = Body(...),
-                      new_password: str = Body(...),
-                      db: Session = Depends(get_db),
-                      ):
-    return await otp_service.verify_otp(db, otp, email, OTPPurpose.PASSWORD_RESET, new_password=new_password )
+@router.post("/reset-password-confirm", response_model=schemas.PasswordResetResponse)
+async def reset_password_confirm(
+    request: schemas.PasswordResetConfirmModel,  
+    db: Session = Depends(get_db)
+):
+    
+    # Verify the password reset OTP and set the new password.
+    
+    # Basic password validation
+    if len(request.new_password) < 8:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password must be at least 7 characters long"
+        )
+    
+    try:
+        result = await otp_service.verify_otp(
+            db, 
+            request.email, 
+            request.otp, 
+            OTPPurpose.PASSWORD_RESET, 
+            new_password=request.new_password
+        )
+        return result
+    except HTTPException as e:
+        # Re-raise HTTP exceptions from the OTP service
+        raise e
+    except Exception as e:
+        # Handle unexpected errors
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to reset password"
+        )
 
 # Resume Functions
 import uuid
