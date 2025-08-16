@@ -55,7 +55,7 @@ class OTPService:
         elif purpose == OTPPurpose.REGISTRATION:
             await self.email_service.send_email_verification_otp(email, otp, self.valid_time)
 
-        # Fixed: f-string formatting
+        
         return {"message": f"Please check your email for your OTP to complete {purpose.value.replace('_', ' ')}."}
     
     async def verify_otp(self, db: Session, email: str, otp: str, purpose: OTPPurpose, new_password: str = None):
