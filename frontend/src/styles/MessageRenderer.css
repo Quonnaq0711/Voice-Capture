@@ -1,0 +1,33 @@
+/* KaTeX container styles to prevent layout conflicts */
+.katex-container {
+  contain: layout style;
+  isolation: isolate;
+}
+
+.katex-inline {
+  contain: layout style;
+  isolation: isolate;
+  vertical-align: -0.5em;
+}
+
+/* Ensure KaTeX doesn't affect parent flex layouts */
+.katex-container .katex,
+.katex-inline .katex {
+  display: inline-block !important;
+  vertical-align: baseline;
+}
+
+/* Prevent KaTeX from affecting dialog height */
+.katex-container .katex-display {
+  margin: 0.5em 0 !important;
+  overflow-x: auto;
+  overflow-y: visible;
+}
+
+/* Reset any potential height conflicts */
+.katex-container,
+.katex-inline {
+  height: auto !important;
+  min-height: unset !important;
+  max-height: unset !important;
+}
