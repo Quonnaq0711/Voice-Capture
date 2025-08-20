@@ -18,7 +18,7 @@ class EmailService:
         self.mailgun_api_key = os.getenv('MAILGUN_API_KEY')
         self.mailgun_domain = os.getenv('MAILGUN_DOMAIN')
         self.mailgun_base_url = f"https://api.mailgun.net/v3/{self.mailgun_domain}"
-        self.app_name = os.getenv('APP_NAME', 'Your App')
+        self.app_name = os.getenv('APP_NAME')
         self.from_email = os.getenv('FROM_EMAIL') or f"noreply@{self.mailgun_domain}"
     
     def validate_mailgun_config(self):
@@ -78,7 +78,7 @@ class EmailService:
         try:
             logger.info(f"Sending password reset OTP to: {to_email}")
             
-            subject = "🔒 Your {self.app_name} Password Reset Verification Code"
+            subject = f"🔒 Your {self.app_name} Password Reset Verification Code"
             
             # Text version
             text_content = f"""
@@ -155,7 +155,7 @@ Stay Safe,
         try:
             logger.info(f"Sending email verification OTP to: {to_email}")
             
-            subject = "🔒 Your {self.app_name} Email Verification Code"
+            subject = f"🔒 Your {self.app_name} Email Verification Code"
             
             # Text version
             text_content = f"""
