@@ -9,7 +9,7 @@ const api = axios.create({
   },
 });
 
-// Request interceptor: add token
+// Request interceptor: add token to headers
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token');
@@ -23,8 +23,73 @@ api.interceptors.request.use(
   }
 );
 
+let isRefreshing = false;
+let failedQueue = [];
+
+const processQueue = (error, token = null) => {
+  failedQueue.forEach(prom => {
+    if (error) {
+      prom.reject(error);
+    } else {
+      prom.resolve(token);
+    }
+  });
+
+  failedQueue = [];
+};
+
+// Response interceptor: handle token refresh
+api.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const originalRequest = error.config;
+    if (error.response.status === 401 && !originalRequest._retry) {
+      if (isRefreshing) {
+        return new Promise(function(resolve, reject) {
+          failedQueue.push({resolve, reject});
+        }).then(token => {
+          originalRequest.headers['Authorization'] = 'Bearer ' + token;
+          return api(originalRequest);
+        }).catch(err => {
+          return Promise.reject(err);
+        });
+      }
+
+      originalRequest._retry = true;
+      isRefreshing = true;
+
+      return new Promise(function (resolve, reject) {
+        auth.refreshToken().then(data => {
+          const newToken = data.access_token;
+          api.defaults.headers.common['Authorization'] = 'Bearer ' + newToken;
+          originalRequest.headers['Authorization'] = 'Bearer ' + newToken;
+          processQueue(null, newToken);
+          resolve(api(originalRequest));
+        }).catch((err) => {
+          processQueue(err, null);
+          auth.logout();
+          window.location.href = '/login';
+          reject(err);
+        }).finally(() => {
+          isRefreshing = false;
+        });
+      });
+    }
+    return Promise.reject(error);
+  }
+);
+
 // Authentication related API
 export const auth = {
+  // Refresh token
+  refreshToken: async () => {
+    const response = await api.post('/auth/token/refresh');
+    if (response.data.access_token) {
+      localStorage.setItem('token', response.data.access_token);
+    }
+    return response.data;
+  },
+
   // User registration
   register: async (username, email, password) => {
     const response = await api.post('/auth/signup', { username, email, password });
@@ -81,11 +146,15 @@ export const auth = {
 // Chat related API
 export const chat = {
   // Save chat message
-  saveMessage: async (messageText, sender) => {
-    const response = await api.post('/chat/messages', {
+  saveMessage: async (messageText, sender, sessionId = null) => {
+    const payload = {
       message_text: messageText,
-      sender: sender
-    });
+      sender: sender,
+    };
+    if (sessionId) {
+      payload.session_id = sessionId;
+    }
+    const response = await api.post('/chat/messages', payload);
     return response.data;
   },
 
@@ -102,6 +171,20 @@ export const chat = {
   // Clear chat history
   clearHistory: async () => {
     const response = await api.delete('/chat/messages');
+    return response.data;
+  },
+
+  // Update a specific message
+  updateMessage: async (messageId, messageText) => {
+    const response = await api.put(`/chat/messages/${messageId}`, {
+      message_text: messageText
+    });
+    return response.data;
+  },
+
+  // Delete messages after a specific index
+  deleteMessagesAfterIndex: async (messageIndex) => {
+    const response = await api.delete(`/chat/messages/after/${messageIndex}`);
     return response.data;
   }
 };
@@ -144,6 +227,26 @@ export const sessions = {
   // Delete a session
   deleteSession: async (sessionId) => {
     const response = await api.delete(`/chat/sessions/${sessionId}`);
+    return response.data;
+  },
+
+  // Update session name
+  updateSessionName: async (sessionId, sessionName) => {
+    const response = await api.put(`/chat/sessions/${sessionId}/name`, {
+      session_name: sessionName
+    });
+    return response.data;
+  },
+
+  // Mark a session as read
+  markSessionAsRead: async (sessionId) => {
+    const response = await api.put(`/chat/sessions/${sessionId}/read`);
+    return response.data;
+  },
+
+  // Mark a session as unread
+  markSessionAsUnread: async (sessionId) => {
+    const response = await api.put(`/chat/sessions/${sessionId}/unread`);
     return response.data;
   }
 }
