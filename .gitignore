@@ -222,6 +222,9 @@ cython_debug/
 #  you could uncomment the following to ignore the entire vscode folder
 # .vscode/
 
+# Vercel
+.vercel/
+
 # Ruff stuff:
 .ruff_cache/
 

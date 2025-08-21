@@ -254,19 +254,25 @@ python scripts/migrate_career_fields.py
 
 ### 1. Start the Backend Server
 
-Open a terminal and navigate to the backend directory:
+Open a terminal and navigate to the Product root directory:
 
 ```bash
-cd backend
+# Activate conda environment
 conda activate sadaora
 
-# Method 1: Using uvicorn directly
+# Method 1: From Product root directory (Recommended)
+python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload
+
+# Method 2: Navigate to backend directory first
+cd backend
 uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 
-# Method 2: Using Python
+# Method 3: Using Python directly (from backend directory)
+cd backend
 python main.py
 
-# Method 3: For development with auto-reload
+# Method 4: For development with auto-reload (from backend directory)
+cd backend
 uvicorn main:app --reload
 ```
 
@@ -277,7 +283,56 @@ The backend server will start at `http://localhost:8000`
 - You should see: `{"message": "Sadaora AI Assistant Platform API"}`
 - Check API docs at: `http://localhost:8000/docs`
 
-### 2. Start the Frontend Development Server
+### 2. Start the Personal Assistant Chat API (Optional)
+
+The Personal Assistant Chat API provides AI chat functionality using local Ollama LLM. This is optional but required for chat features.
+
+#### Prerequisites for Personal Assistant
+
+1. **Install Ollama**:
+   - Visit [https://ollama.ai/download](https://ollama.ai/download) and download Ollama
+   - Install following the platform-specific instructions
+   - Start Ollama service:
+     ```bash
+     ollama serve
+     ```
+
+2. **Pull the required model**:
+   ```bash
+   ollama pull gemma3:latest
+   ```
+
+#### Start the Personal Assistant API
+
+Open a new terminal and navigate to the personal assistant directory:
+
+```bash
+# Navigate to personal assistant directory
+cd backend/personal_assistant
+
+# Activate conda environment
+conda activate sadaora
+
+# Option 1: Using the startup script (Recommended)
+python start_chat_api.py
+
+# Option 2: Manual start
+# Install dependencies first
+pip install -r requirements.txt
+# Then start the API
+python main.py
+# OR
+uvicorn main:app --host 0.0.0.0 --port 8001 --reload
+```
+
+The Personal Assistant API will start at `http://localhost:8001`
+
+#### Verify Personal Assistant is Running:
+- Open `http://localhost:8001` in your browser
+- Check API docs at: `http://localhost:8001/docs`
+- Test health endpoint: `http://localhost:8001/api/chat/health`
+
+### 3. Start the Frontend Development Server
 
 Open a new terminal and navigate to the frontend directory:
 
@@ -290,11 +345,13 @@ npm start
 
 The frontend will start at `http://localhost:3000` and automatically open in your browser.
 
-### 3. Verify Full Application
+### 4. Verify Full Application
 
 1. Frontend should be accessible at `http://localhost:3000`
 2. Backend API should be accessible at `http://localhost:8000`
-3. Frontend should be able to communicate with backend (check browser console for any errors)
+3. Personal Assistant API should be accessible at `http://localhost:8001` (if started)
+4. Frontend should be able to communicate with backend (check browser console for any errors)
+5. Chat functionality should work if Personal Assistant API is running
 
 ## Running Tests
 
@@ -433,6 +490,47 @@ The backend tests cover:
 - ✅ **Chat API** (`test_chat.py`) - Create messages, get history with pagination, clear history, session filtering
 - ✅ **Sessions API** (`test_sessions.py`) - Create/get/activate/delete sessions, session messages, active session management
 
+### Personal Assistant API Tests
+
+The Personal Assistant Chat API includes its own comprehensive test suite.
+
+Navigate to the personal assistant directory:
+
+```bash
+cd backend/personal_assistant
+conda activate sadaora
+```
+
+#### Install Test Dependencies
+
+```bash
+# Install test dependencies
+pip install pytest pytest-asyncio httpx
+```
+
+#### Run Personal Assistant Tests
+
+```bash
+# Run all tests
+pytest tests/
+
+# Run with verbose output
+pytest tests/ -v
+
+# Run with coverage reporting
+pytest tests/ --cov=. --cov-report=term-missing
+
+# Run specific test files
+pytest tests/unit/test_api.py
+pytest tests/unit/test_streaming.py
+```
+
+#### Personal Assistant Test Coverage
+
+The Personal Assistant tests cover:
+- ✅ **Core API Tests** (`test_api.py`) - Send message endpoint, health checks, memory management, chat history, model information
+- ✅ **Streaming API Tests** (`test_streaming.py`) - Server-Sent Events (SSE) streaming, real-time message streaming, multi-part responses
+
 ## Troubleshooting
 
 ### Common Issues
@@ -489,6 +587,58 @@ The backend tests cover:
 3. **CORS Errors**
    - Ensure backend is running on port 8000
    - Check that `proxy` in `package.json` points to correct backend URL
+
+#### Personal Assistant Issues
+
+1. **"Connection refused" errors**
+   ```bash
+   # Ensure Ollama is running
+   ollama serve
+   
+   # Check if port 11434 is accessible
+   curl http://localhost:11434
+   ```
+
+2. **"Model not found" errors**
+   ```bash
+   # Pull the required model
+   ollama pull gemma3:latest
+   
+   # Verify model is available
+   ollama list
+   ```
+
+3. **Port 8001 Already in Use**
+   ```bash
+   # Kill process using port 8001
+   # Windows
+   netstat -ano | findstr :8001
+   taskkill /PID <PID> /F
+   
+   # Linux/macOS
+   lsof -ti:8001 | xargs kill -9
+   
+   # Or change port in main.py
+   uvicorn main:app --port 8002
+   ```
+
+4. **Slow AI responses**
+   - Check Ollama performance and hardware resources
+   - Consider using a smaller/faster model
+   - Verify Ollama is using GPU acceleration if available
+
+5. **Personal Assistant API not starting**
+   ```bash
+   # Check dependencies
+   cd backend/personal_assistant
+   pip install -r requirements.txt
+   
+   # Check Ollama connection
+   python -c "import requests; print(requests.get('http://localhost:11434').status_code)"
+   
+   # Start with verbose logging
+   python main.py --log-level DEBUG
+   ```
 
 #### Test Issues
 
