@@ -38,8 +38,10 @@ class OTPService:
         
         # OTP Generator 
         if not user.hotp_secret:
-            user.hotp_secret = secrets.token_hex(20)
+            user.hotp_secret = pyotp.random_base32() #secrets.token_hex(20)
             user.hotp_counter = 0
+            db.commit()
+            
 
         # Increment
         user.hotp_counter += 1
