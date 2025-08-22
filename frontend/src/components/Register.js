@@ -23,6 +23,7 @@ const Register = () => {
       setError('');
       setLoading(true);
       await register(username, email, password);
+      
       //Set start date for 90 day passwrod reset
       localStorage.setItem('registrationDate', new Date().toISOString());
 
