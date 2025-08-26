@@ -15,11 +15,10 @@ class OTPPurpose(str, Enum):
     PASSWORD_RESET = "password_reset"
 
 class OTPService:
-    def __init__(self, email_service):
+    def __init__(self):
         self.valid_time = 5  # minutes
         self.failed_attempts = 3
         self.lockout_time = 15  # minutes
-        self.email_service = email_service
         self.request_timeout = 2  # minutes
 
     def user_by_email(self, db: Session, email: str):
@@ -50,17 +49,9 @@ class OTPService:
         user.otp_failed_attempts = 0 
         user.otp_purpose = purpose.value
         db.commit()
+        return otp
 
-        
-        if purpose == OTPPurpose.PASSWORD_RESET:
-            await self.email_service.send_password_reset_otp(email, otp, self.valid_time)
-        elif purpose == OTPPurpose.REGISTRATION:
-            await self.email_service.send_email_verification_otp(email, otp, self.valid_time)
-
-        
-        return {"message": f"Please check your email for your OTP to complete {purpose.value.replace('_', ' ')}."}
-    
-    async def verify_otp(self, db: Session, email: str, otp: str, purpose: OTPPurpose, new_password: str = None):
+    async def verify_otp(self, db: Session, email: str, otp: str, purpose: OTPPurpose):
         user = self.user_by_email(db, email)
 
         if not user:
@@ -90,19 +81,11 @@ class OTPService:
                 db.commit() 
                 raise HTTPException(status_code=400, detail=f'Invalid Passcode. You made {user.otp_failed_attempts} attempts out of {self.failed_attempts}.')
             
-        # Password reset
-        if purpose == OTPPurpose.PASSWORD_RESET:
-            if not new_password:
-                raise HTTPException(status_code=400, detail="New password is required for password reset.")
-            user.hashed_password = bcrypt.hash(new_password)  #hashpw(new_password.encode('utf-8'), bcrypt.gensalt())  # Fixed: proper bcrypt usage
-        elif purpose == OTPPurpose.REGISTRATION:
-            user.is_active = True
-
-        # Clean up OTP data after successful verification
+      # Clean up OTP data after successful verification
         user.otp_failed_attempts = 0  
         user.otp_locked_until = None
         user.otp_requested_at = None
         user.otp_purpose = None 
         db.commit()
 
-        return {"message": f"{purpose.value.replace('_', ' ').capitalize()} completed successfully"}
+        return True

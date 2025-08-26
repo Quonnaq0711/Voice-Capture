@@ -19,7 +19,7 @@ class EmailService:
         self.mailgun_domain = os.getenv('MAILGUN_DOMAIN')
         self.mailgun_base_url = f"https://api.mailgun.net/v3/{self.mailgun_domain}"
         self.app_name = os.getenv('APP_NAME')
-        self.from_email = os.getenv('FROM_EMAIL') or f"noreply@{self.mailgun_domain}"
+        self.from_email = os.getenv('FROM_EMAIL') or f"postmaster@{self.mailgun_domain}"
     
     def validate_mailgun_config(self):
         required_vars = ['MAILGUN_API_KEY', 'MAILGUN_DOMAIN', 'APP_NAME']
@@ -109,7 +109,7 @@ Stay Safe,
     <style>
         body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
         .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
-        .header {{ background-color: #f8f9fa; padding: 20px; border-radius: 5px; text-align: center; }}
+        .header {{ background-color: #f8f9fa; padding: 10px; border-radius: 5px; text-align: center; }}
         .otp {{ background-color: #007bff; color: white; padding: 15px; font-size: 24px; font-weight: bold; text-align: center; border-radius: 5px; margin: 20px 0; }}
         .warning {{ background-color: #fff3cd; border: 1px solid #ffeaa7; padding: 15px; border-radius: 5px; margin: 20px 0; }}
         .footer {{ margin-top: 30px; font-size: 14px; color: #666; }}
@@ -125,6 +125,7 @@ Stay Safe,
         <p>How's your day going? We see you're having a little technical difficulty.</p>
         <p>You requested a password reset for your <strong>{self.app_name}</strong> account.</p>
         
+        <p>Here's your OTP :</p>
         <div class="otp">{otp}</div>
         
         <div class="warning">
@@ -163,9 +164,11 @@ Hello there!
 
 How's your day going? We see you signed up for a new {self.app_name} account.
 
+WELCOME!!
+
 Here's your one-time Password (OTP): {otp}
 
-If you have not requested this verification, you can just ignore this message.
+If you have not created an account, you can safely ignore this message.
 
 ⚠️ This code is only valid for the next {valid_time} minutes.
 
@@ -199,13 +202,14 @@ Stay Safe,
         <p>Hello there!</p>
         <p>How's your day going? We see you signed up for a new <strong>{self.app_name}</strong> account.</p>
         
+        <p>Here's your one-time Password (OTP):</p>
         <div class="otp">{otp}</div>
         
         <div class="warning">
             <p>⚠️ <strong>Important:</strong> This code is only valid for the next {valid_time} minutes.</p>
         </div>
         
-        <p>If you have not requested this verification, you can safely ignore this message.</p>
+        <p>If you have not created an account, you can safely ignore this message.</p>
         
         <div class="footer">
             <p>As a precaution, you should not share this email with anyone. {self.app_name} or any of its affiliates will never ask you to give or share this password with anyone.</p>

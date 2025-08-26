@@ -1,3 +1,4 @@
+import email
 import os
 from fastapi import APIRouter, Body, Depends, HTTPException, status, UploadFile, File
 from fastapi.security import OAuth2PasswordRequestForm
@@ -6,8 +7,12 @@ from datetime import timedelta
 from typing import List
 import aiofiles
 
+from backend.services import password_reset_service
+
 from ..services.email_service import EmailService
-from ..services.otp_service import OTPPurpose, OTPService
+from ..services.otp_service import OTPService
+from backend.services.email_validation_service import EmailValidationService
+from backend.services.password_reset_service import PasswordResetService
 from ..models import schemas
 from ..models.user import User
 from ..utils.auth import (
@@ -18,13 +23,28 @@ from ..utils.auth import (
     ACCESS_TOKEN_EXPIRE_MINUTES
 )
 from ..db.database import get_db
+from backend.services.email_validation_service import EmailValidationService
+
+from backend.services.password_reset_service import PasswordResetService
 
 router = APIRouter()
-otp_service = OTPService(EmailService())
 
+def get_email_validation_service() -> EmailValidationService:
+    otp_service = OTPService()
+    email_service = EmailService()
+    return EmailValidationService(otp_service, email_service)
+
+def get_password_reset_service() -> PasswordResetService:
+    otp_service = OTPService()
+    email_service = EmailService()
+    return PasswordResetService(otp_service, email_service)
 
 @router.post("/signup", response_model=schemas.User)
-async def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
+async def create_user(
+    user: schemas.UserCreate,
+    db: Session = Depends(get_db),
+    email_validation_service: EmailValidationService = Depends(get_email_validation_service)
+):
     # Check if email already exists
     db_user = db.query(User).filter(User.email == user.email).first()
     if db_user:
@@ -41,8 +61,7 @@ async def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
         username=user.username,
         email=user.email,
         hashed_password=hashed_password,
-        is_active=False,
-        # Initialize OTP-related fields
+        is_active=True,
         hotp_secret=None,
         hotp_counter=0,
         otp_requested_at=None,
@@ -54,24 +73,26 @@ async def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(db_user)
 
-    # Send registration otp
-    await otp_service.otp_request(db, db_user.email, OTPPurpose.REGISTRATION)
+    # ✅ Send registration OTP (only once, with correct args)
+    await email_validation_service.request_email_validation(db, db_user.email)
+
     return db_user
+
 
 @router.post("/verify-registration", response_model=schemas.RegistrationVerificationResponse)
 async def confirm_registration_otp(
     request: schemas.VerifyRegistrationRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    email_validation_service: EmailValidationService = Depends(get_email_validation_service)
 ):
 
     # Verify the registration OTP and activate the user account.
 
     try:
-        result = await otp_service.verify_otp(
+        result = await email_validation_service.verify_email_validation (
             db, 
             request.email, 
-            request.otp, 
-            OTPPurpose.REGISTRATION
+            request.otp,
         )
         return result
     except HTTPException as e:
@@ -85,7 +106,9 @@ async def confirm_registration_otp(
 @router.post("/resend-verification-otp")
 async def resend_verification_otp(
     email: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    email_validation_service: EmailValidationService = Depends(get_email_validation_service)
+
 ):    
     # Check if user exists and is not already verified
     user = db.query(User).filter(User.email == email).first()
@@ -102,7 +125,7 @@ async def resend_verification_otp(
         )
     
     try:
-        result = await otp_service.otp_request(db, email, OTPPurpose.REGISTRATION)
+        result = await email_validation_service.email_validation_request(db, email)
         return result
     except HTTPException as e:
         raise e
@@ -134,13 +157,14 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = 
 @router.post("/reset-password-request", response_model=schemas.PasswordResetResponse)
 async def reset_password_request(
     request: schemas.PasswordResetRequestModel,  
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    password_reset_service: PasswordResetService = Depends(get_password_reset_service)
 ):
     
    # Request a password reset OTP for the given email address.
     
     try:
-        result = await otp_service.otp_request(db, request.email, OTPPurpose.PASSWORD_RESET)
+        result = await password_reset_service.password_reset_request(db, request.email)
         return result
     except HTTPException as e:
         # Re-raise HTTP exceptions from the OTP service
@@ -155,7 +179,8 @@ async def reset_password_request(
 @router.post("/reset-password-confirm", response_model=schemas.PasswordResetResponse)
 async def reset_password_confirm(
     request: schemas.PasswordResetConfirmModel,  
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    password_reset_service: PasswordResetService = Depends(get_password_reset_service)
 ):
     
     # Verify the password reset OTP and set the new password.
@@ -164,15 +189,14 @@ async def reset_password_confirm(
     if len(request.new_password) < 8:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Password must be at least 7 characters long"
+            detail="Password must be at least 8 characters long"
         )
     
     try:
-        result = await otp_service.verify_otp(
+        result = await password_reset_service.verify_password_otp(
             db, 
             request.email, 
-            request.otp, 
-            OTPPurpose.PASSWORD_RESET, 
+            request.otp,  
             new_password=request.new_password
         )
         return result
