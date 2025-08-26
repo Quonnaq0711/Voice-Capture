@@ -40,7 +40,7 @@ export default function ResetPasswordRequest() {
             
             // Navigate to confirmation page after a short delay
             setTimeout(() => {
-                navigate("/reset-password-confirm", { state: { email: email.trim() } });
+                navigate("/password-confirm-otp", { state: { email: email.trim() } });
             }, 2000);
             
         } catch (err) {
