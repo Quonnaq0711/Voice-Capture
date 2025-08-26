@@ -30,7 +30,7 @@ class PasswordResetService:
         await self.otp_service.verify_otp(db, email, otp, OTPPurpose.PASSWORD_RESET)
 
         # Fetch user
-        user = await self.otp_service.user_by_email(db, email)
+        user = self.otp_service.user_by_email(db, email)
 
         # Update password
         user.hashed_password = bcrypt.hash(new_password)  # with passlib

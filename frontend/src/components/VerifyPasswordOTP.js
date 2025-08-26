@@ -13,10 +13,10 @@ export default function VerifyPasswordOTP() {
     const handleSubmit = async (e) => {
         e.preventDefault();
         try {
-            await verifyPasswordOTP(state.email, otp, "password_reset", newPassword);
+            await verifyPasswordOTP(state.email, otp, newPassword);
             nav('/login', { state: { message: 'Password successfully reset. Login please!' } });
         } catch (err) {
-            setError(err.repsonse?.data?.detail || 'Invalid OTP or password reset has failed');
+            setError(err.response?.data?.detail || 'Invalid OTP or password reset has failed');
         }
     }
 
