@@ -1,4 +1,4 @@
-import bcrypt
+from passlib.hash import bcrypt
 from fastapi import HTTPException
 from backend.services import otp_service
 from backend.services.email_service import EmailService

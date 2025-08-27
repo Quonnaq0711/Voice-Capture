@@ -21,7 +21,7 @@ export default function ResetPasswordRequest() {
         setError(null);
         setSuccess(false);
 
-        // Basic validation
+        // Email validation
         if (!email.trim()) {
             setError("Email is required");
             return;
@@ -38,9 +38,9 @@ export default function ResetPasswordRequest() {
             await resetPasswordRequest(email.trim());
             setSuccess(true);
             
-            // Navigate to confirmation page after a short delay
+            // Navigate to confirmation page after delay
             setTimeout(() => {
-                navigate("/password-confirm-otp", { state: { email: email.trim() } });
+                navigate("/confirm-password", { state: { email: email.trim() } });
             }, 2000);
             
         } catch (err) {
@@ -93,7 +93,7 @@ export default function ResetPasswordRequest() {
                             value={email}
                             onChange={(e) => {
                                 setEmail(e.target.value);
-                                if (error) setError(null); // Clear error when user starts typing
+                                if (error) setError(null); // clears error when user starts typing
                             }}
                             disabled={isLoading || success}
                         />

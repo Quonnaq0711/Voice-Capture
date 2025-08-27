@@ -34,17 +34,18 @@ export const auth = {
   
   
   verifyRegistrationOTP: async (email, otp) => {
+    console.log('API call with:', { email, otp });
+    console.log('Email type:', typeof email);
+    console.log('OTP type:', typeof otp);
     const response = await api.post('/auth/verify-registration', { email, otp });
     return response.data;
   },
 
   // Resend registration OTP
-  resendRegistrationOTP: async (email) => {
-    const response = await api.post('/auth/resend-verification-otp', null, {
-      params: { email }
-    });
-    return response.data;
-  },
+resendRegistrationOTP: async (email) => {
+  const response = await api.post('/auth/resend-verification-otp', { email });
+  return response.data;
+},
 
   // User login
   login: async (email, password) => {

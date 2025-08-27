@@ -29,9 +29,10 @@ const Register = () => {
 
       // Mark as first-time user for onboarding
       localStorage.setItem('isFirstTimeUser', 'true');
-      navigate('/login', { 
+      navigate('/confirm-registration', { 
         state: { 
-          message: 'Registration successful! Please sign in to continue.',
+          // message: 'Registration successful! Please sign in to continue.',
+          email: email,
           isFirstTime: true 
         } 
       });

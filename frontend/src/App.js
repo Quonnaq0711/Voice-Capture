@@ -10,6 +10,8 @@ import Profile from './components/Profile';
 import OnboardingWizard from './components/OnboardingWizard';
 import ResetPasswordRequest from './components/ResetPasswordRequest';
 import VerifyPasswordOTP from './components/VerifyPasswordOTP';
+import VerifyRegistration from './components/VerifyRegistration';
+
 
 // Placeholder components for agent routes
 const AgentPage = ({ agentName }) => (
@@ -53,10 +55,9 @@ function App() {
             }
             />
             {/* OTP Routes */}
-            <Route path="/password-request-otp" element={<ResetPasswordRequest />} />
-            <Route path="/password-confirm-otp" element={<VerifyPasswordOTP />} />
-            {/* <Route path="/registration-otp" element={<RegistrationRequest />} /> */}
-            {/* <Route path="/confirm-registration-otp" element={<VerifyRegistrationOTP />} /> */}
+            <Route path="/request-password" element={<ResetPasswordRequest />} />
+            <Route path="/confirm-password" element={<VerifyPasswordOTP />} />
+            <Route path="/confirm-registration" element={<VerifyRegistration />} /> 
 
 
 

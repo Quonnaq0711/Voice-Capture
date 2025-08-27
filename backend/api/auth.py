@@ -61,7 +61,7 @@ async def create_user(
         username=user.username,
         email=user.email,
         hashed_password=hashed_password,
-        is_active=True,
+        is_active=False,
         hotp_secret=None,
         hotp_counter=0,
         otp_requested_at=None,
@@ -85,6 +85,7 @@ async def confirm_registration_otp(
     db: Session = Depends(get_db),
     email_validation_service: EmailValidationService = Depends(get_email_validation_service)
 ):
+    print(f"Received request: {request}") 
 
     # Verify the registration OTP and activate the user account.
 
@@ -103,33 +104,45 @@ async def confirm_registration_otp(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="An error occurred during verification")
 
 # Resend verification OTP for users who didn't receive it or it expired.
+import logging
+
+logger = logging.getLogger(__name__)
+
 @router.post("/resend-verification-otp")
 async def resend_verification_otp(
-    email: str,
+    request: schemas.ResendOTPRequest,  # Assuming you're using request body
     db: Session = Depends(get_db),
     email_validation_service: EmailValidationService = Depends(get_email_validation_service)
-
 ):    
-    # Check if user exists and is not already verified
-    user = db.query(User).filter(User.email == email).first()
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found"
-        )
-    
-    if user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="User is already verified"
-        )
+    logger.info(f"Resend verification OTP request for email: {request.email}")
     
     try:
-        result = await email_validation_service.email_validation_request(db, email)
+        # Check if user exists and is not already verified
+        user = db.query(User).filter(User.email == request.email).first()
+        if not user:
+            logger.warning(f"User not found for email: {request.email}")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found"
+            )
+        
+        if user.is_active:
+            logger.warning(f"User already verified for email: {request.email}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="User is already verified"
+            )
+        
+        logger.info(f"Calling email_validation_request for: {request.email}")
+        result = await email_validation_service.request_email_validation(db, request.email)
+        logger.info(f"Successfully sent verification email to: {request.email}")
         return result
+        
     except HTTPException as e:
+        logger.warning(f"HTTP exception in resend_verification_otp: {e.detail}")
         raise e
     except Exception as e:
+        logger.error(f"Unexpected error in resend_verification_otp for {request.email}: {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to send verification email"
@@ -176,17 +189,21 @@ async def reset_password_request(
             detail="Failed to send password reset email"
         )
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 @router.post("/reset-password-confirm", response_model=schemas.PasswordResetResponse)
 async def reset_password_confirm(
     request: schemas.PasswordResetConfirmModel,  
     db: Session = Depends(get_db),
     password_reset_service: PasswordResetService = Depends(get_password_reset_service)
 ):
-    
-    # Verify the password reset OTP and set the new password.
+    logger.info(f"Password reset attempt for email: {request.email}")
     
     # Basic password validation
     if len(request.new_password) < 8:
+        logger.warning(f"Password too short for email: {request.email}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Password must be at least 8 characters long"
@@ -199,12 +216,14 @@ async def reset_password_confirm(
             request.otp,  
             new_password=request.new_password
         )
+        logger.info(f"Password reset successful for email: {request.email}")
         return result
     except HTTPException as e:
-        # Re-raise HTTP exceptions from the OTP service
+        logger.warning(f"HTTPException during password reset for {request.email}: {e.detail}")
         raise e
     except Exception as e:
-        # Handle unexpected errors
+        # Log the full exception details
+        logger.error(f"Unexpected error during password reset for {request.email}: {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to reset password"

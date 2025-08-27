@@ -30,8 +30,11 @@ class TokenData(BaseModel):
     email: Optional[str] = None
 
 class VerifyRegistrationRequest(BaseModel):
-    email: str
+    email: EmailStr
     otp: str
+
+class ResendOTPRequest(BaseModel):
+    email: EmailStr
 
 class RegistrationVerificationResponse(BaseModel):
     message: str
