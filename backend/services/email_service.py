@@ -125,7 +125,7 @@ Stay Safe,
         <p>How's your day going? We see you're having a little technical difficulty.</p>
         <p>You requested a password reset for your <strong>{self.app_name}</strong> account.</p>
         
-        <p>Here's your OTP :</p>
+        <p>Here's your one-time password (OTP):</p>
         <div class="otp">{otp}</div>
         
         <div class="warning">
@@ -202,7 +202,7 @@ Stay Safe,
         <p>Hello there!</p>
         <p>How's your day going? We see you signed up for a new <strong>{self.app_name}</strong> account.</p>
         
-        <p>Here's your one-time Password (OTP):</p>
+        <p>Here's your one-time password (OTP):</p>
         <div class="otp">{otp}</div>
         
         <div class="warning">
