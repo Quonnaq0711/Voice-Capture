@@ -84,11 +84,15 @@ class ChatMessageBase(BaseModel):
     sender: str  # 'user' or 'assistant'
 
 class ChatMessageCreate(ChatMessageBase):
-    pass
+    session_id: Optional[int] = None
+
+class ChatMessageUpdate(BaseModel):
+    message_text: str
 
 class ChatMessage(ChatMessageBase):
     id: int
     user_id: int
+    session_id: int
     created_at: datetime
     updated_at: datetime
 
