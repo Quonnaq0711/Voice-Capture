@@ -13,6 +13,7 @@ class ChatSession(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     is_active = Column(Boolean, default=False)
+    unread = Column(Boolean, default=False, nullable=False)
 
     # Relationships
     user = relationship("User", back_populates="chat_sessions")
