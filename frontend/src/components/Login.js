@@ -119,7 +119,7 @@ const Login = () => {
             <p className="text-sm text-gray-600">
               Forgot Password?{' '}
               <Link
-                to="/password-request-otp"
+                to="/request-password"
                 className="font-medium text-primary-600 hover:text-primary-500"
               >
                 Click Here
