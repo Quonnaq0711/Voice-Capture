@@ -43,7 +43,7 @@ const Login = () => {
     }
   };
 
-  return (
+   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
         <div>
@@ -114,6 +114,15 @@ const Login = () => {
                 className="font-medium text-primary-600 hover:text-primary-500"
               >
                 Sign up now
+              </Link>
+            </p>
+            <p className="text-sm text-gray-600">
+              Forgot Password?{' '}
+              <Link
+                to="/request-password"
+                className="font-medium text-primary-600 hover:text-primary-500"
+              >
+                Click Here
               </Link>
             </p>
           </div>

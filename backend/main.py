@@ -7,8 +7,11 @@ from .models.chat import ChatMessage
 from .models.session import ChatSession
 from .models.resume import Resume
 from .models.profile import UserProfile
+from backend.services.email_service import EmailService
+from backend.services.otp_service import OTPService
 from .db.database import engine
 import os
+
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
