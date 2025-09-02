@@ -1,11 +1,18 @@
+import email
 import os
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from fastapi import APIRouter, Body, Depends, HTTPException, status, UploadFile, File
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from datetime import timedelta
 from typing import List
 import aiofiles
 
+from backend.services import password_reset_service
+
+from ..services.email_service import EmailService
+from ..services.otp_service import OTPService
+from backend.services.email_validation_service import EmailValidationService
+from backend.services.password_reset_service import PasswordResetService
 from ..models import schemas
 from ..models.user import User
 from ..utils.auth import (
@@ -16,38 +23,130 @@ from ..utils.auth import (
     ACCESS_TOKEN_EXPIRE_MINUTES
 )
 from ..db.database import get_db
+from backend.services.email_validation_service import EmailValidationService
+
+from backend.services.password_reset_service import PasswordResetService
 
 router = APIRouter()
 
+def get_email_validation_service() -> EmailValidationService:
+    otp_service = OTPService()
+    email_service = EmailService()
+    return EmailValidationService(otp_service, email_service)
+
+def get_password_reset_service() -> PasswordResetService:
+    otp_service = OTPService()
+    email_service = EmailService()
+    return PasswordResetService(otp_service, email_service)
+
 @router.post("/signup", response_model=schemas.User)
-async def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
+async def create_user(
+    user: schemas.UserCreate,
+    db: Session = Depends(get_db),
+    email_validation_service: EmailValidationService = Depends(get_email_validation_service)
+):
     # Check if email already exists
     db_user = db.query(User).filter(User.email == user.email).first()
     if db_user:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email already registered"
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered")
     
     # Check if username already exists
     db_user = db.query(User).filter(User.username == user.username).first()
     if db_user:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Username already taken"
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Username already taken")
     
-    # Create new user
+    # Create new user (unverified)
     hashed_password = get_password_hash(user.password)
     db_user = User(
         username=user.username,
         email=user.email,
-        hashed_password=hashed_password
+        hashed_password=hashed_password,
+        is_active=False,
+        hotp_secret=None,
+        hotp_counter=0,
+        otp_requested_at=None,
+        otp_failed_attempts=0,
+        otp_locked_until=None,
+        otp_purpose=None
     )
     db.add(db_user)
     db.commit()
     db.refresh(db_user)
+
+    # ✅ Send registration OTP (only once, with correct args)
+    await email_validation_service.request_email_validation(db, db_user.email)
+
     return db_user
+
+
+@router.post("/verify-registration", response_model=schemas.RegistrationVerificationResponse)
+async def confirm_registration_otp(
+    request: schemas.VerifyRegistrationRequest,
+    db: Session = Depends(get_db),
+    email_validation_service: EmailValidationService = Depends(get_email_validation_service)
+):
+    print(f"Received request: {request}") 
+
+    # Verify the registration OTP and activate the user account.
+
+    try:
+        result = await email_validation_service.verify_email_validation (
+            db, 
+            request.email, 
+            request.otp,
+        )
+        return result
+    except HTTPException as e:
+        # Re-raise the HTTPException from the OTP service
+        raise e
+    except Exception as e:
+        # Handle any unexpected errors
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="An error occurred during verification")
+
+# Resend verification OTP for users who didn't receive it or it expired.
+import logging
+
+logger = logging.getLogger(__name__)
+
+@router.post("/resend-verification-otp")
+async def resend_verification_otp(
+    request: schemas.ResendOTPRequest,  # Assuming you're using request body
+    db: Session = Depends(get_db),
+    email_validation_service: EmailValidationService = Depends(get_email_validation_service)
+):    
+    logger.info(f"Resend verification OTP request for email: {request.email}")
+    
+    try:
+        # Check if user exists and is not already verified
+        user = db.query(User).filter(User.email == request.email).first()
+        if not user:
+            logger.warning(f"User not found for email: {request.email}")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found"
+            )
+        
+        if user.is_active:
+            logger.warning(f"User already verified for email: {request.email}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="User is already verified"
+            )
+        
+        logger.info(f"Calling email_validation_request for: {request.email}")
+        result = await email_validation_service.request_email_validation(db, request.email)
+        logger.info(f"Successfully sent verification email to: {request.email}")
+        return result
+        
+    except HTTPException as e:
+        logger.warning(f"HTTP exception in resend_verification_otp: {e.detail}")
+        raise e
+    except Exception as e:
+        logger.error(f"Unexpected error in resend_verification_otp for {request.email}: {type(e).__name__}: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to send verification email"
+        )
 
 @router.post("/token", response_model=schemas.Token)
 async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
@@ -66,6 +165,71 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = 
         data={"sub": user.email}, expires_delta=access_token_expires
     )
     return {"access_token": access_token, "token_type": "bearer"}
+
+# Password reset endpoints
+@router.post("/reset-password-request", response_model=schemas.PasswordResetResponse)
+async def reset_password_request(
+    request: schemas.PasswordResetRequestModel,  
+    db: Session = Depends(get_db),
+    password_reset_service: PasswordResetService = Depends(get_password_reset_service)
+):
+    
+   # Request a password reset OTP for the given email address.
+    
+    try:
+        result = await password_reset_service.password_reset_request(db, request.email)
+        return result
+    except HTTPException as e:
+        # Re-raise HTTP exceptions from the OTP service
+        raise e
+    except Exception as e:
+        # Handle unexpected errors
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to send password reset email"
+        )
+
+import logging
+
+logger = logging.getLogger(__name__)
+
+@router.post("/reset-password-confirm", response_model=schemas.PasswordResetResponse)
+async def reset_password_confirm(
+    request: schemas.PasswordResetConfirmModel,  
+    db: Session = Depends(get_db),
+    password_reset_service: PasswordResetService = Depends(get_password_reset_service)
+):
+    logger.info(f"Password reset attempt for email: {request.email}")
+    
+    # Basic password validation
+    if len(request.new_password) < 8:
+        logger.warning(f"Password too short for email: {request.email}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password must be at least 8 characters long"
+        )
+    
+    try:
+        result = await password_reset_service.verify_password_otp(
+            db, 
+            request.email, 
+            request.otp,  
+            new_password=request.new_password
+        )
+        logger.info(f"Password reset successful for email: {request.email}")
+        return result
+    except HTTPException as e:
+        logger.warning(f"HTTPException during password reset for {request.email}: {e.detail}")
+        raise e
+    except Exception as e:
+        # Log the full exception details
+        logger.error(f"Unexpected error during password reset for {request.email}: {type(e).__name__}: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to reset password"
+        )
+
+# Resume Functions
 
 @router.post("/token/refresh", response_model=schemas.Token)
 async def refresh_token(current_user: User = Depends(get_current_user)):

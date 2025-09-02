@@ -23,14 +23,16 @@ const Register = () => {
       setError('');
       setLoading(true);
       await register(username, email, password);
+      
       //Set start date for 90 day passwrod reset
       localStorage.setItem('registrationDate', new Date().toISOString());
 
       // Mark as first-time user for onboarding
       localStorage.setItem('isFirstTimeUser', 'true');
-      navigate('/login', { 
+      navigate('/confirm-registration', { 
         state: { 
-          message: 'Registration successful! Please sign in to continue.',
+          // message: 'Registration successful! Please sign in to continue.',
+          email: email,
           isFirstTime: true 
         } 
       });

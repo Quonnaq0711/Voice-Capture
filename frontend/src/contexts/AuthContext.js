@@ -35,6 +35,45 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  // Verify registration OTP
+  const verifyRegistrationOTP = async (email, otp) => {
+        try {
+            const response = await auth.verifyRegistrationOTP(email, otp);
+            return response;
+        } catch (error) {
+            throw error;
+        }
+    };
+
+  // Resend registration OTP
+  const resendRegistrationOTP = async (email) => {
+        try {
+            const response = await auth.resendRegistrationOTP(email);
+            return response;
+        } catch (error) {
+            throw error;
+        }
+    };
+
+    // Password reset request function - THIS IS WHAT YOU'RE MISSING
+    const resetPasswordRequest = async (email) => {
+        try {
+            const response = await auth.resetPasswordRequest(email);
+            return response;
+        } catch (error) {
+            throw error;
+        }
+    };
+
+    // Verify password reset OTP and set new password
+    const verifyPasswordOTP = async (email, otp, newPassword) => {
+        try {
+            const response = await auth.verifyPasswordOTP(email, otp, newPassword);
+            return response;
+        } catch (error) {
+            throw error;
+        }
+    };
   const logout = () => {
     auth.logout();
     setUser(null);
@@ -45,6 +84,10 @@ export const AuthProvider = ({ children }) => {
     loading,
     login,
     register,
+    verifyRegistrationOTP,
+    verifyPasswordOTP,
+    resetPasswordRequest,
+    resendRegistrationOTP,
     logout,
   };
 

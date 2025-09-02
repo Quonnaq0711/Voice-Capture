@@ -1,3 +1,4 @@
+from httpx import request
 from pydantic import BaseModel, EmailStr
 from datetime import datetime
 from typing import Optional, List
@@ -27,6 +28,28 @@ class Token(BaseModel):
 
 class TokenData(BaseModel):
     email: Optional[str] = None
+
+class VerifyRegistrationRequest(BaseModel):
+    email: EmailStr
+    otp: str
+
+class ResendOTPRequest(BaseModel):
+    email: EmailStr
+
+class RegistrationVerificationResponse(BaseModel):
+    message: str
+
+class PasswordResetRequestModel(BaseModel):
+    email: EmailStr
+
+class PasswordResetConfirmModel(BaseModel):
+    email: EmailStr
+    otp: str
+    new_password: str
+
+class PasswordResetResponse(BaseModel):
+    message: str
+
 
 class ResumeBase(BaseModel):
     filename: str
@@ -79,6 +102,12 @@ class ChatMessage(ChatMessageBase):
 class ChatHistoryResponse(BaseModel):
     messages: List[ChatMessage]
     total_count: int
+
+class OTPResponse(UserBase):
+    requested_at: datetime
+    valid_time: int
+class ResetPasswordConfirm(UserBase):
+    resset_at: datetime
 
 # User Profile schemas
 class UserProfileBase(BaseModel):

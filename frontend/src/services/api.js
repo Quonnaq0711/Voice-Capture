@@ -1,4 +1,5 @@
-import axios from 'axios';
+import axios from 'axios'
+
 
 const API_URL = 'http://localhost:8000/api/v1';
 
@@ -95,6 +96,21 @@ export const auth = {
     const response = await api.post('/auth/signup', { username, email, password });
     return response.data;
   },
+  
+  
+  verifyRegistrationOTP: async (email, otp) => {
+    console.log('API call with:', { email, otp });
+    console.log('Email type:', typeof email);
+    console.log('OTP type:', typeof otp);
+    const response = await api.post('/auth/verify-registration', { email, otp });
+    return response.data;
+  },
+
+  // Resend registration OTP
+resendRegistrationOTP: async (email) => {
+  const response = await api.post('/auth/resend-verification-otp', { email });
+  return response.data;
+},
 
   // User login
   login: async (email, password) => {
@@ -111,6 +127,22 @@ export const auth = {
     if (response.data.access_token) {
       localStorage.setItem('token', response.data.access_token);
     }
+    return response.data;
+  },
+
+  // Password Reset Request
+  resetPasswordRequest: async (email) => {
+    const response = await api.post('/auth/reset-password-request', { email });
+    return response.data;
+  },
+
+  
+  verifyPasswordOTP: async (email, otp, newPassword) => {
+    const response = await api.post('/auth/reset-password-confirm', { 
+      email, 
+      otp, 
+      new_password: newPassword 
+    });
     return response.data;
   },
 
