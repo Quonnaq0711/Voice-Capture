@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import ChatDialog from './ChatDialog';
 
-const PersonalAssistant = ({ user, isDialogOpen: externalIsDialogOpen, setIsDialogOpen: externalSetIsDialogOpen }) => {
+const PersonalAssistant = ({ user, isDialogOpen: externalIsDialogOpen, setIsDialogOpen: externalSetIsDialogOpen, onDialogClose, onUnreadCountChange }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const [internalIsDialogOpen, setInternalIsDialogOpen] = useState(false);
@@ -16,6 +16,7 @@ const PersonalAssistant = ({ user, isDialogOpen: externalIsDialogOpen, setIsDial
   const [countdown, setCountdown] = useState(3);
   const [targetAgent, setTargetAgent] = useState(null);
   const [showAgentWelcome, setShowAgentWelcome] = useState(false);
+  const [hasDialogBeenOpened, setHasDialogBeenOpened] = useState(false);
   
   // Available agents configuration
   const agents = [
@@ -62,9 +63,12 @@ const PersonalAssistant = ({ user, isDialogOpen: externalIsDialogOpen, setIsDial
 
     // If mouse moved less than 5px, consider it a click
     if (mouseTravel < 5) {
+      if (!hasDialogBeenOpened) {
+        setHasDialogBeenOpened(true);
+      }
       setIsDialogOpen(true);
     }
-  }, [initialMousePos, setIsDialogOpen]);
+  }, [initialMousePos, hasDialogBeenOpened, setIsDialogOpen]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -373,12 +377,20 @@ const PersonalAssistant = ({ user, isDialogOpen: externalIsDialogOpen, setIsDial
       
       <AssistantAvatar />
       
-      {isDialogOpen && (
-        <ChatDialog 
-          onClose={() => setIsDialogOpen(false)} 
-          assistantPosition={position} 
-          setAssistantPosition={setPosition} 
-        />
+      {hasDialogBeenOpened && (
+        <div style={{ display: isDialogOpen ? 'block' : 'none' }}>
+          <ChatDialog 
+            onClose={() => {
+              setIsDialogOpen(false);
+              if (onDialogClose) {
+                onDialogClose();
+              }
+            }} 
+            assistantPosition={position} 
+            setAssistantPosition={setPosition}
+            onUnreadCountChange={onUnreadCountChange}
+          />
+        </div>
       )}
     </div>
   );

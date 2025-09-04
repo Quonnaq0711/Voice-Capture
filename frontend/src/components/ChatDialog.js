@@ -1,15 +1,61 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { XMarkIcon, PaperAirplaneIcon, PlusIcon, ClockIcon, Cog6ToothIcon, TrashIcon, ChevronDownIcon, DocumentDuplicateIcon, PencilIcon, StopIcon } from '@heroicons/react/24/outline';
+import { useAuth } from '../contexts/AuthContext';
+import { XMarkIcon, PaperAirplaneIcon, PlusIcon, ClockIcon, Cog6ToothIcon, TrashIcon, ChevronDownIcon, DocumentDuplicateIcon, PencilIcon, StopIcon, CheckIcon } from '@heroicons/react/24/outline';
 import { XCircleIcon } from '@heroicons/react/24/solid';
 import { chat, sessions, profile as profileAPI } from '../services/api';
-import { sendMessage, sendMessageStream, checkHealth, clearMemory, generateSessionId, handleApiError, removeMessagesAfterIndex, updateMessageAtIndex } from '../services/chatApi';
+import { sendMessage as defaultSendMessage, sendMessageStream as defaultSendMessageStream, checkHealth, clearMemory, generateSessionId, handleApiError, removeMessagesAfterIndex, updateMessageAtIndex } from '../services/chatApi';
 import MessageRenderer from './MessageRenderer';
 
-const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition }) => {
+const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnreadCountChange }) => {
+  const { user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+
+  const getApiUrls = useCallback(() => {
+    // Map agent paths to their respective API URLs
+    const agentApiMap = {
+      '/agents/career': 'http://localhost:8002/api/chat',
+      '/agents/money': 'http://localhost:8003/api/chat',
+      '/agents/mind': 'http://localhost:8004/api/chat',
+      '/agents/travel': 'http://localhost:8005/api/chat',
+      '/agents/body': 'http://localhost:8006/api/chat',
+      '/agents/family-life': 'http://localhost:8007/api/chat',
+      '/agents/hobby': 'http://localhost:8008/api/chat',
+      '/agents/knowledge': 'http://localhost:8009/api/chat',
+      '/agents/personal-dev': 'http://localhost:8010/api/chat',
+      '/agents/spiritual': 'http://localhost:8011/api/chat'
+    };
+    
+    // Find matching agent API URL
+    for (const [path, baseUrl] of Object.entries(agentApiMap)) {
+      if (location.pathname.startsWith(path)) {
+        return {
+          messageUrl: `${baseUrl}/message`,
+          streamUrl: `${baseUrl}/message/stream`,
+        };
+      }
+    }
+    
+    // For dashboard and other pages, use default (personal assistant)
+    return {
+      messageUrl: null, // Will use default from chatApi.js
+      streamUrl: null,  // Will use default from chatApi.js
+    };
+  }, [location.pathname]);
+
+  const { messageUrl, streamUrl } = getApiUrls();
+
+  const sendMessage = (message, sessionId, signal) => {
+    return defaultSendMessage(message, sessionId, signal, messageUrl);
+  };
+
+  const sendMessageStream = (message, sessionId, userId, onToken, onComplete, onError, streamApiUrl) => {
+    return defaultSendMessageStream(message, sessionId, userId, onToken, onComplete, onError, streamApiUrl || streamUrl);
+  };
   const [messages, setMessages] = useState([]);
+  // Track which message indices have been copied to show feedback
+  const [copiedMessageIds, setCopiedMessageIds] = useState(new Set());
   const [input, setInput] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [sessionToDelete, setSessionToDelete] = useState(null);
@@ -188,13 +234,92 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition }) => {
   const resizeStartPos = useRef({ x: 0, y: 0 });
   const resizeStartSize = useRef({ width: 0, height: 0 });
   
-  // Expose updateCountdownMessage to global window object
+  // Add progress message to chat (for career analysis progress)
+  const addProgressMessage = useCallback(async (text, type = 'progress') => {
+    // Detect current agent context from URL or page state
+    const currentPath = window.location.pathname;
+    const isCareerAgent = currentPath.includes('/career') || document.querySelector('[data-agent-type="career"]');
+    
+    // Save progress message to database if we have a current session
+    let savedMessage = null;
+    if (currentSession?.id) {
+      try {
+        const agentType = isCareerAgent ? 'career' : 'dashboard';
+        const dbMessage = await chat.saveMessage(text, 'assistant', currentSession.id, agentType);
+        savedMessage = {
+          text: dbMessage.message_text,
+          sender: dbMessage.sender,
+          timestamp: dbMessage.created_at,
+          id: dbMessage.id,
+          messageType: type,
+          agent_type: dbMessage.agent_type || agentType
+        };
+      } catch (error) {
+        console.error('Failed to save progress message to database:', error);
+      }
+    }
+    
+    // Use saved message if available, otherwise create local message
+    const progressMessage = savedMessage || {
+      text: text,
+      sender: 'assistant',
+      timestamp: new Date().getTime(),
+      id: Date.now(),
+      messageType: type,
+      agent_type: isCareerAgent ? 'career' : 'dashboard'
+    };
+    
+    setMessages(prev => [...prev, progressMessage]);
+  }, [currentSession, chat]);
+
+  // Update progress message (replace the last progress message if it exists)
+  const updateProgressMessage = useCallback((text, type = 'progress') => {
+    // Detect current agent context from URL or page state
+    const currentPath = window.location.pathname;
+    const isCareerAgent = currentPath.includes('/career') || document.querySelector('[data-agent-type="career"]');
+    
+    setMessages(prev => {
+      const newMessages = [...prev];
+      const lastMessage = newMessages[newMessages.length - 1];
+      
+      // If the last message is a progress message, replace it
+      if (lastMessage && lastMessage.sender === 'assistant' && 
+          lastMessage.messageType && 
+          ['progress', 'section_start'].includes(lastMessage.messageType)) {
+        newMessages[newMessages.length - 1] = {
+          ...lastMessage,
+          text: text,
+          messageType: type,
+          timestamp: new Date().getTime(),
+          agent_type: isCareerAgent ? 'career' : 'dashboard' // Set correct agent type based on context
+        };
+      } else {
+        // Otherwise, add a new progress message
+        newMessages.push({
+          text: text,
+          sender: 'assistant',
+          timestamp: new Date().getTime(),
+          id: Date.now(),
+          messageType: type,
+          agent_type: isCareerAgent ? 'career' : 'dashboard' // Set correct agent type based on context
+        });
+      }
+      
+      return newMessages;
+    });
+  }, []);
+
+  // Expose progress functions and updateCountdownMessage to global window object
   useEffect(() => {
     window.updateCountdownMessage = updateCountdownMessage;
+    window.addProgressMessage = addProgressMessage;
+    window.updateProgressMessage = updateProgressMessage;
     return () => {
       delete window.updateCountdownMessage;
+      delete window.addProgressMessage;
+      delete window.updateProgressMessage;
     };
-  }, [updateCountdownMessage]);
+  }, [updateCountdownMessage, addProgressMessage, updateProgressMessage]);
 
   // Track navigation state from PersonalAssistant
   useEffect(() => {
@@ -213,11 +338,136 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition }) => {
     };
   }, []);
 
-  // Check API health on component mount
+  // Listen for career analysis progress events
+  useEffect(() => {
+    // Event handler for analysis progress
+    const handleAnalysisProgress = async (event) => {
+      const { section, status, progress, totalSections } = event.detail;
+      console.log('ChatDialog: Analysis progress update:', { section, status, progress });
+      
+      if (status === 'starting') {
+        // Set loading state when analysis starts
+        setIsLoading(true);
+        setIsCancelling(false);
+        
+        const sectionName = section.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
+        const currentSectionNumber = progress ? Math.ceil(progress / (100 / totalSections)) : 1;
+        
+        await addProgressMessage(
+          `🚀 Starting ${sectionName} analysis... (Section ${currentSectionNumber} of ${totalSections})`,
+          'section_start'
+        );
+      } else if (status === 'analyzing') {
+        const sectionName = section.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
+        const progressPercentage = progress || 0;
+        const currentSectionNumber = progress ? Math.ceil(progress / (100 / totalSections)) : 1;
+        
+        updateProgressMessage(
+          `🔍 Analyzing ${sectionName}... (${progressPercentage}% complete - Section ${currentSectionNumber} of ${totalSections})`,
+          'section_progress'
+        );
+      }
+    };
+
+    // Event handler for section start
+    const handleSectionStart = async (event) => {
+      const { section, display_name, description, progress } = event.detail;
+      console.log('ChatDialog: Section started:', { section, display_name, description, progress });
+      
+      // Set loading state when section starts
+      setIsLoading(true);
+      setIsCancelling(false);
+      
+      const sectionName = display_name || section.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
+      await addProgressMessage(
+        `🔄 Starting ${sectionName} analysis...`,
+        'section_start'
+      );
+    };
+
+    // Event handler for section completion
+    const handleSectionComplete = async (event) => {
+      const { section, data, error } = event.detail;
+      console.log('ChatDialog: Section completed:', { section, hasData: !!data, error });
+      
+      if (error) {
+        await addProgressMessage(
+          `❌ Error analyzing ${section.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}: ${error}`,
+          'section_complete'
+        );
+        return;
+      }
+
+      if (data) {
+        const sectionName = section.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
+        await addProgressMessage(
+          `✅ ${sectionName} analysis completed successfully! New insights are now available in your career profile.`,
+          'section_complete'
+        );
+      }
+    };
+
+    // Event handler for analysis completion
+    const handleAnalysisComplete = async (event) => {
+      const { success, error } = event.detail;
+      console.log('ChatDialog: Analysis workflow completed:', { success, error });
+      
+      // Clear loading state when analysis completes
+      setIsLoading(false);
+      setIsCancelling(false);
+      
+      if (success) {
+        await addProgressMessage(
+          `🎉 Your comprehensive career analysis is now complete! All sections have been analyzed successfully. You can explore your insights to discover new opportunities and career guidance.`,
+          'analysis_complete'
+        );
+      } else if (error) {
+        await addProgressMessage(
+          `❌ Analysis failed: ${error}. Please try again or contact support if the issue persists.`,
+          'analysis_complete'
+        );
+      }
+    };
+    
+    // Add event listeners to the document (global events)
+    const element = document.querySelector('[data-agent-type="career"]') || document;
+    if (element) {
+      element.addEventListener('analysisProgress', handleAnalysisProgress);
+      element.addEventListener('sectionStart', handleSectionStart);
+      element.addEventListener('sectionComplete', handleSectionComplete);
+      element.addEventListener('analysisComplete', handleAnalysisComplete);
+    }
+    
+    // Clean up event listeners on component unmount
+    return () => {
+      if (element) {
+        element.removeEventListener('analysisProgress', handleAnalysisProgress);
+        element.removeEventListener('sectionStart', handleSectionStart);
+        element.removeEventListener('sectionComplete', handleSectionComplete);
+        element.removeEventListener('analysisComplete', handleAnalysisComplete);
+      }
+    };
+  }, [addProgressMessage, updateProgressMessage]);
+
+  // Check API health on component mount and when location changes
   useEffect(() => {
     checkApiHealth();
-
+    
+    // Set up periodic health checks every 30 seconds
+    const healthCheckInterval = setInterval(() => {
+      checkApiHealth();
+    }, 30000); // 30 seconds
+    
+    // Cleanup interval on unmount
+    return () => {
+      clearInterval(healthCheckInterval);
+    };
   }, []);
+  
+  // Re-check API health when location changes (switching between dashboard and agents)
+  useEffect(() => {
+    checkApiHealth();
+  }, [location.pathname]);
 
   // Generate or restore chat session ID when component mounts
   useEffect(() => {
@@ -259,7 +509,8 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition }) => {
             text: msg.message_text,
             sender: msg.sender,
             timestamp: msg.created_at,
-            id: msg.id
+            id: msg.id,
+            agent_type: msg.agent_type || 'dashboard'
           }));
           setMessages(formattedMessages);
         }
@@ -306,11 +557,21 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition }) => {
     };
   }, [eventSource, abortController]);
 
+  // Determine agent type based on current path
+  const getAgentType = useCallback(() => {
+    const agent = agents.find(a => location.pathname.startsWith(a.path));
+    if (agent) {
+      return agent.path.substring('/agents/'.length);
+    }
+    return 'dashboard';
+  }, [location.pathname, agents]);
+
   // Save message to database
   const saveMessageToDb = async (messageText, sender) => {
     try {
       let sessionToUse = currentSession;
       let newSessionCreated = false;
+      const agentType = getAgentType();
       
       // If no current session and this is the first user message, create a new session
       if (!sessionToUse && sender === 'user') {
@@ -324,12 +585,13 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition }) => {
       
       // Only call saveMessage if we have a valid session
       if (sessionToUse?.id) {
-        const savedMessage = await chat.saveMessage(messageText, sender, sessionToUse.id);
+        const savedMessage = await chat.saveMessage(messageText, sender, sessionToUse.id, agentType);
         const messageData = {
           text: savedMessage.message_text,
           sender: savedMessage.sender,
           timestamp: savedMessage.created_at,
-          id: savedMessage.id
+          id: savedMessage.id,
+          agent_type: savedMessage.agent_type || agentType
         };
         return { message: messageData, newSession: newSessionCreated ? sessionToUse : null };
       } else {
@@ -345,7 +607,33 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition }) => {
   // Check API health
   const checkApiHealth = async () => {
     try {
-      const health = await checkHealth();
+      // Determine which API to check based on current location
+      let apiUrl = null;
+      
+      // Map agent paths to their respective API URLs
+      const agentApiMap = {
+        '/agents/career': 'http://localhost:8002/api/chat',
+        '/agents/money': 'http://localhost:8003/api/chat',
+        '/agents/mind': 'http://localhost:8004/api/chat',
+        '/agents/travel': 'http://localhost:8005/api/chat',
+        '/agents/body': 'http://localhost:8006/api/chat',
+        '/agents/family-life': 'http://localhost:8007/api/chat',
+        '/agents/hobby': 'http://localhost:8008/api/chat',
+        '/agents/knowledge': 'http://localhost:8009/api/chat',
+        '/agents/personal-dev': 'http://localhost:8010/api/chat',
+        '/agents/spiritual': 'http://localhost:8011/api/chat'
+      };
+      
+      // Find matching agent API URL
+      for (const [path, url] of Object.entries(agentApiMap)) {
+        if (location.pathname.startsWith(path)) {
+          apiUrl = url;
+          break;
+        }
+      }
+      
+      // For dashboard and other pages, use default (personal assistant)
+      const health = await checkHealth(apiUrl);
       setApiStatus(health.status === 'healthy' ? 'healthy' : 'unhealthy');
     } catch (error) {
       setApiStatus('unhealthy');
@@ -353,11 +641,19 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition }) => {
   };
 
   // Copy message to clipboard function
-  const copyToClipboard = async (text) => {
+  const copyToClipboard = async (text, msgIndex) => {
     try {
       await navigator.clipboard.writeText(text);
-      // You could add a toast notification here if desired
-      console.log('Message copied to clipboard');
+      // Record the message index after successful copy to trigger button animation
+      setCopiedMessageIds(prev => new Set([...prev, msgIndex]));
+      // Reset button state after 1.5 seconds
+      setTimeout(() => {
+        setCopiedMessageIds(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(msgIndex);
+          return newSet;
+        });
+      }, 1500);
     } catch (error) {
       // Fallback for older browsers
       const textArea = document.createElement('textarea');
@@ -490,13 +786,17 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition }) => {
       setIsCancelling(false);
       
       // Send the edited message to get a new response using streaming
+      const currentPath = location.pathname;
+      const agentType = currentPath.startsWith('/agents/career') ? 'career' : 'personal_assistant';
+
       // Add a placeholder message for the AI response
       const placeholderMessage = {
         id: Date.now() + 1,
         text: '',
         sender: 'assistant',
         timestamp: new Date().getTime(),
-        isStreaming: true
+        isStreaming: true,
+        agent_type: agentType,
       };
       
       setMessages(prev => [...prev, placeholderMessage]);
@@ -508,8 +808,22 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition }) => {
         currentSessionAtSendTime?.id,
         userId,
         // onToken callback - update the streaming message
-        (token) => {
+        async (token, options = {}) => {
           streamingResponse += token;
+          
+          // If this is the initial message, save it to database immediately
+          if (options.isInitialMessage) {
+            const sessionToSaveIn = currentSessionAtSendTime;
+            if (sessionToSaveIn?.id) {
+              try {
+                await chat.saveMessage(token, 'assistant', sessionToSaveIn.id, getAgentType());
+                console.log('Initial message saved to database:', token);
+              } catch (error) {
+                console.error('Failed to save initial message to database:', error);
+              }
+            }
+          }
+          
           setMessages(prev => {
             const streamingMessageId = placeholderMessage.id;
 
@@ -518,33 +832,32 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition }) => {
               return prev; // Ignore tokens for other sessions
             }
 
-            // Find the first streaming placeholder, claim it, and remove others.
+            // Find the assistant message to update
             const newMessages = [...prev];
-            let streamingIdx = newMessages.findIndex(m => m.sender === 'assistant' && m.isStreaming);
+            let assistantIdx = newMessages.findIndex(m => m.sender === 'assistant' && (m.isStreaming || m.id === streamingMessageId));
 
-            if (streamingIdx === -1) {
-              // No placeholder exists, create one.
+            if (assistantIdx === -1) {
+              // No assistant message exists, create one.
               newMessages.push({
                 id: streamingMessageId,
                 text: streamingResponse,
                 sender: 'assistant',
                 timestamp: new Date().getTime(),
-                isStreaming: true
+                isStreaming: !options.isInitialMessage // Don't show cursor for initial message
               });
-              streamingIdx = newMessages.length - 1;
+              assistantIdx = newMessages.length - 1;
             } else {
-              // Placeholder found, update it.
-              newMessages[streamingIdx] = {
-                ...newMessages[streamingIdx],
+              // Assistant message found, update it.
+              const currentMessage = newMessages[assistantIdx];
+              newMessages[assistantIdx] = {
+                ...currentMessage,
                 text: streamingResponse,
-                id: streamingMessageId, // Claim the placeholder with the correct ID
+                id: streamingMessageId, // Claim the message with the correct ID
+                isStreaming: options.isInitialMessage ? false : true // Show cursor for subsequent tokens
               };
             }
 
-            // Remove any other streaming placeholders to prevent duplicates.
-            return newMessages.filter((m, idx) => 
-              !(m.sender === 'assistant' && m.isStreaming && idx !== streamingIdx)
-            );
+            return newMessages;
           });
         },
         // onComplete callback - finalize the message
@@ -583,11 +896,15 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition }) => {
             // User switched sessions, save response to the original session's database
             console.log('User switched sessions during response generation for edited message. Response saved to database but not displayed.');
             if (currentSessionAtSendTime?.id) {
-              await chat.saveMessage(fullResponse, 'assistant', currentSessionAtSendTime.id);
+              await chat.saveMessage(fullResponse, 'assistant', currentSessionAtSendTime.id, getAgentType());
               // Mark session as unread by calling the backend
               try {
                 await sessions.markSessionAsUnread(currentSessionAtSendTime.id); // This function needs to be created in api.js
                 setUnreadSessions(prev => new Set(prev).add(currentSessionAtSendTime.id));
+                // Trigger unread count update immediately
+                if (onUnreadCountChange) {
+                  onUnreadCountChange();
+                }
               } catch (error) {
                 console.error('Failed to mark session as unread:', error);
               }
@@ -655,7 +972,7 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition }) => {
         } else {
           // Also save error messages to the correct session
           if (currentSessionAtSendTime?.id) {
-            await chat.saveMessage(errorResponse.text, 'system', currentSessionAtSendTime.id);
+            await chat.saveMessage(errorResponse.text, 'system', currentSessionAtSendTime.id, getAgentType());
           }
         }
       }
@@ -671,29 +988,38 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition }) => {
   const handleNewSession = async () => {
     try {
       // Clear chat memory for current session before starting new session
-      if (chatSessionId) {
-        await clearMemory(chatSessionId);
+      if (currentSession && currentSession.id) {
+        await clearMemory(currentSession.id);
       }
+
+      // Create a new session in the backend
+      const newSession = await sessions.createSession('New Session', new Date().toISOString()); // You can customize the default name
       
-      // Generate new chat session ID and save to localStorage
-      const newSessionId = generateSessionId();
-      localStorage.setItem('chatSessionId', newSessionId);
-      setChatSessionId(newSessionId);
+      // Update state with the new session
+      setCurrentSession(newSession);
+      setMessages([]); // Clear messages for the new session
+      setChatSessionId(newSession.id);
+      localStorage.setItem('chatSessionId', newSession.id);
       
-      // Add welcome message in English
+      // Add a welcome message
       const welcomeMessage = {
         text: "Hello! I'm your personal assistant. How can I help you today?",
         sender: 'assistant',
         timestamp: new Date().getTime(),
-        id: Date.now()
+        id: Date.now(),
+        session_id: newSession.id,
+        agent_type: getAgentType(), // Set agent type for correct avatar
       };
       setMessages([welcomeMessage]);
       
-      // Don't set currentSession to null immediately, let it be set when first message is sent
-      setCurrentSession(null);
+      // Refresh the sessions list to show the new session
+      loadSessions();
       setShowSessions(false);
+
     } catch (error) {
       console.error('Failed to create new session:', error);
+      // Optionally, show an error message to the user
+      addSystemMessage(`Error: Could not create a new session. ${error.message}`);
     }
   };
 
@@ -723,6 +1049,10 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition }) => {
         newSet.delete(sessionId);
         return newSet;
       });
+      // Trigger unread count update immediately
+      if (onUnreadCountChange) {
+        onUnreadCountChange();
+      }
     } catch (error) {
       console.error('Failed to mark session as read:', error);
     }
@@ -737,6 +1067,7 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition }) => {
         sender: msg.sender,
         timestamp: msg.created_at,
         id: msg.id,
+        agent_type: msg.agent_type || 'dashboard',
         // By default, messages are not in streaming state
         isStreaming: false
       }));
@@ -750,7 +1081,8 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition }) => {
             text: '',
             sender: 'assistant',
             timestamp: Date.now(),
-            isStreaming: true
+            isStreaming: true,
+            agent_type: getAgentType() // Preserve agent type on session switch
           });
         }
       }
@@ -858,7 +1190,7 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition }) => {
 
 
   // Handle cancel request
-  const handleCancel = () => {
+  const handleCancel = async () => {
     if (!isLoading) return;
 
     // Flag cancellation so any late EventSource can be immediately closed
@@ -866,6 +1198,28 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition }) => {
 
     // Mark as cancelling so UI can show spinner immediately
     setIsCancelling(true);
+
+    // If we're on career agent page, try to cancel the career analysis
+    if (location.pathname.startsWith('/agents/career') && currentSession?.id) {
+      try {
+        const response = await fetch(`/api/career/analyze/session/${currentSession.id}`, {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+          }
+        });
+        
+        if (response.ok) {
+          console.log('Career analysis cancelled successfully');
+          // Add a system message to indicate cancellation
+          addSystemMessage('🛑 Career analysis cancelled by user.');
+        } else {
+          console.warn('Failed to cancel career analysis:', response.statusText);
+        }
+      } catch (error) {
+        console.error('Error cancelling career analysis:', error);
+      }
+    }
 
     // Close existing EventSource so backend stops streaming
     if (eventSourceRef.current) {
@@ -933,7 +1287,7 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition }) => {
       setMessages(prev => [...prev, savedUserMessage]);
     } else {
       // Fallback to local state if save fails
-      setMessages(prev => [...prev, { text: userMessage, sender: 'user', timestamp: new Date().getTime() }]);
+      setMessages(prev => [...prev, { text: userMessage, sender: 'user', timestamp: new Date().getTime(), agent_type: getAgentType() }]);
     }
 
     // Update currentSessionAtSendTime if a new session was created
@@ -942,6 +1296,26 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition }) => {
     // If a new session was created, add it to the top of the sessions list
     if (newSession) {
       setSessionsList(prev => [newSession, ...prev]);
+
+      // Rename the newly created session to the user\u2019s first message
+      try {
+        const newSessionName = userMessage.length > 50 ? userMessage.substring(0, 50) + '...' : userMessage;
+        await sessions.updateSessionName(newSession.id, newSessionName);
+        setCurrentSession(prev => (prev ? { ...prev, session_name: newSessionName } : prev));
+        setSessionsList(prev => prev.map(s => (s.id === newSession.id ? { ...s, session_name: newSessionName } : s)));
+      } catch (err) {
+        console.warn('Failed to update new session name:', err);
+      }
+    } else if (currentSessionAtSendTime && currentSessionAtSendTime.session_name === 'New Session') {
+      // Rename placeholder session created earlier
+      try {
+        const newSessionName = userMessage.length > 50 ? userMessage.substring(0, 50) + '...' : userMessage;
+        await sessions.updateSessionName(currentSessionAtSendTime.id, newSessionName);
+        setCurrentSession(prev => (prev ? { ...prev, session_name: newSessionName } : prev));
+        setSessionsList(prev => prev.map(s => (s.id === currentSessionAtSendTime.id ? { ...s, session_name: newSessionName } : s)));
+      } catch (err) {
+        console.warn('Failed to update existing session name:', err);
+      }
     }
 
     // Add current session to generating sessions - ensure we have a valid session ID
@@ -972,6 +1346,7 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition }) => {
       text: '',
       sender: 'assistant',
       timestamp: new Date().getTime(),
+      agent_type: getAgentType(),
       isStreaming: true
     };
     
@@ -984,44 +1359,57 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition }) => {
         sessionIdForGenerating,
         userId,
         // onToken callback - update the streaming message
-        (token) => {
+        async (token, options = {}) => {
           streamingResponse += token;
+          
+          // If this is the initial message, save it to database immediately
+          if (options.isInitialMessage) {
+            const sessionToSaveIn = updatedSessionAtSendTime || currentSessionAtSendTime;
+            if (sessionToSaveIn?.id) {
+              try {
+                await chat.saveMessage(token, 'assistant', sessionToSaveIn.id, getAgentType());
+                console.log('Initial message saved to database:', token);
+              } catch (error) {
+                console.error('Failed to save initial message to database:', error);
+              }
+            }
+          }
+          
           setMessages(prev => {
             // Ensure we are still in the originating session before updating UI
             if (currentSessionRef.current?.id !== (currentSessionAtSendTime?.id || updatedSessionAtSendTime?.id) || chatSessionId !== currentChatSessionIdAtSendTime) {
               return prev; // Ignore tokens for other sessions
             }
-            // Find the first streaming placeholder, claim it, and remove others.
+            // Find the assistant message to update
             const newMessages = [...prev];
-            let streamingIdx = newMessages.findIndex(m => m.sender === 'assistant' && m.isStreaming);
+            let assistantIdx = newMessages.findIndex(m => m.sender === 'assistant' && (m.isStreaming || m.id === streamingMessageId));
 
-            if (streamingIdx === -1) {
-              // No placeholder exists, create one.
+            if (assistantIdx === -1) {
+              // No assistant message exists, create one.
               newMessages.push({
                 id: streamingMessageId,
                 text: streamingResponse,
                 sender: 'assistant',
                 timestamp: new Date().getTime(),
-                isStreaming: true
+                isStreaming: !options.isInitialMessage // Don't show cursor for initial message
               });
-              streamingIdx = newMessages.length - 1;
+              assistantIdx = newMessages.length - 1;
             } else {
-              // Placeholder found, update it.
-              newMessages[streamingIdx] = {
-                ...newMessages[streamingIdx],
+              // Assistant message found, update it.
+              const currentMessage = newMessages[assistantIdx];
+              newMessages[assistantIdx] = {
+                ...currentMessage,
                 text: streamingResponse,
-                id: streamingMessageId, // Claim the placeholder with the correct ID
+                id: streamingMessageId, // Claim the message with the correct ID
+                isStreaming: options.isInitialMessage ? false : true // Show cursor for subsequent tokens
               };
             }
 
-            // Remove any other streaming placeholders to prevent duplicates.
-            return newMessages.filter((m, idx) => 
-              !(m.sender === 'assistant' && m.isStreaming && idx !== streamingIdx)
-            );
+            return newMessages;
           });
         },
         // onComplete callback - finalize the message
-        async (fullResponse) => {
+        async (fullResponse, professionalData) => {
           // Remove session from generating sessions on completion
           const sessionIdForClearing = updatedSessionAtSendTime?.id || currentSessionAtSendTime?.id;
           if (sessionIdForClearing) {
@@ -1045,7 +1433,7 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition }) => {
             
             if (sessionToSaveIn?.id) {
               try {
-                const savedMessage = await chat.saveMessage(fullResponse, 'assistant', sessionToSaveIn.id);
+                const savedMessage = await chat.saveMessage(fullResponse, 'assistant', sessionToSaveIn.id, getAgentType());
                 savedAssistantMessage = {
                   text: savedMessage.message_text,
                   sender: savedMessage.sender,
@@ -1068,15 +1456,30 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition }) => {
                   }
                 : msg
             ));
+            
+            // If professional data is provided (for career insights), update the parent component
+            if (professionalData && location.pathname.startsWith('/agents/career')) {
+              // Find the parent window to update the CareerAgent component
+              const careerAgentWindow = window.parent.document.querySelector('[data-agent-type="career"]');
+              if (careerAgentWindow) {
+                // Dispatch a custom event with the professional data
+                const event = new CustomEvent('careerInsightsReceived', { detail: { professionalData } });
+                careerAgentWindow.dispatchEvent(event);
+              }
+            }
           } else {
             // User switched sessions, save to database but remove from current UI
             const sessionIdToSave = currentSessionAtSendTime?.id || updatedSessionAtSendTime?.id;
             if (sessionIdToSave) {
-              await chat.saveMessage(fullResponse, 'assistant', sessionIdToSave);
+              await chat.saveMessage(fullResponse, 'assistant', sessionIdToSave, getAgentType());
               // Mark session as unread by calling the backend
               try {
                 await sessions.markSessionAsUnread(sessionIdToSave); // This function needs to be created in api.js
                 setUnreadSessions(prev => new Set(prev).add(sessionIdToSave));
+                // Trigger unread count update immediately
+                if (onUnreadCountChange) {
+                  onUnreadCountChange();
+                }
               } catch (error) {
                 console.error('Failed to mark session as unread:', error);
               }
@@ -1086,7 +1489,7 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition }) => {
           }
         },
         // onError callback - handle errors
-        async (errorMessage) => {
+        async (errorMessage) => { 
           // Remove session from generating sessions on error
           const sessionIdForClearing = updatedSessionAtSendTime?.id || currentSessionAtSendTime?.id;
           if (sessionIdForClearing) {
@@ -1111,7 +1514,7 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition }) => {
             
             if (sessionToSaveIn?.id) {
               try {
-                const savedMessage = await chat.saveMessage(finalErrorMessage, 'assistant', sessionToSaveIn.id);
+                const savedMessage = await chat.saveMessage(finalErrorMessage, 'assistant', sessionToSaveIn.id, getAgentType());
                 savedErrorMessage = {
                   text: savedMessage.message_text,
                   sender: savedMessage.sender,
@@ -1139,7 +1542,7 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition }) => {
             // User switched sessions, save error to database but remove from current UI
             const sessionIdToSave = currentSessionAtSendTime?.id || updatedSessionAtSendTime?.id;
             if (sessionIdToSave) {
-              await chat.saveMessage(errorMessage, 'assistant', sessionIdToSave);
+              await chat.saveMessage(errorMessage, 'assistant', sessionIdToSave, getAgentType());
             }
             // Remove the streaming message from current session
             setMessages(prev => prev.filter(msg => msg.id !== streamingMessageId));
@@ -1156,6 +1559,7 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition }) => {
         setEventSource(null);
         return;
       }
+
       
     } catch (error) {
       console.error('Error starting streaming response:', error);
@@ -1176,7 +1580,7 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition }) => {
         
         if (sessionToSaveIn?.id) {
           try {
-            const savedMessage = await chat.saveMessage(errorMessage, 'assistant', sessionToSaveIn.id);
+            const savedMessage = await chat.saveMessage(errorMessage, 'assistant', sessionToSaveIn.id, getAgentType());
             savedErrorMessage = {
               text: savedMessage.message_text,
               sender: savedMessage.sender,
@@ -1604,35 +2008,55 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition }) => {
             {messages.map((message, index) => (
               <div
                 key={message.id || index}
-                className={`flex flex-col group ${
+                className={`flex items-start group my-2 ${
                   message.sender === 'system' 
-                    ? 'items-center' 
+                    ? 'justify-center' 
                     : message.sender === 'user' 
-                    ? 'items-end' 
-                    : 'items-start'
+                    ? 'flex-row-reverse' 
+                    : 'flex-row'
                 }`}
               >
-                {editingMessageIndex === index && message.sender === 'user' ? (
+                {/* Avatar */}
+                {message.sender !== 'system' && (
+                  <div className={`flex-shrink-0 ${message.sender === 'user' ? 'ml-2' : 'mr-2'}`}>
+                    {message.sender === 'user' ? (
+                      <div className="px-3 py-1 rounded-lg bg-blue-500 flex items-center justify-center text-white text-sm font-medium">
+                        {user?.name || 'User'}
+                      </div>
+                    ) : (
+                      <div className={`px-3 py-1 rounded-lg flex items-center justify-center text-white text-sm font-medium ${message.agent_type === 'career' ? 'bg-green-500' : 'bg-purple-500'}`}>
+                        {message.agent_type === 'career' ? 'Career' : 'Dashboard'}
+                      </div>
+                    )}
+                  </div>
+                )}
+                {message.sender === 'system' ? (
+                  <div className="w-full flex justify-center">
+                    <div className="bg-yellow-100 text-yellow-800 border border-yellow-200 px-4 py-2 rounded-full text-sm font-medium">
+                      <MessageRenderer content={message.text} isStreaming={message.isStreaming} />
+                    </div>
+                  </div>
+                ) : editingMessageIndex === index && message.sender === 'user' ? (
                   // Edit mode for user messages
-                  <div className="max-w-[80%] p-3 rounded-lg bg-blue-500 text-white">
+                  <div className="w-full max-w-[90%] p-3 rounded-lg bg-blue-500 text-white">
                     <textarea
                       value={editInput}
                       onChange={(e) => setEditInput(e.target.value)}
                       onKeyDown={(e) => handleEditKeyPress(e, index)}
-                      className="w-full bg-white text-gray-800 p-2 rounded border-none resize-none focus:outline-none focus:ring-2 focus:ring-blue-300"
+                      className="w-full bg-white text-gray-800 p-3 rounded border-none resize-none focus:outline-none focus:ring-2 focus:ring-blue-300"
                       rows={Math.max(2, editInput.split('\n').length)}
                       autoFocus
                     />
-                    <div className="flex justify-end space-x-2 mt-2">
+                    <div className="flex justify-end space-x-3 mt-3">
                       <button
                         onClick={cancelEditMessage}
-                        className="px-3 py-1 text-xs bg-gray-300 text-gray-700 rounded hover:bg-gray-400 transition-colors"
+                        className="px-4 py-2 text-sm bg-gray-300 text-gray-700 rounded hover:bg-gray-400 transition-colors"
                       >
                         Cancel
                       </button>
                       <button
                         onClick={() => submitEditedMessage(index)}
-                        className="px-3 py-1 text-xs bg-green-500 text-white rounded hover:bg-green-600 transition-colors"
+                        className="px-4 py-2 text-sm bg-green-500 text-white rounded hover:bg-green-600 transition-colors"
                       >
                         Save
                       </button>
@@ -1640,66 +2064,67 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition }) => {
                   </div>
                 ) : (
                   // Normal message display with MessageRenderer
-                  <div
-                    className={`${
-                      message.sender === 'system'
-                        ? 'bg-yellow-100 text-yellow-800 border border-yellow-200 px-4 py-2 rounded-full text-sm font-medium'
-                        : `max-w-[80%] p-3 rounded-lg select-text ${
-                            message.sender === 'user'
-                              ? 'bg-blue-500 text-white'
-                              : 'bg-gray-100 text-gray-800'
-                          }`
-                    }`}
-                  >
-                    <div className={message.sender === 'system' ? 'text-sm' : getFontSizeClass()}>
-                      <MessageRenderer content={message.text} isStreaming={message.isStreaming} />
-                    </div>
-                  </div>
-                )}
-                
-                {/* Action buttons - appears below message on hover */}
-                {message.sender !== 'system' && editingMessageIndex !== index && (
-                  <div className={`opacity-0 group-hover:opacity-100 transition-opacity duration-200 mt-1 flex space-x-1 ${
-                    message.sender === 'user' ? 'self-end' : 'self-start'
-                  }`}>
-                    <button
-                      onClick={() => copyToClipboard(message.text)}
-                      className="p-1 rounded hover:bg-gray-200 text-gray-500 hover:text-gray-700"
-                      title="Copy message"
+                  <div className={`flex flex-col ${message.sender === 'user' ? 'items-end' : 'items-start'}`}>
+                    <div
+                      className={`max-w-[90%] p-3 rounded-lg select-text ${
+                        message.sender === 'user'
+                          ? 'bg-blue-500 text-white'
+                          : message.messageType === 'progress' || message.messageType === 'section_start'
+                          ? 'bg-blue-50 text-blue-800 border border-blue-200'
+                          : message.messageType === 'section_complete'
+                          ? 'bg-green-50 text-green-800 border border-green-200'
+                          : message.messageType === 'analysis_complete'
+                          ? 'bg-purple-50 text-purple-800 border border-purple-200'
+                          : 'bg-gray-100 text-gray-800'
+                      }`}
                     >
-                      <DocumentDuplicateIcon className="w-4 h-4" />
-                    </button>
-                    {message.sender === 'user' && (
-                      <button
-                        onClick={() => startEditMessage(index, message.text)}
-                        disabled={isLoading || isCancelling}
-                        className={`p-1 rounded transition-colors ${
-                          isLoading || isCancelling
-                            ? 'text-gray-300 cursor-not-allowed'
-                            : 'hover:bg-gray-200 text-gray-500 hover:text-gray-700'
-                        }`}
-                        title={isLoading || isCancelling ? "Cannot edit while generating response" : "Edit message"}
-                      >
-                        <PencilIcon className="w-4 h-4" />
-                      </button>
+                      <div className={message.sender === 'system' ? 'text-sm' : getFontSizeClass()}>
+                        <MessageRenderer content={message.text} isStreaming={message.isStreaming} />
+                      </div>
+                    </div>
+                    
+                    {/* Action buttons - appears below message content and above timestamp */}
+                    {message.sender !== 'system' && editingMessageIndex !== index && (
+                      <div className={`mt-2 flex space-x-1 ${message.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
+                        <button
+                          onClick={() => copyToClipboard(message.text, index)}
+                          className={`p-1 rounded transition-colors ${copiedMessageIds.has(index) ? 'bg-green-100 text-green-600' : 'hover:bg-gray-200 text-gray-500 hover:text-gray-700'}`}
+                          title="Copy message"
+                        >
+                          {copiedMessageIds.has(index) ? (
+                            <CheckIcon className="w-4 h-4 text-green-500" />
+                          ) : (
+                            <DocumentDuplicateIcon className="w-4 h-4" />
+                          )}
+                        </button>
+                        {message.sender === 'user' && (
+                          <button
+                            onClick={() => startEditMessage(index, message.text)}
+                            disabled={isLoading || isCancelling}
+                            className={`p-1 rounded transition-colors ${isLoading || isCancelling ? 'text-gray-300 cursor-not-allowed' : 'hover:bg-gray-200 text-gray-500 hover:text-gray-700'}`}
+                            title={isLoading || isCancelling ? "Cannot edit while generating response" : "Edit message"}
+                          >
+                            <PencilIcon className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                    )}
+                    
+                    {message.timestamp && message.sender !== 'system' && editingMessageIndex !== index && (
+                      <div className="text-xs text-gray-400 mt-1 px-1">
+                        {new Date(typeof message.timestamp === 'string' ? message.timestamp : message.timestamp).toLocaleString('en-US', {
+                          year: 'numeric',
+                          month: '2-digit',
+                          day: '2-digit',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </div>
                     )}
                   </div>
                 )}
                 
-                {message.timestamp && message.sender !== 'system' && editingMessageIndex !== index && (
-                  <div className="text-xs text-gray-400 mt-1 px-1">
-                    {new Date(typeof message.timestamp === 'string' ? message.timestamp : message.timestamp).toLocaleString('en-US', {
-                      year: 'numeric',
-                      month: '2-digit',
-                      day: '2-digit',
-                      hour: '2-digit',
-                      minute: '2-digit',
-                      second: '2-digit',
-                      hour12: true,
-                      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
-                    })}
-                  </div>
-                )}
+
               </div>
             ))}
             <div ref={messagesEndRef} />

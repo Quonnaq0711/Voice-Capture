@@ -33,7 +33,8 @@ async def create_chat_message(
                 user_id=current_user.id,
                 session_name=session_name,
                 first_message_time=datetime.utcnow(),
-                is_active=True
+                is_active=True,
+                unread=False
             )
             db.add(new_session)
             db.commit()
@@ -44,7 +45,8 @@ async def create_chat_message(
         user_id=current_user.id,
         message_text=message.message_text,
         sender=message.sender,
-        session_id=session_id
+        session_id=session_id,
+        agent_type=message.agent_type or 'dashboard'
     )
     db.add(db_message)
     db.commit()
