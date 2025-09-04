@@ -85,6 +85,7 @@ class ChatMessageBase(BaseModel):
 
 class ChatMessageCreate(ChatMessageBase):
     session_id: Optional[int] = None
+    agent_type: Optional[str] = 'dashboard'
 
 class ChatMessageUpdate(BaseModel):
     message_text: str
@@ -93,6 +94,7 @@ class ChatMessage(ChatMessageBase):
     id: int
     user_id: int
     session_id: int
+    agent_type: Optional[str] = 'dashboard'
     created_at: datetime
     updated_at: datetime
 

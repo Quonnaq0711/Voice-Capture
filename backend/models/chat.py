@@ -11,6 +11,7 @@ class ChatMessage(Base):
     session_id = Column(Integer, ForeignKey("chat_sessions.id"), nullable=True)
     message_text = Column(Text, nullable=False)
     sender = Column(String, nullable=False)  # 'user' or 'assistant'
+    agent_type = Column(String, nullable=True, default='dashboard')  # 'dashboard', 'career', etc.
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

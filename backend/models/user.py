@@ -2,6 +2,7 @@ from datetime import datetime
 from sqlalchemy import Column, Integer, Nullable, String, DateTime, Boolean, true
 from sqlalchemy.orm import relationship
 from backend.db.database import Base
+from backend.models.career_insight import CareerInsight
 
 class User(Base):
     __tablename__ = "users"
@@ -27,3 +28,4 @@ class User(Base):
     chat_messages = relationship("ChatMessage", back_populates="user")
     chat_sessions = relationship("ChatSession", back_populates="user")
     profile = relationship("UserProfile", back_populates="user", uselist=False)
+    career_insights = relationship("CareerInsight", back_populates="user")
