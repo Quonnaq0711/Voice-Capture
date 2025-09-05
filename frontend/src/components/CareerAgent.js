@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { profile as profileAPI, sessions as sessionsAPI } from '../services/api';
-import { getCareerInsights, hasCareerInsights } from '../services/chatApi';
+import { profile as profileAPI, sessions as sessionsAPI, auth } from '../services/api';
+import { getCareerInsights, hasCareerInsights, getCareerInsightsByResume } from '../services/chatApi';
 import PersonalAssistant from './PersonalAssistant';
 // Progress tracking is now handled in ChatDialog
 // import ProgressTracker from './ProgressTracker';
@@ -50,8 +50,662 @@ import {
   CalendarIcon,
   ChevronDownIcon,
   BellIcon,
-  FlagIcon
+  FlagIcon,
+  CloudArrowUpIcon,
+  DocumentIcon,
+  TrashIcon
 } from '@heroicons/react/24/solid';
+
+// Toast notification component
+const Toast = ({ message, type, onClose }) => {
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      onClose();
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, [onClose]);
+
+  return (
+    <div className={`fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg ${
+      type === 'success' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'
+    }`}>
+      <div className="flex items-center space-x-2">
+        {type === 'success' ? (
+          <CheckCircleIcon className="h-5 w-5" />
+        ) : (
+          <ExclamationTriangleIcon className="h-5 w-5" />
+        )}
+        <span>{message}</span>
+      </div>
+    </div>
+  );
+};
+
+// Confirmation dialog component
+const ConfirmDialog = ({ isOpen, title, message, onConfirm, onCancel }) => {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+        <h3 className="text-lg font-semibold text-gray-900 mb-2">{title}</h3>
+        <p className="text-gray-600 mb-6">{message}</p>
+        <div className="flex justify-end space-x-3">
+          <button
+            onClick={onCancel}
+            className="px-4 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+          >
+            Delete
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Document upload component
+const DocumentUpload = ({ onUploadSuccess }) => {
+  const [isDragging, setIsDragging] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [isUploading, setIsUploading] = useState(false);
+  const [toast, setToast] = useState(null);
+  const fileInputRef = useRef(null);
+  const timersRef = useRef({ progressInterval: null, completionTimeout: null });
+
+  // Cleanup timers on component unmount
+  useEffect(() => {
+    return () => {
+      if (timersRef.current.progressInterval) {
+        clearInterval(timersRef.current.progressInterval);
+      }
+      if (timersRef.current.completionTimeout) {
+        clearTimeout(timersRef.current.completionTimeout);
+      }
+    };
+  }, []);
+
+  const showToast = (message, type) => {
+    setToast({ message, type });
+  };
+
+  const handleFileUpload = async (file) => {
+    if (!file) return;
+
+    // Validate file type
+    const allowedTypes = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+    if (!allowedTypes.includes(file.type)) {
+      showToast('Please upload a PDF, DOC, or DOCX file', 'error');
+      return;
+    }
+
+    // Validate file size (10MB limit)
+    if (file.size > 10 * 1024 * 1024) {
+      showToast('File size must be less than 10MB', 'error');
+      return;
+    }
+
+    setIsUploading(true);
+    setUploadProgress(0);
+
+    try {
+      // Simulate upload progress
+      timersRef.current.progressInterval = setInterval(() => {
+        setUploadProgress(prev => {
+          if (prev >= 90) {
+            clearInterval(timersRef.current.progressInterval);
+            timersRef.current.progressInterval = null;
+            return 90;
+          }
+          return prev + 10;
+        });
+      }, 200);
+
+      await auth.uploadResume(file);
+      
+      if (timersRef.current.progressInterval) {
+        clearInterval(timersRef.current.progressInterval);
+        timersRef.current.progressInterval = null;
+      }
+      setUploadProgress(100);
+
+      timersRef.current.completionTimeout = setTimeout(() => {
+        setIsUploading(false);
+        setUploadProgress(0);
+        showToast('Document uploaded successfully!', 'success');
+        if (onUploadSuccess) {
+          onUploadSuccess();
+        }
+        timersRef.current.completionTimeout = null;
+      }, 500);
+    } catch (error) {
+      if (timersRef.current.progressInterval) {
+        clearInterval(timersRef.current.progressInterval);
+        timersRef.current.progressInterval = null;
+      }
+      if (timersRef.current.completionTimeout) {
+        clearTimeout(timersRef.current.completionTimeout);
+        timersRef.current.completionTimeout = null;
+      }
+      setIsUploading(false);
+      setUploadProgress(0);
+      showToast('Failed to upload document: ' + error.message, 'error');
+    }
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const files = e.dataTransfer.files;
+    if (files.length > 0) {
+      handleFileUpload(files[0]);
+    }
+  };
+
+  const handleFileSelect = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      handleFileUpload(file);
+    }
+  };
+
+  return (
+    <div className="mb-6">
+      <label className="block text-sm font-medium text-gray-700 mb-2">Upload Document</label>
+      
+      <div
+        className={`relative border-2 border-dashed rounded-lg p-6 transition-all duration-200 ${
+          isDragging
+            ? 'border-blue-400 bg-blue-50'
+            : 'border-gray-300 hover:border-gray-400'
+        } ${isUploading ? 'pointer-events-none' : 'cursor-pointer'}`}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+        onClick={() => !isUploading && fileInputRef.current?.click()}
+      >
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".pdf,.doc,.docx"
+          onChange={handleFileSelect}
+          className="hidden"
+        />
+        
+        <div className="text-center">
+          {isUploading ? (
+            <div className="space-y-4">
+              <div className="animate-spin mx-auto h-8 w-8 text-blue-600">
+                <CloudArrowUpIcon className="h-8 w-8" />
+              </div>
+              <div className="space-y-2">
+                <div className="text-sm text-gray-600">Uploading document...</div>
+                <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div
+                    className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                    style={{ width: `${uploadProgress}%` }}
+                  ></div>
+                </div>
+                <div className="text-xs text-gray-500">{uploadProgress}%</div>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <CloudArrowUpIcon className="mx-auto h-12 w-12 text-gray-400" />
+              <div className="space-y-2">
+                <div className="text-sm font-medium text-gray-900">
+                  Click to upload or drag and drop
+                </div>
+                <div className="text-sm text-gray-500">
+                  PDF, DOC, DOCX up to 10MB
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+      
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
+      )}
+    </div>
+  );
+};
+
+// Document list component
+const DocumentList = ({ documents, loading, onPreview, onDelete, onAnalyze, formatDate, getFileIcon }) => {
+  if (loading) {
+    return (
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-2">Document History</label>
+        <div className="border border-gray-200 rounded-lg p-4">
+          <div className="animate-pulse flex space-x-4">
+            <div className="rounded-full bg-gray-300 h-10 w-10"></div>
+            <div className="flex-1 space-y-2 py-1">
+              <div className="h-4 bg-gray-300 rounded w-3/4"></div>
+              <div className="h-4 bg-gray-300 rounded w-1/2"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-2">Document History</label>
+      
+      {documents.length === 0 ? (
+        <div className="border border-gray-200 rounded-lg p-6 text-center">
+          <DocumentIcon className="mx-auto h-12 w-12 text-gray-400 mb-2" />
+          <p className="text-gray-500 text-sm">No documents uploaded yet</p>
+        </div>
+      ) : (
+        <div className="border border-gray-200 rounded-lg divide-y divide-gray-200 max-h-64 overflow-y-auto">
+          {documents.map((document) => (
+            <div key={document.id} className="p-4 hover:bg-gray-50 transition-colors">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-3 flex-1 min-w-0">
+                  {getFileIcon(document.file_type)}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900 truncate">
+                      {document.original_filename}
+                    </p>
+                    <div className="flex items-center text-xs text-gray-500 mt-1">
+                      <CalendarIcon className="h-3 w-3 mr-1" />
+                      <span>{formatDate(document.created_at)}</span>
+                      <span className="mx-2">•</span>
+                      <span className="uppercase">{document.file_type}</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={() => onPreview(document)}
+                    className="inline-flex items-center px-3 py-1 border border-gray-300 shadow-sm text-xs font-medium rounded text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
+                  >
+                    <EyeIcon className="h-3 w-3 mr-1" />
+                    Preview
+                  </button>
+                  <button
+                    onClick={() => onAnalyze(document)}
+                    className="inline-flex items-center px-3 py-1 border border-green-300 shadow-sm text-xs font-medium rounded text-green-700 bg-white hover:bg-green-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors"
+                  >
+                    <ChartBarIcon className="h-3 w-3 mr-1" />
+                    Analyze
+                  </button>
+                  <button
+                    onClick={() => onDelete(document)}
+                    className="inline-flex items-center px-3 py-1 border border-red-300 shadow-sm text-xs font-medium rounded text-red-700 bg-white hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors"
+                  >
+                    <TrashIcon className="h-3 w-3 mr-1" />
+                    Delete
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Document manager component that combines upload and list
+const DocumentManager = ({ analysisProgress, setAnalysisProgress, setSectionStatus, setProfessionalData, addNotification, setLastAnalyzedDocumentId }) => {
+  const [documents, setDocuments] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [toast, setToast] = useState(null);
+
+  const showToast = (message, type) => {
+    setToast({ message, type });
+  };
+
+  const fetchDocuments = async () => {
+    try {
+      setLoading(true);
+      const documentList = await auth.getResumes();
+      setDocuments(documentList);
+    } catch (error) {
+      showToast('Failed to load documents: ' + error.message, 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchDocuments();
+  }, []);
+
+  const handleUploadSuccess = () => {
+    fetchDocuments(); // Refresh the list after successful upload
+  };
+
+  const handlePreview = (document) => {
+    // Open document in new tab for preview
+    const documentUrl = `http://localhost:8000/resumes/${document.user_id}/${document.filename}`;
+    window.open(documentUrl, '_blank');
+  };
+
+  const handleAnalyze = async (document) => {
+    if (analysisProgress.isAnalyzing) {
+      console.log('Analysis already in progress, ignoring request');
+      return;
+    }
+
+    try {
+      // Reset analysis state
+      setAnalysisProgress({
+        isAnalyzing: true,
+        currentSection: null,
+        completedSections: [],
+        totalSections: 7,
+        progress: 0,
+        error: null
+      });
+
+      setSectionStatus({
+        professionalIdentity: 'pending',
+        workExperience: 'pending',
+        skillsAnalysis: 'pending',
+        marketPosition: 'pending',
+        careerTrajectory: 'pending',
+        strengthsWeaknesses: 'pending',
+        salaryAnalysis: 'pending'
+      });
+
+      // Clear existing professional data to prepare for new analysis
+      setProfessionalData({
+        professionalIdentity: { title: '', summary: '', keyHighlights: [], currentRole: '', currentIndustry: '', currentCompany: '', location: '' },
+        workExperience: { totalYears: 0, timelineStart: null, timelineEnd: null, analytics: { workingYears: { years: '', period: '' }, heldRoles: { count: '', longest: '' }, heldTitles: { count: '', shortest: '' }, companies: { count: '', longest: '' }, insights: { gaps: '', shortestTenure: '', companyChanges: '', careerProgression: '' } } },
+        skillsAnalysis: { hardSkills: [], softSkills: [], coreStrengths: [], developmentAreas: [] },
+        marketPosition: { competitiveness: 0, skillRelevance: 0, industryDemand: 0, careerPotential: 0 },
+        careerTrajectory: [],
+        strengthsWeaknesses: { strengths: [], weaknesses: [] },
+        salaryAnalysis: { currentSalary: null, historicalTrends: [], marketComparison: null, predictedGrowth: null, salaryFactors: [], recommendations: [] }
+      });
+
+      // Store the document ID for later retrieval of analysis results
+      setLastAnalyzedDocumentId(document.id);
+      
+      addNotification({
+        type: 'progress',
+        title: 'Resume Analysis Started',
+        message: `Starting comprehensive analysis of ${document.original_filename}`,
+        details: 'This may take a few minutes. You will see real-time updates as each section completes.'
+      });
+      
+      // Call the streaming API with the specific document ID
+      const response = await fetch('http://localhost:8002/api/career/analyze_resume_streaming', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({ 
+          user_id: String(document.user_id),
+          resume_id: String(document.id)
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value);
+        const lines = chunk.split('\n');
+
+        for (const line of lines) {
+          if (line.trim() && line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              console.log('Received streaming data:', data);
+              
+              // Handle different types of streaming responses
+              if (data.type === 'section_progress') {
+                // Update state directly for immediate UI feedback
+                setAnalysisProgress(prev => ({
+                  ...prev,
+                  currentSection: data.section,
+                  progress: data.progress || prev.progress,
+                  totalSections: data.total_sections || 7,
+                  isAnalyzing: true
+                }));
+                
+                setSectionStatus(prev => ({
+                  ...prev,
+                  [data.section]: 'analyzing'
+                }));
+                
+                // Add progress notification
+                const sectionName = data.section.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
+                addNotification({
+                  type: 'progress',
+                  title: 'Analysis in Progress',
+                  message: `Analyzing ${sectionName}...`,
+                  current_section: sectionName,
+                  progress: data.progress || 0,
+                  details: `Processing section ${data.progress ? Math.ceil(data.progress / (100 / (data.total_sections || 7))) : 1} of ${data.total_sections || 7}`
+                });
+                
+                // Also dispatch event for compatibility
+                const progressEvent = new CustomEvent('analysisProgress', {
+                  detail: {
+                    section: data.section,
+                    status: 'analyzing',
+                    progress: data.progress,
+                    totalSections: data.total_sections || 7
+                  }
+                });
+                document.querySelector('[data-agent-type="career"]')?.dispatchEvent(progressEvent);
+              } else if (data.type === 'section_complete') {
+                console.log('Section completed:', data.section, data.data);
+                
+                // Update state directly for immediate UI feedback
+                if (data.data) {
+                  // Update professional data with the new section data
+                  const sectionData = data.data[data.section] || data.data;
+                  setProfessionalData(prev => {
+                    const newData = {
+                      ...prev,
+                      [data.section]: sectionData
+                    };
+                    console.log(`Updated professional data for section ${data.section}:`, newData);
+                    return newData;
+                  });
+                }
+                
+                // Update section status
+                setSectionStatus(prev => {
+                  const newStatus = { ...prev, [data.section]: 'completed' };
+                  console.log('Updated section status:', newStatus);
+                  return newStatus;
+                });
+                
+                // Update analysis progress
+                setAnalysisProgress(prev => {
+                  const newCompletedSections = [...prev.completedSections, data.section];
+                  const newProgress = Math.round((newCompletedSections.length / prev.totalSections) * 100);
+                  return {
+                    ...prev,
+                    completedSections: newCompletedSections,
+                    progress: newProgress,
+                    currentSection: null
+                  };
+                });
+                
+                // Also dispatch event for compatibility
+                const completeEvent = new CustomEvent('sectionComplete', {
+                  detail: {
+                    section: data.section,
+                    data: data.data,
+                    error: data.error
+                  }
+                });
+                document.querySelector('[data-agent-type="career"]')?.dispatchEvent(completeEvent);
+              } else if (data.type === 'analysis_complete') {
+                console.log('Analysis completed:', data);
+                
+                // Update state directly for immediate UI feedback
+                setAnalysisProgress(prev => ({
+                  ...prev,
+                  isAnalyzing: false,
+                  currentSection: null,
+                  progress: data.success ? 100 : prev.progress,
+                  error: data.error || null
+                }));
+                
+                // If backend returns complete data, merge it with existing professionalData
+                if (data.professional_data) {
+                  const finalData = data.professional_data;
+                  setProfessionalData(prev => ({
+                    ...prev,
+                    ...finalData
+                  }));
+                }
+                
+                // Add completion notification
+                if (data.success) {
+                  addNotification({
+                    type: 'complete',
+                    title: 'Analysis Complete!',
+                    message: 'Your comprehensive career analysis is now ready',
+                    details: 'All sections have been analyzed. Explore your insights to discover new opportunities.'
+                  });
+                } else if (data.error) {
+                  addNotification({
+                    type: 'error',
+                    title: 'Analysis Failed',
+                    message: 'There was an error completing your career analysis',
+                    details: data.error
+                  });
+                }
+                
+                // Also dispatch event for compatibility
+                const analysisCompleteEvent = new CustomEvent('analysisComplete', {
+                  detail: {
+                    success: data.success,
+                    error: data.error,
+                    professional_data: data.professional_data
+                  }
+                });
+                document.querySelector('[data-agent-type="career"]')?.dispatchEvent(analysisCompleteEvent);
+                break;
+              }
+            } catch (parseError) {
+              console.error('Error parsing streaming data:', parseError);
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error analyzing document:', error);
+      setAnalysisProgress(prev => ({
+        ...prev,
+        isAnalyzing: false,
+        error: `Failed to analyze resume: ${error.message}`
+      }));
+      
+      addNotification({
+        type: 'error',
+        title: 'Analysis Failed',
+        message: `Failed to analyze ${document.original_filename}`,
+        details: error.message || 'An unexpected error occurred during analysis'
+      });
+    }
+  };
+
+  const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, document: null });
+
+  const handleDelete = (document) => {
+    setConfirmDialog({ isOpen: true, document });
+  };
+
+  const confirmDelete = async () => {
+    try {
+      await auth.deleteResume(confirmDialog.document.id);
+      showToast('Document deleted successfully', 'success');
+      fetchDocuments(); // Refresh the list
+    } catch (error) {
+      showToast('Failed to delete document: ' + error.message, 'error');
+    } finally {
+      setConfirmDialog({ isOpen: false, document: null });
+    }
+  };
+
+  const cancelDelete = () => {
+    setConfirmDialog({ isOpen: false, document: null });
+  };
+
+  const formatDate = (dateString) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
+  const getFileIcon = (fileType) => {
+    return <DocumentIcon className="h-5 w-5 text-red-500" />;
+  };
+
+  return (
+    <>
+      <DocumentUpload onUploadSuccess={handleUploadSuccess} />
+      <DocumentList 
+        documents={documents} 
+        loading={loading} 
+        onPreview={handlePreview}
+        onDelete={handleDelete}
+        onAnalyze={handleAnalyze}
+        formatDate={formatDate}
+        getFileIcon={getFileIcon}
+      />
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
+      )}
+      <ConfirmDialog
+        isOpen={confirmDialog.isOpen}
+        title="Delete Document"
+        message={`Are you sure you want to delete "${confirmDialog.document?.original_filename}"? This action cannot be undone.`}
+        onConfirm={confirmDelete}
+        onCancel={cancelDelete}
+      />
+    </>
+  );
+};
 
 /**
  * Career Agent component - Provides personalized career guidance and insights
@@ -251,10 +905,14 @@ const CareerAgent = () => {
 
   // Notifications state
   const [notifications, setNotifications] = useState([]);
+  const [hasLoadedStoredInsights, setHasLoadedStoredInsights] = useState(false);
   const [notificationCounter, setNotificationCounter] = useState(0);
 
   // Track whether we're loading stored data vs receiving new analysis data
   const [isLoadingStoredData, setIsLoadingStoredData] = useState(false);
+
+  // Track the last analyzed document to load its specific insights
+  const [lastAnalyzedDocumentId, setLastAnalyzedDocumentId] = useState(null);
 
   // Fetch user data on component mount
   useEffect(() => {
@@ -485,10 +1143,10 @@ const CareerAgent = () => {
 
   // Load stored career insights when user is available
   useEffect(() => {
-    if (user?.id) {
+    if (user?.id && !hasLoadedStoredInsights) {
       loadStoredCareerInsights();
     }
-  }, [user?.id]);
+  }, [user?.id, hasLoadedStoredInsights]);
 
   const fetchUserData = async () => {
     try {
@@ -553,9 +1211,34 @@ const CareerAgent = () => {
         return;
       }
 
+      if (hasLoadedStoredInsights) {
+        console.log('Stored insights have already been loaded. Skipping notification.');
+        return;
+      }
+
       setIsLoadingStoredData(true); // Set flag to indicate we're loading stored data
-      console.log('Loading stored career insights for user:', user.id);
-      const response = await getCareerInsights(user.id);
+      
+      let response;
+      
+      // Try to load insights for the last analyzed document first
+      if (lastAnalyzedDocumentId) {
+        console.log('Loading career insights for last analyzed document:', lastAnalyzedDocumentId);
+        try {
+          response = await getCareerInsightsByResume(lastAnalyzedDocumentId, user.id);
+          if (response.success && response.has_data) {
+            console.log('Found insights for last analyzed document');
+          } else {
+            console.log('No insights found for last analyzed document, falling back to latest insights');
+            response = await getCareerInsights(user.id);
+          }
+        } catch (error) {
+          console.log('Error loading insights for specific document, falling back to latest:', error);
+          response = await getCareerInsights(user.id);
+        }
+      } else {
+        console.log('No last analyzed document tracked, loading latest career insights for user:', user.id);
+        response = await getCareerInsights(user.id);
+      }
       
       if (response.success && response.has_data && response.professional_data) {
         console.log('Found stored career insights:', response.professional_data);
@@ -573,12 +1256,15 @@ const CareerAgent = () => {
         setActiveTab('insights');
         
         // Add notification about loaded data
+        const documentInfo = lastAnalyzedDocumentId ? 'for your last analyzed document' : 'from your most recent analysis';
         addNotification({
+          id: 'career-insights-loaded', // Add fixed ID to prevent duplicate notifications
           type: 'info',
           title: 'Career Insights Loaded',
-          message: 'Your previous analysis results have been restored',
+          message: `Your previous analysis results ${documentInfo} have been restored`,
           details: 'All your career insights are now available for review'
         });
+        setHasLoadedStoredInsights(true);
       } else {
         console.log('No stored career insights found or data is empty');
       }
@@ -593,20 +1279,26 @@ const CareerAgent = () => {
   // Notification management functions
   const addNotification = (notification) => {
     const newNotification = {
-      id: `notification-${notificationCounter}`,
+      id: notification.id || `notification-${notificationCounter}`,
       timestamp: Date.now(),
       ...notification
     };
     
-    setNotifications(prev => [...prev, newNotification]);
+    // Only check for duplicates if a custom ID is provided
+    // This allows section completion notifications to accumulate while preventing specific duplicates
+    setNotifications(prev => {
+      if (notification.id) {
+        const existingIndex = prev.findIndex(n => n.id === newNotification.id);
+        if (existingIndex !== -1) {
+          // Update existing notification instead of adding duplicate
+          const updated = [...prev];
+          updated[existingIndex] = newNotification;
+          return updated;
+        }
+      }
+      return [...prev, newNotification];
+    });
     setNotificationCounter(prev => prev + 1);
-    
-    // Auto-dismiss progress notifications after 5 seconds
-    if (notification.type === 'progress') {
-      setTimeout(() => {
-        dismissNotification(newNotification.id);
-      }, 5000);
-    }
   };
 
   const dismissNotification = (notificationId) => {
@@ -615,6 +1307,171 @@ const CareerAgent = () => {
 
   const clearAllNotifications = () => {
     setNotifications([]);
+  };
+
+  // Handler for Resume Analysis
+  const handleAnalyzeResume = async () => {
+    if (!user?.id) {
+      addNotification({
+        type: 'error',
+        title: 'Authentication Required',
+        message: 'Please log in to analyze your resume',
+        details: 'User authentication is required for resume analysis'
+      });
+      return;
+    }
+
+    if (analysisProgress.isAnalyzing) {
+      console.log('Analysis already in progress, ignoring request');
+      return;
+    }
+
+    try {
+      // Reset analysis state
+      setAnalysisProgress({
+        isAnalyzing: true,
+        currentSection: null,
+        completedSections: [],
+        totalSections: 7,
+        progress: 0,
+        error: null
+      });
+
+      setSectionStatus({
+        professionalIdentity: 'pending',
+        workExperience: 'pending',
+        skillsAnalysis: 'pending',
+        marketPosition: 'pending',
+        careerTrajectory: 'pending',
+        strengthsWeaknesses: 'pending',
+        salaryAnalysis: 'pending'
+      });
+
+      // Clear existing professional data to prepare for new analysis
+      setProfessionalData({
+        professionalIdentity: { title: '', summary: '', keyHighlights: [], currentRole: '', currentIndustry: '', currentCompany: '', location: '' },
+        workExperience: { totalYears: 0, timelineStart: null, timelineEnd: null, analytics: { workingYears: { years: '', period: '' }, heldRoles: { count: '', longest: '' }, heldTitles: { count: '', shortest: '' }, companies: { count: '', longest: '' }, insights: { gaps: '', shortestTenure: '', companySize: '', averageRoleDuration: '' } }, companies: [], industries: [] },
+        skillsAnalysis: { hardSkills: [], softSkills: [], coreStrengths: [], developmentAreas: [] },
+        marketPosition: { competitiveness: 0, skillRelevance: 0, industryDemand: 0, careerPotential: 0 },
+        careerTrajectory: [],
+        strengthsWeaknesses: { strengths: [], weaknesses: [] },
+        salaryAnalysis: { currentSalary: null, historicalTrends: [], marketComparison: null, predictedGrowth: null, salaryFactors: [], recommendations: [] }
+      });
+
+      addNotification({
+        type: 'progress',
+        title: 'Resume Analysis Started',
+        message: 'Starting comprehensive analysis of your recent resume',
+        details: 'This may take a few minutes. You will see real-time updates as each section completes.'
+      });
+
+      // Call the backend streaming endpoint
+      const response = await fetch('http://localhost:8002/api/career/analyze_resume_streaming', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}` // Assuming token-based auth
+        },
+        body: JSON.stringify({ user_id: String(user.id) })
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value);
+        const lines = chunk.split('\n');
+
+        for (const line of lines) {
+          if (line.trim() && line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              
+              // Handle different types of streaming responses
+              if (data.type === 'section_progress') {
+                // Dispatch section progress event
+                const progressEvent = new CustomEvent('analysisProgress', {
+                  detail: {
+                    section: data.section,
+                    status: 'analyzing',
+                    progress: data.progress,
+                    totalSections: data.total_sections || 7
+                  }
+                });
+                document.querySelector('[data-agent-type="career"]')?.dispatchEvent(progressEvent);
+              } else if (data.type === 'section_complete') {
+                console.log('Section completed:', data.section, data.data);
+                
+                // Update state directly for immediate UI feedback
+                if (data.data) {
+                  // Update professional data with the new section data
+                  const sectionData = data.data[data.section] || data.data;
+                  setProfessionalData(prev => {
+                    const newData = {
+                      ...prev,
+                      [data.section]: sectionData
+                    };
+                    console.log(`Updated professional data for section ${data.section}:`, newData);
+                    return newData;
+                  });
+                }
+                
+                // Update section status
+                setSectionStatus(prev => {
+                  const newStatus = { ...prev, [data.section]: 'completed' };
+                  console.log('Updated section status:', newStatus);
+                  return newStatus;
+                });
+                
+                // Dispatch section completion event
+                const completeEvent = new CustomEvent('sectionComplete', {
+                  detail: {
+                    section: data.section,
+                    data: data.data,
+                    error: data.error
+                  }
+                });
+                document.querySelector('[data-agent-type="career"]')?.dispatchEvent(completeEvent);
+              } else if (data.type === 'analysis_complete') {
+                // Dispatch analysis completion event
+                const analysisCompleteEvent = new CustomEvent('analysisComplete', {
+                  detail: {
+                    success: data.success,
+                    error: data.error,
+                    professional_data: data.professional_data
+                  }
+                });
+                document.querySelector('[data-agent-type="career"]')?.dispatchEvent(analysisCompleteEvent);
+                break;
+              }
+            } catch (parseError) {
+              console.error('Error parsing streaming data:', parseError);
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error analyzing resume:', error);
+      setAnalysisProgress(prev => ({
+        ...prev,
+        isAnalyzing: false,
+        error: `Failed to analyze resume: ${error.message}`
+      }));
+      
+      addNotification({
+        type: 'error',
+        title: 'Analysis Failed',
+        message: 'Failed to analyze your resume',
+        details: error.message || 'An unexpected error occurred during analysis'
+      });
+    }
   };
 
   // Handler for Personal Assistant dialog
@@ -1480,7 +2337,6 @@ const careerInsights = {
                 <p className="text-gray-600">AI-powered resume creation and optimization tools are in development.</p>
               </div>
             </div>
-            )}
           </div>
         );
 
@@ -1497,11 +2353,14 @@ const careerInsights = {
                   <p className="text-gray-600">Manage your professional documents and certifications</p>
                 </div>
               </div>
-              <div className="text-center py-12">
-                <DocumentTextIcon className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-xl font-semibold text-gray-900 mb-2">Document Management Coming Soon</h3>
-                <p className="text-gray-600">Professional document storage and management features are in development.</p>
-              </div>
+              <DocumentManager 
+                  analysisProgress={analysisProgress}
+                  setAnalysisProgress={setAnalysisProgress}
+                  setSectionStatus={setSectionStatus}
+                  setProfessionalData={setProfessionalData}
+                  addNotification={addNotification}
+                  setLastAnalyzedDocumentId={setLastAnalyzedDocumentId}
+                />
             </div>
           </div>
         );
@@ -3502,12 +4361,26 @@ const careerInsights = {
                   </button>
                   {isInsightsMenuOpen && activeTab === 'insights' && (
                     <div className="pl-6 pt-4 space-y-1">
-                      {[{ id: 'identity', label: 'Professional Identity' }, { id: 'work', label: 'Work Experience Analysis' }, { id: 'salary', label: 'Salary Analysis' }, { id: 'skills', label: 'Skills Analysis' }, { id: 'market', label: 'Market Position Analysis' }].map((item) => (
+                      {[{ id: 'identity', label: 'Professional Identity', section: 'professionalIdentity' }, 
+                        { id: 'work', label: 'Work Experience Analysis', section: 'workExperience' }, 
+                        { id: 'salary', label: 'Salary Analysis', section: 'salaryAnalysis' }, 
+                        { id: 'skills', label: 'Skills Analysis', section: 'skillsAnalysis' }, 
+                        { id: 'market', label: 'Market Position Analysis', section: 'marketPosition' }].map((item) => (
                         <button
                           key={item.id}
                           onClick={() => setInsightsTab(item.id)}
-                          className={`w-full text-left px-3 py-2 rounded-md text-sm transition-all duration-200 ${insightsTab === item.id ? 'bg-orange-100 text-orange-600 font-semibold' : 'text-gray-600 hover:bg-gray-100'}`}
+                          className={`w-full text-left px-3 py-2 rounded-md text-sm transition-all duration-200 flex items-center ${insightsTab === item.id ? 'bg-orange-100 text-orange-600 font-semibold' : 'text-gray-600 hover:bg-gray-100'}`}
                         >
+                          {sectionStatus[item.section] === 'completed' ? (
+                            <svg className="w-4 h-4 text-green-500 mr-2 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                            </svg>
+                          ) : analysisProgress.isAnalyzing ? (
+                            <svg className="w-4 h-4 text-orange-500 mr-2 flex-shrink-0 animate-spin" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="m4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                          ) : null}
                           {item.label}
                         </button>
                       ))}
@@ -3556,16 +4429,27 @@ const careerInsights = {
             </div>
             <div className="flex items-center space-x-4">
               <button
+                onClick={handleAnalyzeResume}
+                className="bg-gradient-to-r from-green-600 to-teal-600 text-white px-6 py-2 rounded-lg font-medium hover:shadow-lg transition-all duration-200 flex items-center space-x-2"
+                disabled={analysisProgress.isAnalyzing}
+              >
+                <DocumentTextIcon className="h-5 w-5" />
+                <span>{analysisProgress.isAnalyzing ? 'Analyzing...' : 'Analyze Recent Resume'}</span>
+              </button>
+              <button
                 onClick={handlePersonalAssistant}
                 className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-2 rounded-lg font-medium hover:shadow-lg transition-all duration-200"
               >
                 Ask Career Agent
               </button>
-              {unreadCount > 0 && (
-                <div className="w-8 h-8 bg-orange-500 rounded-full flex items-center justify-center">
-                  <span className="text-white text-sm font-bold">{unreadCount}</span>
-                </div>
-              )}
+              
+              {/* Notification Bell - moved from bottom to top navigation */}
+              <NotificationPanel 
+                notifications={notifications}
+                onDismiss={dismissNotification}
+                maxVisible={5}
+              />
+              
               <div className="w-10 h-10 bg-gray-300 rounded-full flex items-center justify-center">
                 {avatarUrl ? (
                   <img
@@ -3589,12 +4473,7 @@ const careerInsights = {
           {renderTabContent()}
         </div>
 
-        {/* Notification Panel */}
-        <NotificationPanel 
-          notifications={notifications}
-          onDismiss={dismissNotification}
-          maxVisible={5}
-        />
+        {/* Notification Panel moved to top navigation bar */}
 
         {/* Personal Assistant Section */}
         <PersonalAssistant 

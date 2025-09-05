@@ -159,11 +159,12 @@ class StreamingResumeAnalyzer:
             logger.error(f"Failed to send notification: {e}")
             # Don't raise the exception to avoid breaking the analysis flow
         
-    async def analyze_resume_streaming(self, user_id: int) -> AsyncGenerator[Dict[str, Any], None]:
+    async def analyze_resume_streaming(self, user_id: int, resume_id: Optional[int] = None) -> AsyncGenerator[Dict[str, Any], None]:
         """Analyze resume with streaming progress updates.
         
         Args:
             user_id: The user's ID
+            resume_id: Optional specific resume ID to analyze. If None, analyzes the latest resume.
             
         Yields:
             Streaming analysis results and progress updates
@@ -192,15 +193,25 @@ class StreamingResumeAnalyzer:
                 "timestamp": datetime.now().isoformat()
             }
             
-            # Get the latest resume
-            latest_resume = await self.resume_analyzer.get_latest_resume(user_id)
-            if not latest_resume:
-                yield {
-                    "type": "error",
-                    "message": "No resume found. Please upload your resume first.",
-                    "timestamp": datetime.now().isoformat()
-                }
-                return
+            # Get the specified resume or the latest one
+            if resume_id:
+                target_resume = await self.resume_analyzer.get_resume_by_id(user_id, resume_id)
+                if not target_resume:
+                    yield {
+                        "type": "error",
+                        "message": f"Resume with ID {resume_id} not found.",
+                        "timestamp": datetime.now().isoformat()
+                    }
+                    return
+            else:
+                target_resume = await self.resume_analyzer.get_latest_resume(user_id)
+                if not target_resume:
+                    yield {
+                        "type": "error",
+                        "message": "No resume found. Please upload your resume first.",
+                        "timestamp": datetime.now().isoformat()
+                    }
+                    return
             
             # Read resume content
             yield {
@@ -210,7 +221,7 @@ class StreamingResumeAnalyzer:
                 "timestamp": datetime.now().isoformat()
             }
             
-            resume_content = await self.resume_analyzer.read_resume_content(latest_resume)
+            resume_content = await self.resume_analyzer.read_resume_content(target_resume)
             if not resume_content:
                 yield {
                     "type": "error",
@@ -363,7 +374,7 @@ class StreamingResumeAnalyzer:
                     
                     await self.resume_analyzer.store_career_insight(
                         user_id, 
-                        latest_resume.id, 
+                        target_resume.id, 
                         all_results
                     )
                     
