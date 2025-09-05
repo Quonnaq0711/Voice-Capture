@@ -277,7 +277,7 @@ export const sendMessageStream = (message, sessionId, userId, onToken, onComplet
           if (onToken) onToken(data.content);
           break;
         case 'complete':
-          if (onComplete) onComplete(data.content);
+          if (onComplete) onComplete(data.content, null, data.follow_up_questions);
           eventSource.close();
           break;
         case 'error':
@@ -290,7 +290,7 @@ export const sendMessageStream = (message, sessionId, userId, onToken, onComplet
           break;
         case 'career_insights':
           // Handle career insights data
-          if (onComplete) onComplete(data.message, data.professional_data);
+          if (onComplete) onComplete(data.message, data.professional_data, data.follow_up_questions);
           eventSource.close();
           break;
         case 'section_complete':
@@ -353,7 +353,7 @@ export const sendMessageStream = (message, sessionId, userId, onToken, onComplet
             });
             careerAgentCompleteElement.dispatchEvent(completeEvent);
           }
-          if (onComplete) onComplete(data.message, data.professional_data);
+          if (onComplete) onComplete(data.message, data.professional_data, data.follow_up_questions);
           eventSource.close();
           break;
         default:
@@ -434,6 +434,42 @@ export const getCareerInsights = async (userId) => {
     return data;
   } catch (error) {
     console.error('Error retrieving career insights:', error);
+    throw error;
+  }
+};
+
+/**
+ * Retrieve career insights for a specific resume
+ * @param {number} resumeId - The resume ID to retrieve career insights for
+ * @param {number} userId - The user ID for ownership verification
+ * @returns {Promise<Object>} - The career insights response object
+ */
+export const getCareerInsightsByResume = async (resumeId, userId) => {
+  try {
+    // Validate parameters
+    if (!resumeId || typeof resumeId !== 'number') {
+      throw new Error('Valid resume ID is required');
+    }
+    if (!userId || typeof userId !== 'number') {
+      throw new Error('Valid user ID is required');
+    }
+
+    const response = await fetch(`${CAREER_API_BASE_URL}/insights/resume/${resumeId}?user_id=${userId}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error('Error retrieving career insights by resume:', error);
     throw error;
   }
 };

@@ -77,6 +77,30 @@ class ResumeAnalyzer:
         finally:
             db.close()
     
+    async def get_resume_by_id(self, user_id: int, resume_id: int) -> Optional[Resume]:
+        """Get a specific resume by ID for a user.
+        
+        Args:
+            user_id: The user's ID
+            resume_id: The specific resume ID
+            
+        Returns:
+            The Resume object or None if not found
+        """
+        try:
+            db = SessionLocal()
+            resume = (
+                db.query(Resume)
+                .filter(Resume.user_id == user_id, Resume.id == resume_id)
+                .first()
+            )
+            return resume
+        except Exception as e:
+            logger.error(f"Error getting resume by ID {resume_id}: {str(e)}")
+            return None
+        finally:
+            db.close()
+    
     async def read_resume_content(self, resume: Resume) -> Optional[str]:
         """Read the content of a resume file.
         
@@ -245,6 +269,35 @@ class ResumeAnalyzer:
             
         except Exception as e:
             logger.error(f"Error getting latest career insight: {str(e)}")
+            return None
+        finally:
+            db.close()
+
+    async def get_career_insight_by_resume(self, user_id: int, resume_id: int) -> Optional[Dict[str, Any]]:
+        """Get career insight for a specific resume.
+        
+        Args:
+            user_id: The user's ID (for ownership verification)
+            resume_id: The resume's ID
+            
+        Returns:
+            The professional data from the career insight for the specified resume, or None if not found
+        """
+        try:
+            db = SessionLocal()
+            career_insight = (
+                db.query(CareerInsight)
+                .filter(CareerInsight.user_id == user_id, CareerInsight.resume_id == resume_id)
+                .order_by(CareerInsight.created_at.desc())
+                .first()
+            )
+            
+            if career_insight:
+                return career_insight.get_professional_data()
+            return None
+            
+        except Exception as e:
+            logger.error(f"Error getting career insight for resume {resume_id}: {str(e)}")
             return None
         finally:
             db.close()

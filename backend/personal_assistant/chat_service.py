@@ -20,6 +20,7 @@ from backend.models.chat import ChatMessage
 from backend.models.session import ChatSession
 from backend.models.user import User
 from backend.models.profile import UserProfile
+from prompts import FOLLOW_UP_PROMPT, OPTIMIZE_QUERY_PROMPT
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -218,8 +219,14 @@ class ChatService:
             else:
                 response = await task
             
+            # Generate follow-up questions after the main response
+            follow_up_questions = await self.generate_follow_up_questions(
+                user_message, response, session_id, profile_data, cancellation_event
+            )
+            
             return {
                 "response": response,
+                "follow_up_questions": follow_up_questions,
                 "model": self.model_name,
                 "session_id": session_id,
                 "status": "success"
@@ -730,9 +737,14 @@ class ChatService:
                                 if chunk_data.get("done", False):
                                     # Add the complete response to conversation history
                                     self._add_to_history(session_id, user_message, full_response)
+                                    
+                                    # Generate follow-up questions
+                                    follow_up_questions = await self.generate_follow_up_questions(user_message, full_response, session_id, profile_data)
+                                    
                                     yield {
                                         "type": "complete",
-                                        "content": full_response
+                                        "content": full_response,
+                                        "follow_up_questions": follow_up_questions
                                     }
                                     break
                                     
@@ -793,6 +805,342 @@ class ChatService:
             history.add_ai_message(ai_response)
         except Exception as e:
             logger.error(f"Error adding to history: {str(e)}")
+    
+    async def generate_follow_up_questions(self, user_message: str, ai_response: str, session_id: str = "default", profile_data: Optional[Dict[str, any]] = None, cancellation_event: Optional[asyncio.Event] = None) -> List[str]:
+        """
+        Generate 3 follow-up questions based on the user's original message and AI response.
+        
+        Args:
+            user_message: The original user message
+            ai_response: The AI's response to the user message
+            session_id: Session identifier for conversation context
+            profile_data: Optional user profile data for personalized context
+            cancellation_event: Optional event to check for cancellation
+            
+        Returns:
+            List of 3 follow-up questions that users are most likely to ask
+        """
+        try:
+            # Check for cancellation before starting
+            if cancellation_event and cancellation_event.is_set():
+                return []
+            
+            # Format profile context
+            profile_context = ""
+            if profile_data:
+                profile_context = self._format_profile_for_context(profile_data)
+            
+            # Create a specialized prompt for generating follow-up questions
+            follow_up_prompt = FOLLOW_UP_PROMPT.format(
+                user_message=user_message, 
+                ai_response=ai_response,
+                profile_context=profile_context
+            )
+            
+            print("follow_up_prompt=",follow_up_prompt)
+
+            # Generate follow-up questions using the LLM
+            loop = asyncio.get_event_loop()
+            task = loop.run_in_executor(
+                self.executor,
+                self._generate_follow_up_sync,
+                follow_up_prompt,
+                cancellation_event
+            )
+            
+            # Handle cancellation
+            if cancellation_event:
+                wait_task = asyncio.create_task(cancellation_event.wait())
+                try:
+                    done, pending = await asyncio.wait(
+                        [task, wait_task],
+                        return_when=asyncio.FIRST_COMPLETED
+                    )
+                    
+                    # Cancel any pending tasks
+                    for pending_task in pending:
+                        pending_task.cancel()
+                        try:
+                            await pending_task
+                        except asyncio.CancelledError:
+                            pass
+                    
+                    # If cancellation event was set, return empty list
+                    if cancellation_event.is_set():
+                        if not task.done():
+                            task.cancel()
+                            try:
+                                await task
+                            except asyncio.CancelledError:
+                                pass
+                        return []
+                    
+                    # Get the result from the completed task
+                    questions_text = await task
+                finally:
+                    # Ensure wait_task is cancelled if it wasn't already
+                    if not wait_task.done():
+                        wait_task.cancel()
+                        try:
+                            await wait_task
+                        except asyncio.CancelledError:
+                            pass
+            else:
+                questions_text = await task
+            
+            # Parse the generated questions
+            questions = self._parse_follow_up_questions(questions_text)
+            
+            logger.info(f"Generated {len(questions)} follow-up questions for session: {session_id}")
+            return questions
+            
+        except Exception as e:
+            logger.error(f"Error generating follow-up questions: {str(e)}")
+            # Return default questions if generation fails
+            return [
+                "Can you provide more details about this?",
+                "What are the next steps I should take?",
+                "Are there any alternatives I should consider?"
+            ]
+    
+    async def optimize_query(self, user_query: str, cancellation_event: Optional[asyncio.Event] = None) -> Dict[str, str]:
+        """
+        Optimize user query to make it clearer and more structured for better AI understanding.
+        
+        Args:
+            user_query: Original user query to optimize
+            cancellation_event: Optional event to signal cancellation
+            
+        Returns:
+            Dictionary containing the optimized query and metadata
+        """
+        try:
+            logger.info(f"Optimizing query: {user_query[:50]}...")
+            
+            # Check if request was cancelled before starting
+            if cancellation_event and cancellation_event.is_set():
+                raise asyncio.CancelledError("Request was cancelled before processing")
+            
+            # Format the optimization prompt
+            optimization_prompt = OPTIMIZE_QUERY_PROMPT.format(user_query=user_query)
+            
+            # Run the optimization in a thread pool to avoid blocking
+            loop = asyncio.get_event_loop()
+            
+            # Create a task that can be cancelled
+            task = loop.run_in_executor(
+                self.executor,
+                self._optimize_sync_query,
+                optimization_prompt,
+                cancellation_event
+            )
+            
+            # Wait for either the task to complete or cancellation
+            if cancellation_event:
+                wait_task = asyncio.create_task(cancellation_event.wait())
+                try:
+                    done, pending = await asyncio.wait(
+                        [task, wait_task],
+                        return_when=asyncio.FIRST_COMPLETED
+                    )
+                    
+                    # Cancel any pending tasks
+                    for pending_task in pending:
+                        pending_task.cancel()
+                        try:
+                            await pending_task
+                        except asyncio.CancelledError:
+                            pass
+                    
+                    # If cancellation event was set, cancel the task
+                    if cancellation_event.is_set():
+                        if not task.done():
+                            task.cancel()
+                            try:
+                                await task
+                            except asyncio.CancelledError:
+                                pass
+                        raise asyncio.CancelledError("Request was cancelled during processing")
+                    
+                    # Get the result from the completed task
+                    optimized_query = await task
+                finally:
+                    # Ensure wait_task is cancelled if it wasn't already
+                    if not wait_task.done():
+                        wait_task.cancel()
+                        try:
+                            await wait_task
+                        except asyncio.CancelledError:
+                            pass
+            else:
+                optimized_query = await task
+            
+            return {
+                "original_query": user_query,
+                "optimized_query": optimized_query,
+                "model": self.model_name,
+                "status": "success"
+            }
+            
+        except asyncio.CancelledError:
+            logger.info("Query optimization cancelled")
+            raise
+        except Exception as e:
+            logger.error(f"Error optimizing query: {str(e)}")
+            return {
+                "original_query": user_query,
+                "optimized_query": user_query,  # Return original on error
+                "model": self.model_name,
+                "status": "error",
+                "error": str(e)
+            }
+    
+    def _optimize_sync_query(self, optimization_prompt: str, cancellation_event: Optional[asyncio.Event] = None) -> str:
+        """
+        Synchronous method to optimize query using the LLM.
+        
+        Args:
+            optimization_prompt: Formatted prompt for query optimization
+            cancellation_event: Optional event to check for cancellation
+            
+        Returns:
+            Optimized query string
+        """
+        try:
+            # Check for cancellation before starting
+            if cancellation_event and cancellation_event.is_set():
+                raise asyncio.CancelledError("Request was cancelled")
+            
+            # Use the LLM directly for optimization (no conversation history needed)
+            response = self.llm.invoke(optimization_prompt)
+            
+            # Check for cancellation after generation
+            if cancellation_event and cancellation_event.is_set():
+                raise asyncio.CancelledError("Request was cancelled")
+            
+            # Clean up the response - remove any extra formatting
+            optimized_query = response.strip()
+            
+            # Remove common prefixes that might be added by the LLM
+            prefixes_to_remove = [
+                "Optimized Query:",
+                "Optimized:",
+                "Here's the optimized query:",
+                "The optimized query is:"
+            ]
+            
+            for prefix in prefixes_to_remove:
+                if optimized_query.startswith(prefix):
+                    optimized_query = optimized_query[len(prefix):].strip()
+                    break
+
+            # Remove wrapping quotation marks that the LLM might add
+            import re
+            optimized_query = optimized_query.strip()
+            optimized_query = re.sub(r'^[\"“\'`]+', '', optimized_query)
+            optimized_query = re.sub(r'[\"”\'`]+$', '', optimized_query)
+
+            return optimized_query
+            
+        except Exception as e:
+            logger.error(f"Error in sync query optimization: {str(e)}")
+            raise
+    
+    def _generate_follow_up_sync(self, prompt: str, cancellation_event: Optional[asyncio.Event] = None) -> str:
+        """
+        Synchronous method to generate follow-up questions using the LLM.
+        
+        Args:
+            prompt: The prompt for generating follow-up questions
+            cancellation_event: Optional event to check for cancellation
+            
+        Returns:
+            Generated follow-up questions as text
+        """
+        try:
+            # Check for cancellation before starting
+            if cancellation_event and cancellation_event.is_set():
+                return ""
+            
+            # Use the LLM directly for follow-up question generation
+            response = self.llm.invoke(prompt)
+            
+            # Check for cancellation after generation
+            if cancellation_event and cancellation_event.is_set():
+                return ""
+                
+            return response.strip()
+            
+        except Exception as e:
+            logger.error(f"Error in sync follow-up generation: {str(e)}")
+            raise
+    
+    def _parse_follow_up_questions(self, questions_text: str) -> List[str]:
+        """
+        Parse the generated follow-up questions text into a list of questions.
+        
+        Args:
+            questions_text: Raw text containing the generated questions
+            
+        Returns:
+            List of parsed follow-up questions
+        """
+        try:
+            questions = []
+            lines = questions_text.strip().split('\n')
+            
+            for line in lines:
+                line = line.strip()
+                # Look for numbered questions (1., 2., 3. or 1), 2), 3))
+                if line and (line.startswith(('1.', '2.', '3.', '1)', '2)', '3)')) or 
+                           any(line.startswith(f'{i}.') or line.startswith(f'{i})') for i in range(1, 4))):
+                    # Remove the number and clean up the question
+                    question = line
+                    # Remove leading numbers and punctuation
+                    for prefix in ['1.', '2.', '3.', '1)', '2)', '3)']:
+                        if question.startswith(prefix):
+                            question = question[len(prefix):].strip()
+                            break
+                    
+                    if question and len(question) > 5:  # Ensure it's a meaningful question
+                        questions.append(question)
+            
+            # If we couldn't parse exactly 3 questions, try a different approach
+            if len(questions) != 3:
+                # Split by common delimiters and try to extract questions
+                all_text = questions_text.replace('\n', ' ').strip()
+                # Look for question patterns
+                import re
+                question_patterns = re.findall(r'[1-3][.)][^1-3]*(?=[1-3][.)]|$)', all_text)
+                
+                if question_patterns:
+                    questions = []
+                    for pattern in question_patterns[:3]:  # Take only first 3
+                        # Clean up the question
+                        question = re.sub(r'^[1-3][.)]\s*', '', pattern).strip()
+                        if question and len(question) > 5:
+                            questions.append(question)
+            
+            # Ensure we have exactly 3 questions, pad with defaults if needed
+            while len(questions) < 3:
+                default_questions = [
+                    "Can you explain this in more detail?",
+                    "What should I do next?",
+                    "Are there other options to consider?"
+                ]
+                questions.append(default_questions[len(questions)])
+            
+            # Limit to exactly 3 questions
+            return questions[:3]
+            
+        except Exception as e:
+            logger.error(f"Error parsing follow-up questions: {str(e)}")
+            # Return default questions if parsing fails
+            return [
+                "Can you provide more details about this?",
+                "What are the next steps I should take?",
+                "Are there any alternatives I should consider?"
+            ]
     
     async def health_check(self) -> Dict[str, str]:
         """

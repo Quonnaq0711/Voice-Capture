@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { XMarkIcon, PaperAirplaneIcon, PlusIcon, ClockIcon, Cog6ToothIcon, TrashIcon, ChevronDownIcon, DocumentDuplicateIcon, PencilIcon, StopIcon, CheckIcon } from '@heroicons/react/24/outline';
+import { XMarkIcon, PaperAirplaneIcon, PlusIcon, ClockIcon, Cog6ToothIcon, TrashIcon, ChevronDownIcon, DocumentDuplicateIcon, PencilIcon, StopIcon, CheckIcon, SparklesIcon, ArrowUturnLeftIcon } from '@heroicons/react/24/outline';
 import { XCircleIcon } from '@heroicons/react/24/solid';
 import { chat, sessions, profile as profileAPI } from '../services/api';
 import { sendMessage as defaultSendMessage, sendMessageStream as defaultSendMessageStream, checkHealth, clearMemory, generateSessionId, handleApiError, removeMessagesAfterIndex, updateMessageAtIndex } from '../services/chatApi';
@@ -83,6 +83,7 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
   const [abortController, setAbortController] = useState(null);
   const [generatingSessions, setGeneratingSessions] = useState(new Set()); // Track sessions generating responses
   const [userId, setUserId] = useState(null);
+  const [followUpQuestions, setFollowUpQuestions] = useState({}); // Store follow-up questions by message ID
   const currentSessionRef = useRef(currentSession);
   useEffect(() => {
     currentSessionRef.current = currentSession;
@@ -103,6 +104,11 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
   }, [currentSession, generatingSessions]);
   const [editingMessageIndex, setEditingMessageIndex] = useState(null);
   const [editInput, setEditInput] = useState('');
+  
+  // Optimize input states
+  const [isOptimizing, setIsOptimizing] = useState(false);
+  const [originalInput, setOriginalInput] = useState('');
+  const [isOptimized, setIsOptimized] = useState(false);
   const [sessionHistoryHeight, setSessionHistoryHeight] = useState(240); // Default height for session history
   const [isResizingSessions, setIsResizingSessions] = useState(false);
   const [eventSource, setEventSource] = useState(null); // Track EventSource for streaming responses
@@ -231,6 +237,7 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
   const messagesEndRef = useRef(null);
   const messageContainerRef = useRef(null);
   const dialogRef = useRef(null);
+  const textareaRef = useRef(null);
   const resizeStartPos = useRef({ x: 0, y: 0 });
   const resizeStartSize = useRef({ width: 0, height: 0 });
   
@@ -681,6 +688,64 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
     setEditingMessageIndex(null);
     setEditInput('');
   };
+  
+  // Optimize input functions
+  const optimizeInput = async () => {
+    if (!input.trim() || isOptimizing) return;
+    
+    setIsOptimizing(true);
+    setOriginalInput(input); // Store original input for revert functionality
+    
+    try {
+      const data = await chat.optimizeQuery(input.trim());
+      
+      if (data.status === 'success' && data.optimized_query) {
+        setInput(data.optimized_query);
+        setIsOptimized(true);
+      } else {
+        console.error('Failed to optimize query:', data.error || 'Unknown error');
+        // Show error message to user (you might want to add a toast notification here)
+      }
+    } catch (error) {
+      console.error('Error optimizing input:', error);
+      // Show error message to user (you might want to add a toast notification here)
+    } finally {
+      setIsOptimizing(false);
+    }
+  };
+  
+  const revertOptimization = () => {
+    if (isOptimized && originalInput) {
+      setInput(originalInput);
+      setIsOptimized(false);
+      setOriginalInput('');
+    }
+  };
+  
+  // Auto-resize textarea function
+  const autoResizeTextarea = useCallback(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 200) + 'px';
+    }
+  }, []);
+
+  // Auto-resize textarea when input changes
+  useEffect(() => {
+    autoResizeTextarea();
+  }, [input, autoResizeTextarea]);
+
+  // Reset optimization state when input changes manually
+  const handleInputChange = (e) => {
+    const newValue = e.target.value;
+    setInput(newValue);
+    
+    // If user manually changes the input after optimization, reset optimization state
+    if (isOptimized && newValue !== input) {
+      setIsOptimized(false);
+      setOriginalInput('');
+    }
+  };
 
   // Function to handle keyboard shortcuts in edit mode
   const handleEditKeyPress = (e, messageIndex) => {
@@ -861,7 +926,7 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
           });
         },
         // onComplete callback - finalize the message
-        async (fullResponse) => {
+        async (fullResponse, professionalData, followUpQuestionsData) => {
           // Remove session from generating sessions on completion
           if (currentSessionAtSendTime?.id) {
             setGeneratingSessions(prev => {
@@ -884,14 +949,24 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
             
             // Update the placeholder message with the final response
             setMessages(prev => {
-              const newMessages = [...prev];
-              const lastMessage = newMessages[newMessages.length - 1];
-              if (lastMessage && lastMessage.sender === 'assistant' && lastMessage.isStreaming) {
-                Object.assign(lastMessage, assistantMessage);
-                delete lastMessage.isStreaming;
+                const newMessages = [...prev];
+                const lastMessage = newMessages[newMessages.length - 1];
+                if (lastMessage && lastMessage.sender === 'assistant' && lastMessage.isStreaming) {
+                  Object.assign(lastMessage, { ...assistantMessage, id: lastMessage.id }); // Preserve streaming ID
+                  delete lastMessage.isStreaming;
+                }
+                return newMessages;
+              });
+  
+              // Handle follow-up questions if provided
+              if (followUpQuestionsData && Array.isArray(followUpQuestionsData) && followUpQuestionsData.length > 0) {
+                const messageId = placeholderMessage.id;
+                setFollowUpQuestions(prev => ({
+                  ...prev,
+                  [messageId]: followUpQuestionsData
+                }));
               }
-              return newMessages;
-            });
+
           } else {
             // User switched sessions, save response to the original session's database
             console.log('User switched sessions during response generation for edited message. Response saved to database but not displayed.');
@@ -1257,18 +1332,36 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
   };
 
   // Handle message submission
-  const handleSubmit = async (e) => {
+  // Handle follow-up question click
+  const handleFollowUpQuestionClick = (question) => {
+    // Do nothing if the question is empty, a response is loading, or navigation is in progress.
+    if (!question || isLoading || isNavigating) return;
+    
+    // Create a synthetic event because handleSubmit expects one.
+    const syntheticEvent = {
+      preventDefault: () => {},
+    };
+
+    // Call handleSubmit directly with the question, bypassing the input state.
+    handleSubmit(syntheticEvent, question);
+  };
+
+  const handleSubmit = async (e, messageOverride = null) => {
     e.preventDefault();
     
-    // If currently loading, cancel the request
+    // If a response is already loading, treat the submission as a cancellation request.
     if (isLoading) {
       handleCancel();
       return;
     }
     
-    if (!input.trim() || isNavigating) return;
+    // Determine the message to send, using the override if available (for follow-up questions).
+    const userMessage = (messageOverride || input).trim();
+    
+    // Do not send an empty message or if navigation is in progress.
+    if (!userMessage || isNavigating) return;
 
-    const userMessage = input.trim();
+    // Clear the input field immediately after sending.
     setInput('');
 
     // Force scroll to bottom when user sends a message
@@ -1409,7 +1502,7 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
           });
         },
         // onComplete callback - finalize the message
-        async (fullResponse, professionalData) => {
+        async (fullResponse, professionalData, followUpQuestionsData) => {
           // Remove session from generating sessions on completion
           const sessionIdForClearing = updatedSessionAtSendTime?.id || currentSessionAtSendTime?.id;
           if (sessionIdForClearing) {
@@ -1456,6 +1549,15 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
                   }
                 : msg
             ));
+            
+            // Handle follow-up questions if provided
+            if (followUpQuestionsData && Array.isArray(followUpQuestionsData) && followUpQuestionsData.length > 0) {
+              const messageId = savedAssistantMessage?.id || streamingMessageId;
+              setFollowUpQuestions(prev => ({
+                ...prev,
+                [messageId]: followUpQuestionsData
+              }));
+            }
             
             // If professional data is provided (for career insights), update the parent component
             if (professionalData && location.pathname.startsWith('/agents/career')) {
@@ -2121,6 +2223,49 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
                         })}
                       </div>
                     )}
+                    
+                    {/* Follow-up Questions */}
+                    {message.sender === 'assistant' && !message.isStreaming && followUpQuestions[message.id] && (
+                      <div className="mt-4 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-100 shadow-sm">
+                        <div className="flex items-center mb-3">
+                          <svg className="w-4 h-4 text-blue-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          <span className="text-sm font-semibold text-blue-800">You might also want to ask:</span>
+                        </div>
+                        <div className="grid gap-2">
+                          {followUpQuestions[message.id].map((question, qIndex) => (
+                            <button
+                              key={qIndex}
+                              onClick={() => handleFollowUpQuestionClick(question)}
+                              disabled={isLoading || isNavigating}
+                              className={`group relative w-full text-left p-3 text-sm rounded-lg border-2 transition-all duration-200 transform ${
+                                isLoading || isNavigating
+                                  ? 'bg-gray-50 text-gray-400 border-gray-200 cursor-not-allowed'
+                                  : 'bg-white text-gray-700 border-blue-200 hover:border-blue-400 hover:shadow-md hover:-translate-y-0.5 cursor-pointer'
+                              }`}
+                              title={isLoading || isNavigating ? 'Please wait for current response to complete' : 'Click to ask this question'}
+                            >
+                              <div className="flex items-start">
+                                <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold mr-3 mt-0.5 ${
+                                  isLoading || isNavigating
+                                    ? 'bg-gray-200 text-gray-400'
+                                    : 'bg-blue-100 text-blue-600 group-hover:bg-blue-200'
+                                }`}>
+                                  {qIndex + 1}
+                                </span>
+                                <span className="flex-1 leading-relaxed">{question}</span>
+                                {!isLoading && !isNavigating && (
+                                  <svg className="w-4 h-4 text-blue-400 opacity-0 group-hover:opacity-100 transition-opacity ml-2 mt-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                  </svg>
+                                )}
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
                 
@@ -2136,8 +2281,9 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
       <form onSubmit={handleSubmit} className="p-4 border-t">
         <div className="relative">
           <textarea
+            ref={textareaRef}
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={handleInputChange}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
@@ -2151,20 +2297,58 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
                 ? "Cancelling..." 
                 : isLoading 
                 ? "Thinking..." 
+                : isOptimizing
+                ? "Optimizing your input..."
                 : "Ask me anything..."
             }
-            disabled={isNavigating || isCancelling || isLoading}
-            rows={Math.max(1, Math.min(10, input.split('\n').length))}
-            className={`w-full p-2 pr-12 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors resize-none ${
-              isNavigating || isCancelling || isLoading ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : ''
+            disabled={isNavigating || isCancelling || isLoading || isOptimizing}
+            rows={1}
+            style={{
+              minHeight: '40px',
+              maxHeight: '200px',
+              height: 'auto',
+              resize: 'none'
+            }}
+            className={`w-full p-2 pr-24 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors resize-none ${
+              isNavigating || isCancelling || isLoading || isOptimizing ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : ''
             }`}
           />
+          {/* Optimize Button */}
+          <button
+            onClick={isOptimized ? revertOptimization : optimizeInput}
+            type="button"
+            disabled={isNavigating || isCancelling || isLoading || isOptimizing || !input.trim()}
+            className={`absolute bottom-2 right-16 p-2 rounded-lg transition-colors ${
+              isNavigating || isCancelling || isLoading || isOptimizing || !input.trim()
+                ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                : isOptimized
+                ? 'bg-orange-500 text-white hover:bg-orange-600'
+                : 'bg-green-500 text-white hover:bg-green-600'
+            }`}
+            title={
+              isOptimizing
+                ? 'Optimizing...'
+                : isOptimized
+                ? 'Revert to original input'
+                : 'Optimize input content'
+            }
+          >
+            {isOptimizing ? (
+              <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+            ) : isOptimized ? (
+              <ArrowUturnLeftIcon className="w-5 h-5" />
+            ) : (
+              <SparklesIcon className="w-5 h-5" />
+            )}
+          </button>
+          
+          {/* Send Button */}
           <button
             onClick={isLoading && !isCancelling ? handleCancel : undefined}
             type={isLoading && !isCancelling ? 'button' : 'submit'}
-            disabled={isNavigating || (isLoading ? false : !input.trim())}
-            className={`absolute bottom-2 right-2 p-2 rounded-lg transition-colors ${
-              isNavigating || (isLoading ? false : !input.trim())
+            disabled={isNavigating || isOptimizing || (isLoading ? false : !input.trim())}
+            className={`absolute bottom-2 right-4 p-2 rounded-lg transition-colors ${
+              isNavigating || isOptimizing || (isLoading ? false : !input.trim())
                 ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
                 : isLoading && !isCancelling
                 ? 'bg-red-500 text-white hover:bg-red-600'
