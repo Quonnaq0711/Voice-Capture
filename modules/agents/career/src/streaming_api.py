@@ -9,11 +9,12 @@ from datetime import datetime
 from streaming_analyzer import StreamingResumeAnalyzer, ProgressNotificationService
 from resume_analyzer import ResumeAnalyzer
 
-router = APIRouter()
+router = APIRouter(prefix="/api/career", tags=["career-streaming"])
 notification_service = ProgressNotificationService()
 
 class AnalysisRequest(BaseModel):
     user_id: str
+    resume_id: Optional[str] = None
     session_id: Optional[str] = None
     force_reanalysis: bool = False
 
@@ -23,43 +24,46 @@ class AnalysisResponse(BaseModel):
     session_id: Optional[str] = None
     error: Optional[str] = None
 
-@router.post("/analyze/stream", response_model=AnalysisResponse)
-async def start_streaming_analysis(
-    request: AnalysisRequest,
-    background_tasks: BackgroundTasks
+@router.post("/analyze_resume_streaming")
+async def analyze_resume_streaming(
+    request: AnalysisRequest
 ):
     """
-    Start a streaming resume analysis workflow.
-    Returns immediately with a session ID for tracking progress.
+    Stream resume analysis results in real-time.
+    Returns streaming response with analysis progress and results.
     """
-    try:
-        # Generate session ID if not provided
-        session_id = request.session_id or f"analysis_{request.user_id}_{int(datetime.now().timestamp())}"
-        
-        # Initialize streaming analyzer with notification service URL
-        notification_service_url = "http://localhost:8001"  # Personal assistant service URL
-        streaming_analyzer = StreamingResumeAnalyzer(notification_service_url=notification_service_url)
-        
-        # Register session for progress notifications
-        notification_service.register_session(session_id, request.user_id)
-        
-        # Start analysis in background
-        background_tasks.add_task(
-            run_streaming_analysis,
-            streaming_analyzer,
-            request.user_id,
-            session_id,
-            request.force_reanalysis
-        )
-        
-        return AnalysisResponse(
-            success=True,
-            message="Analysis started successfully",
-            session_id=session_id
-        )
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to start analysis: {str(e)}")
+    async def generate_stream():
+        try:
+            # Initialize streaming analyzer
+            streaming_analyzer = StreamingResumeAnalyzer()
+            
+            # Convert user_id to int if it's a string
+            user_id = int(request.user_id)
+            
+            # Stream analysis results
+            resume_id = int(request.resume_id) if request.resume_id else None
+            async for result in streaming_analyzer.analyze_resume_streaming(user_id, resume_id):
+                # Format as JSON and add newline for streaming
+                yield f"data: {json.dumps(result)}\n\n"
+                
+        except Exception as e:
+            error_result = {
+                "type": "error",
+                "message": f"Analysis failed: {str(e)}",
+                "timestamp": datetime.now().isoformat()
+            }
+            yield f"data: {json.dumps(error_result)}\n\n"
+    
+    return StreamingResponse(
+        generate_stream(),
+        media_type="text/plain",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Headers": "*"
+        }
+    )
 
 async def run_streaming_analysis(
     analyzer: StreamingResumeAnalyzer,
