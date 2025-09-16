@@ -44,8 +44,8 @@ class TestSessionsAPI:
     
     def test_create_session_database_error(self, client, test_user, auth_headers):
         """Test creating session with database error"""
-        from backend.main import app
-        from backend.db.database import get_db
+        from main import app
+        from db.database import get_db
         
         # Mock database error
         mock_db = MagicMock()
@@ -128,8 +128,8 @@ class TestSessionsAPI:
     
     def test_get_user_sessions_database_error(self, client, test_user, auth_headers):
         """Test getting user sessions with database error"""
-        from backend.main import app
-        from backend.db.database import get_db
+        from main import app
+        from db.database import get_db
         
         mock_db = MagicMock()
         mock_db.execute.side_effect = Exception("Database error")
@@ -258,8 +258,8 @@ class TestSessionsAPI:
     
     def test_activate_session_database_error(self, client, test_user, auth_headers):
         """Test activating session with database error"""
-        from backend.main import app
-        from backend.db.database import get_db
+        from main import app
+        from db.database import get_db
         
         mock_db = MagicMock()
         mock_db.execute.side_effect = Exception("Database error")
@@ -319,8 +319,8 @@ class TestSessionsAPI:
     
     def test_get_active_session_database_error(self, client, test_user, auth_headers):
         """Test getting active session with database error"""
-        from backend.main import app
-        from backend.db.database import get_db
+        from main import app
+        from db.database import get_db
         
         mock_db = MagicMock()
         mock_db.execute.side_effect = Exception("Database error")
@@ -380,8 +380,8 @@ class TestSessionsAPI:
     
     def test_delete_session_database_error(self, client, test_user, auth_headers):
         """Test deleting session with database error"""
-        from backend.main import app
-        from backend.db.database import get_db
+        from main import app
+        from db.database import get_db
         
         mock_db = MagicMock()
         mock_db.execute.side_effect = Exception("Database error")

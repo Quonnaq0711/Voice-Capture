@@ -4,10 +4,10 @@ from sqlalchemy import text
 from typing import List
 from datetime import datetime
 
-from ..db.database import get_db
-from ..models.user import User
-from ..models.chat import ChatMessage
-from ..utils.auth import get_current_user
+from db.database import get_db
+from models.user import User
+from models.chat import ChatMessage
+from utils.auth import get_current_user
 from pydantic import BaseModel
 
 router = APIRouter()

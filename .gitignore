@@ -35,6 +35,8 @@ node_modules/
 
 # Virtual environments
 .env
+.env.prod
+.env.staging
 .envrc
 .venv/
 venv/
@@ -242,3 +244,8 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+data/ollama-staging/id_ed25519
+data/postgres-staging/
+nginx/ssl/origin.crt
+nginx/ssl/origin.key
+data/ollama-staging/
