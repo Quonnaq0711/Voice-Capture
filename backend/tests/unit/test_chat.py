@@ -3,7 +3,7 @@ from fastapi import status
 from datetime import datetime
 from unittest.mock import patch
 
-from backend.models.chat import ChatMessage
+from models.chat import ChatMessage
 
 class TestChatAPI:
     """Test cases for Chat API endpoints"""
@@ -232,8 +232,8 @@ class TestChatAPI:
     def test_get_chat_history_other_user_messages_not_visible(self, client, test_user, auth_headers, db_session):
         """Test that user can only see their own messages"""
         # Create another user and their messages
-        from backend.models.user import User
-        from backend.utils.auth import get_password_hash
+        from models.user import User
+        from utils.auth import get_password_hash
         
         other_user = User(
             username="otheruser",
@@ -331,8 +331,8 @@ class TestChatAPI:
     def test_clear_chat_history_only_user_messages(self, client, test_user, auth_headers, db_session):
         """Test that clearing chat history only deletes current user's messages"""
         # Create another user and their messages
-        from backend.models.user import User
-        from backend.utils.auth import get_password_hash
+        from models.user import User
+        from utils.auth import get_password_hash
         
         other_user = User(
             username="otheruser",

@@ -1,15 +1,15 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from .api import auth, chat, profile, sessions
-from .models.user import Base
-from .models.chat import ChatMessage
-from .models.session import ChatSession
-from .models.resume import Resume
-from .models.profile import UserProfile
-from backend.services.email_service import EmailService
-from backend.services.otp_service import OTPService
-from .db.database import engine
+from api import auth, chat, profile, sessions
+from models.user import Base
+from models.chat import ChatMessage
+from models.session import ChatSession
+from models.resume import Resume
+from models.profile import UserProfile
+from services.email_service import EmailService
+from services.otp_service import OTPService
+from db.database import engine
 import os
 
 

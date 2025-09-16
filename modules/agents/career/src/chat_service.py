@@ -14,13 +14,13 @@ from datetime import datetime
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from sqlalchemy.orm import Session
-from backend.db.database import SessionLocal
-from backend.models.profile import UserProfile
-from backend.models.career_insight import CareerInsight
-from backend.models.user import User
-from backend.models.chat import ChatMessage
-from backend.models.session import ChatSession
-from backend.models.resume import Resume
+from db.database import SessionLocal
+from models.profile import UserProfile
+from models.career_insight import CareerInsight
+from models.user import User
+from models.chat import ChatMessage
+from models.session import ChatSession
+from models.resume import Resume
 from prompts import FOLLOW_UP_PROMPT
 
 # Configure logging

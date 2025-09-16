@@ -2,10 +2,10 @@
 # import logging
 # import os
 # import requests
-# from backend.services.email_service import EmailService
+# from services.email_service import EmailService
 # # In a test script
-# from backend.services.otp_service import OTPService
-# from backend.services.otp_service import OTPPurpose
+# from services.otp_service import OTPService
+# from services.otp_service import OTPPurpose
 
 
 # logging.basicConfig(level=logging.INFO)
@@ -177,11 +177,11 @@ import asyncio
 import logging
 import os
 import requests
-from backend.services import email_service
-from backend.services.email_service import EmailService
-from backend.services.otp_service import OTPService
-from backend.services.otp_service import OTPPurpose
-from backend.db.database import get_db, SessionLocal
+from services import email_service
+from services.email_service import EmailService
+from services.otp_service import OTPService
+from services.otp_service import OTPPurpose
+from db.database import get_db, SessionLocal
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

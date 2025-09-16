@@ -12,8 +12,8 @@ import logging
 import asyncio
 import json
 from sse_starlette.sse import EventSourceResponse
-from .chat_service import get_chat_service, ChatService
-from backend.db.database import get_db
+from chat_service import get_chat_service, ChatService
+from db.database import get_db
 from sqlalchemy.orm import Session
 
 # Configure logging
@@ -430,7 +430,7 @@ async def get_available_models():
     """
     return {
         "current_model": "gemma3:latest",
-        "base_url": "http://localhost:11434",
+        "base_url": "http://ollama-staging:11434",
         "description": "Local Ollama LLM instance",
         "capabilities": [
             "text_generation",

@@ -5,7 +5,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '.
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, MetaData, Table
 from sqlalchemy.sql import text
 from datetime import datetime
-from backend.db.database import engine
+from db.database import engine
 
 def create_career_insights_table():
     # Create metadata object

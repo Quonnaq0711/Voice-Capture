@@ -8,7 +8,7 @@ from models.resume import Resume
 from models.chat import ChatMessage
 from models.session import ChatSession
 from models.profile import UserProfile
-from backend.db.database import SQLALCHEMY_DATABASE_URL
+from db.database import SQLALCHEMY_DATABASE_URL
 import argparse
 
 def create_tables(force=False):

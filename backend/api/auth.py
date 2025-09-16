@@ -7,25 +7,25 @@ from datetime import timedelta
 from typing import List
 import aiofiles
 
-from backend.services import password_reset_service
+from services import password_reset_service
 
-from ..services.email_service import EmailService
-from ..services.otp_service import OTPService
-from backend.services.email_validation_service import EmailValidationService
-from backend.services.password_reset_service import PasswordResetService
-from ..models import schemas
-from ..models.user import User
-from ..utils.auth import (
+from services.email_service import EmailService
+from services.otp_service import OTPService
+from services.email_validation_service import EmailValidationService
+from services.password_reset_service import PasswordResetService
+from models import schemas
+from models.user import User
+from utils.auth import (
     get_password_hash,
     verify_password,
     create_access_token,
     get_current_user,
     ACCESS_TOKEN_EXPIRE_MINUTES
 )
-from ..db.database import get_db
-from backend.services.email_validation_service import EmailValidationService
+from db.database import get_db
+from services.email_validation_service import EmailValidationService
 
-from backend.services.password_reset_service import PasswordResetService
+from services.password_reset_service import PasswordResetService
 
 router = APIRouter()
 
@@ -229,7 +229,6 @@ async def reset_password_confirm(
             detail="Failed to reset password"
         )
 
-# Resume Functions
 
 @router.post("/token/refresh", response_model=schemas.Token)
 async def refresh_token(current_user: User = Depends(get_current_user)):
@@ -239,8 +238,10 @@ async def refresh_token(current_user: User = Depends(get_current_user)):
     )
     return {"access_token": access_token, "token_type": "bearer"}
 
+# Resume Functions
+
 import uuid
-from ..models.resume import Resume
+from models.resume import Resume
 
 @router.post("/upload-resume", response_model=schemas.ResumeUploadResponse)
 async def upload_resume(
