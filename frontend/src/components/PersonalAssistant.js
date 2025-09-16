@@ -17,6 +17,12 @@ const PersonalAssistant = ({ user, isDialogOpen: externalIsDialogOpen, setIsDial
   const [targetAgent, setTargetAgent] = useState(null);
   const [showAgentWelcome, setShowAgentWelcome] = useState(false);
   const [hasDialogBeenOpened, setHasDialogBeenOpened] = useState(false);
+
+  useEffect(() => {
+    if (externalIsDialogOpen) {
+      setHasDialogBeenOpened(true);
+    }
+  }, [externalIsDialogOpen]);
   
   // Available agents configuration
   const agents = [

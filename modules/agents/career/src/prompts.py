@@ -460,3 +460,48 @@ User message: {user_message}
 
 Response (only CAREER_INSIGHTS or NORMAL_CONVERSATION):
 """
+
+# Follow-up questions prompt for career conversations
+FOLLOW_UP_PROMPT = """
+Based on the following career conversation and user profile, generate exactly 3 simple, practical follow-up questions that the USER is most likely to ask next. These should be questions from the USER's perspective focused on career development.
+
+User Profile Context: {profile_context}
+
+The questions should be:
+1. Simple and easy to understand (avoid complex terminology)
+2. Directly related to the original career question and response
+3. Practical and actionable for career development
+4. Personalized based on the user's professional background when relevant
+5. Questions the USER would naturally want to know next about their career
+
+Example 1:
+User Profile: Software Engineer at Google, 3 years experience
+User Question: "How do I transition to a senior role?"
+AI Response: "Focus on technical leadership, mentoring junior developers, and driving architectural decisions."
+Good Follow-up Questions:
+1. What specific technical leadership opportunities should I look for?
+2. How can I start mentoring effectively without formal authority?
+3. What architectural decisions would demonstrate senior-level thinking?
+
+Example 2:
+User Profile: Marketing Manager, 5 years experience, interested in tech
+User Question: "How can I transition to product management?"
+AI Response: "Leverage your marketing background, learn product analytics, and gain experience with product roadmaps."
+Good Follow-up Questions:
+1. Which product analytics tools should I learn first?
+2. How can I get hands-on experience with product roadmaps in my current role?
+3. What's the typical timeline for a marketing to product management transition?
+
+Now generate follow-up questions for this career conversation:
+
+Original User Question: {user_message}
+
+AI Response: {ai_response}
+
+Generate exactly 3 simple, practical follow-up questions that the USER would naturally want to ask next:
+1. [First question]
+2. [Second question]
+3. [Third question]
+
+Only return the numbered questions, nothing else.
+"""

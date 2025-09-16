@@ -227,6 +227,20 @@ export const chat = {
   deleteMessagesAfterIndex: async (messageIndex) => {
     const response = await api.delete(`/chat/messages/after/${messageIndex}`);
     return response.data;
+  },
+
+  // Optimize query
+  optimizeQuery: async (query) => {
+    // The personal assistant API runs on port 8001, so we make a direct call here.
+    const response = await axios.post('http://localhost:8001/api/chat/optimize', 
+      { query: query },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+    return response.data;
   }
 };
 

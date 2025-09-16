@@ -246,3 +246,56 @@ async def get_career_insights(
             message=f"Failed to retrieve career insights: {str(e)}",
             has_data=False
         )
+
+@router.get("/insights/resume/{resume_id}", response_model=CareerInsightsResponse)
+async def get_career_insights_by_resume(
+    resume_id: int,
+    user_id: int = Query(..., description="User ID to verify ownership"),
+    db: Session = Depends(get_db)
+):
+    """
+    Retrieve career insights for a specific resume.
+    
+    Args:
+        resume_id: The ID of the resume to get insights for
+        user_id: The ID of the user (for ownership verification)
+        
+    Returns:
+        CareerInsightsResponse containing the professional data or error message
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    try:
+        # Initialize resume analyzer to access career insights methods
+        resume_analyzer = ResumeAnalyzer()
+        
+        # Get career insight for the specific resume
+        logger.info(f"Retrieving career insights for resume {resume_id}, user {user_id}")
+        professional_data = await resume_analyzer.get_career_insight_by_resume(user_id, resume_id)
+        
+        if professional_data:
+            logger.info(f"Found career insights for resume {resume_id}")
+            return CareerInsightsResponse(
+                success=True,
+                professional_data=professional_data,
+                message="Career insights retrieved successfully",
+                has_data=True
+            )
+        else:
+            logger.info(f"No career insights found for resume {resume_id}")
+            return CareerInsightsResponse(
+                success=True,
+                professional_data=None,
+                message="No career insights found for this resume. Please perform an analysis first.",
+                has_data=False
+            )
+            
+    except Exception as e:
+        logger.error(f"Error retrieving career insights for resume {resume_id}: {str(e)}")
+        return CareerInsightsResponse(
+            success=False,
+            professional_data=None,
+            message=f"Failed to retrieve career insights: {str(e)}",
+            has_data=False
+        )

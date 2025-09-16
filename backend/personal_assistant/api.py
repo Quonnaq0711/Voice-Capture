@@ -73,6 +73,35 @@ class ConversationHistoryResponse(BaseModel):
     history: List[ConversationMessage]
     total_messages: int
 
+class OptimizeQueryRequest(BaseModel):
+    """Request model for query optimization."""
+    query: str
+    
+    class Config:
+        schema_extra = {
+            "example": {
+                "query": "help me with my career"
+            }
+        }
+
+class OptimizeQueryResponse(BaseModel):
+    """Response model for query optimization."""
+    original_query: str
+    optimized_query: str
+    model: str
+    status: str
+    error: Optional[str] = None
+    
+    class Config:
+        schema_extra = {
+            "example": {
+                "original_query": "help me with my career",
+                "optimized_query": "I would like guidance on career development opportunities and strategies to advance in my professional field.",
+                "model": "gemma3:latest",
+                "status": "success"
+            }
+        }
+
 @router.post("/message", response_model=ChatResponse)
 async def send_message(
     chat_request: ChatRequest,
@@ -409,6 +438,82 @@ async def get_available_models():
             "question_answering"
         ]
     }
+
+@router.post("/optimize", response_model=OptimizeQueryResponse)
+async def optimize_query(
+    optimize_request: OptimizeQueryRequest,
+    request: Request,
+    chat_service: ChatService = Depends(get_chat_service)
+):
+    """
+    Optimize a user query to make it clearer and more structured.
+    
+    Args:
+        optimize_request: Request containing the query to optimize
+        request: FastAPI request object for client disconnect detection
+        chat_service: Injected chat service instance
+        
+    Returns:
+        Optimized query response
+        
+    Raises:
+        HTTPException: If query optimization fails
+    """
+    try:
+        if not optimize_request.query.strip():
+            raise HTTPException(status_code=400, detail="Query cannot be empty")
+        
+        logger.info(f"Optimizing query: {optimize_request.query[:50]}...")
+        
+        # Create cancellation event for client disconnect detection
+        cancellation_event = asyncio.Event()
+        
+        # Create a background task to monitor client disconnect
+        async def monitor_disconnect():
+            try:
+                while not cancellation_event.is_set():
+                    if await request.is_disconnected():
+                        logger.info("Client disconnected during query optimization")
+                        cancellation_event.set()
+                        break
+                    await asyncio.sleep(0.1)
+            except Exception as e:
+                logger.error(f"Error monitoring client disconnect: {e}")
+                cancellation_event.set()
+        
+        # Start monitoring task
+        monitor_task = asyncio.create_task(monitor_disconnect())
+        
+        try:
+            # Optimize the query
+            result = await chat_service.optimize_query(
+                user_query=optimize_request.query,
+                cancellation_event=cancellation_event
+            )
+            
+            logger.info(f"Query optimization completed successfully")
+            return OptimizeQueryResponse(**result)
+            
+        except asyncio.CancelledError:
+            logger.info("Query optimization was cancelled")
+            raise HTTPException(status_code=499, detail="Request cancelled by client")
+        except Exception as e:
+            logger.error(f"Error during query optimization: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Query optimization failed: {str(e)}")
+        finally:
+            # Clean up monitoring task
+            if not monitor_task.done():
+                monitor_task.cancel()
+                try:
+                    await monitor_task
+                except asyncio.CancelledError:
+                    pass
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error in optimize_query endpoint: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @router.get("/message/stream")
 async def send_message_stream(
