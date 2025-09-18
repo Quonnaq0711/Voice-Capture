@@ -9,6 +9,7 @@ langchain>=0.3.0
 langchain-community>=0.3.0
 langchain-core>=0.3.0
 langchain-ollama>=0.2.0
+ollama==0.1.7
 
 # HTTP client for Ollama integration
 httpx>=0.25.0
