@@ -2,7 +2,6 @@ from datetime import datetime
 from sqlalchemy import Column, Integer, Nullable, String, DateTime, Boolean, true
 from sqlalchemy.orm import relationship
 from backend.db.database import Base
-from backend.models.career_insight import CareerInsight
 
 class User(Base):
     __tablename__ = "users"
@@ -22,6 +21,7 @@ class User(Base):
     
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+    last_login = Column(DateTime, nullable=True)  # Track last login for active user detection
 
     # Relationships
     resumes = relationship("Resume", back_populates="user")
@@ -29,3 +29,5 @@ class User(Base):
     chat_sessions = relationship("ChatSession", back_populates="user")
     profile = relationship("UserProfile", back_populates="user", uselist=False)
     career_insights = relationship("CareerInsight", back_populates="user")
+    activities = relationship("UserActivity", back_populates="user")
+    daily_recommendations = relationship("DailyRecommendation", back_populates="user", lazy="dynamic")
