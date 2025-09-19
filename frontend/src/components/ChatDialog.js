@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { XMarkIcon, PaperAirplaneIcon, PlusIcon, ClockIcon, Cog6ToothIcon, TrashIcon, ChevronDownIcon, DocumentDuplicateIcon, PencilIcon, StopIcon, CheckIcon, SparklesIcon, ArrowUturnLeftIcon } from '@heroicons/react/24/outline';
 import { XCircleIcon } from '@heroicons/react/24/solid';
-import { chat, sessions, profile as profileAPI } from '../services/api';
+import { chat, sessions, profile as profileAPI, activities as activitiesAPI } from '../services/api';
 import { sendMessage as defaultSendMessage, sendMessageStream as defaultSendMessageStream, checkHealth, clearMemory, generateSessionId, handleApiError, removeMessagesAfterIndex, updateMessageAtIndex } from '../services/chatApi';
 import MessageRenderer from './MessageRenderer';
 
@@ -165,7 +165,86 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
     };
     setMessages(prev => [...prev, systemMessage]);
   }, []);
-  
+
+  // Track chat activity
+  const trackChatActivity = useCallback(async (messageText, sessionId, messageId) => {
+    try {
+      const currentPath = location.pathname;
+      let activitySource = 'dashboard'; // default
+      let sourceContext = 'dashboard';
+
+      // Determine source based on current location
+      if (currentPath === '/dashboard') {
+        activitySource = 'dashboard';
+        sourceContext = 'dashboard';
+      } else if (currentPath === '/agents/career') {
+        activitySource = 'career';
+        sourceContext = 'career_agent';
+      } else if (currentPath.startsWith('/agents/')) {
+        const agentName = currentPath.split('/').pop();
+        activitySource = agentName;
+        sourceContext = `${agentName}_agent`;
+      }
+
+      // Create activity with more specific information
+      await activitiesAPI.createActivity({
+        activity_type: 'chat',
+        activity_source: activitySource,
+        activity_title: `Chat Message - ${sourceContext}`,
+        activity_description: `Sent message to Personal Assistant from ${sourceContext}`,
+        activity_metadata: {
+          agent_type: 'personal_assistant',
+          source_context: sourceContext,
+          message_preview: messageText.length > 100 ? messageText.substring(0, 100) + '...' : messageText,
+          session_id: sessionId,
+          message_id: messageId
+        }
+      });
+    } catch (error) {
+      console.warn('Failed to track chat activity:', error);
+    }
+  }, [location.pathname]);
+
+  // Track edit chat activity
+  const trackEditChatActivity = useCallback(async (messageText, sessionId, messageId) => {
+    try {
+      const currentPath = location.pathname;
+      let activitySource = 'dashboard'; // default
+      let sourceContext = 'dashboard';
+
+      // Determine source based on current location
+      if (currentPath === '/dashboard') {
+        activitySource = 'dashboard';
+        sourceContext = 'dashboard';
+      } else if (currentPath === '/agents/career') {
+        activitySource = 'career';
+        sourceContext = 'career_agent';
+      } else if (currentPath.startsWith('/agents/')) {
+        const agentName = currentPath.split('/').pop();
+        activitySource = agentName;
+        sourceContext = `${agentName}_agent`;
+      }
+
+      // Create activity with edit-specific information
+      await activitiesAPI.createActivity({
+        activity_type: 'chat',
+        activity_source: activitySource,
+        activity_title: `Chat Message Edit - ${sourceContext}`,
+        activity_description: `Edited message to Personal Assistant from ${sourceContext}`,
+        activity_metadata: {
+          agent_type: 'personal_assistant',
+          source_context: sourceContext,
+          message_preview: messageText.length > 100 ? messageText.substring(0, 100) + '...' : messageText,
+          session_id: sessionId,
+          message_id: messageId,
+          action_type: 'edit'
+        }
+      });
+    } catch (error) {
+      console.warn('Failed to track edit chat activity:', error);
+    }
+  }, [location.pathname]);
+
   // Update countdown message (replace the last system message if it's a countdown)
   const updateCountdownMessage = useCallback((text) => {
     setMessages(prev => {
@@ -835,10 +914,15 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
       newMessages.push(editedMessage);
       setMessages(newMessages);
       
+      // Track edit activity after message is updated
+      if (currentSessionAtSendTime?.id) {
+        trackEditChatActivity(editInput.trim(), currentSessionAtSendTime.id, editedMessage.id);
+      }
+
       // Clear edit state
       setEditingMessageIndex(null);
       setEditInput('');
-      
+
       // Create new AbortController for the edit request
       const editController = new AbortController();
       setAbortController(editController);
@@ -1381,6 +1465,13 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
     } else {
       // Fallback to local state if save fails
       setMessages(prev => [...prev, { text: userMessage, sender: 'user', timestamp: new Date().getTime(), agent_type: getAgentType() }]);
+    }
+
+    // Track chat activity after message is saved
+    const sessionForTracking = newSession || currentSessionAtSendTime;
+    const messageIdForTracking = savedUserMessage?.id;
+    if (sessionForTracking?.id) {
+      trackChatActivity(userMessage, sessionForTracking.id, messageIdForTracking);
     }
 
     // Update currentSessionAtSendTime if a new session was created
