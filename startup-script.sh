@@ -20,12 +20,12 @@ apt-get install -y git
 apt-get install -y nginx
 
 # Create application directory
-mkdir -p /opt/sadaora-platform
-mkdir -p /opt/sadaora-platform/data/ollama
-cd /opt/sadaora-platform
+mkdir -p /opt/idii-platform
+mkdir -p /opt/idii-platform/data/ollama
+cd /opt/idii-platform
 
 # Clone your repository (replace with your actual repo)
-git clone https://github.com/Sadaora/Product.git .
+git clone https://github.com/sadaora/Product.git .
 
 # Create necessary directories
 mkdir -p logs
@@ -34,4 +34,4 @@ mkdir -p data/ollama
 
 
 # Set permissions
-chown -R ubuntu:ubuntu /opt/sadaora-platform
+chown -R ubuntu:ubuntu /opt/idii-platform
