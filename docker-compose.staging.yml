@@ -117,7 +117,7 @@ services:
     depends_on:
       - frontend-staging
       - backend-staging
-      - personal_assistant-staging
+      - personal-assistant-staging
 
 volumes:
   postgres_data:
