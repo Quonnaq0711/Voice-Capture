@@ -24,7 +24,7 @@ echo "🌐 Staging IP: $EXTERNAL_IP"
 
 echo "👨🏽‍💻 Pulling latest..."
 
-git pull origin main
+git pull origin containerization
 
 echo "🏗️ Building... Starting services...."
 docker-compose --env-file .env.staging -f docker-compose.staging.yml down
