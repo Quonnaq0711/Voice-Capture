@@ -80,10 +80,10 @@ services:
     ports:
       - "11434:11434"
     environment:
-      - OLLAMA_ORIGINS: ${OLLAMA_ORIGINS:-*}
-      - OLLAMA_HOST: ${OLLAMA_HOST:-"0.0.0.0:11434"}
-      - NVIDIA_VISIBLE_DEVICES=all
-      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      OLLAMA_ORIGINS: "${OLLAMA_ORIGINS:-*}"
+      OLLAMA_HOST: "${OLLAMA_HOST:-0.0.0.0:11434}"
+      NVIDIA_VISIBLE_DEVICES: "all"
+      NVIDIA_DRIVER_CAPABILITIES: "compute,utility"
     volumes:
       - ./data/ollama-staging:/root/.ollama
     networks:
