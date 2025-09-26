@@ -44,12 +44,13 @@ services:
         --reload  
 
   frontend-staging:
-    build: ./frontend
-    dockerfile: Dockerfile.prod
-    args:
-      REACT_APP_BACKEND_URL: http://${EXTERNAL_IP}:8000
-      REACT_APP_PA_URL: http://${EXTERNAL_IP}:8001
-      REACT_ENVIRONMENT: staging
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+      args:
+        REACT_APP_BACKEND_URL: http://${EXTERNAL_IP}:8000
+        REACT_APP_PA_URL: http://${EXTERNAL_IP}:8001
+        REACT_ENVIRONMENT: staging
     container_name: idii-frontend-staging
     ports:
       - "3000:80"
