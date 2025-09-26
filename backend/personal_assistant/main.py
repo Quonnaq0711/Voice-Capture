@@ -12,6 +12,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from personal_assistant.api import router as chat_router
 from personal_assistant.chat_service import get_chat_service
+from personal_assistant.notification_service import router as notification_router
 
 # Configure logging
 logging.basicConfig(
@@ -77,8 +78,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include chat router
+# Include routers
 app.include_router(chat_router)
+app.include_router(notification_router)
 
 # Root endpoint
 @app.get("/")
@@ -96,6 +98,8 @@ async def root():
             "history": "/api/chat/history",
             "clear_memory": "/api/chat/memory",
             "models": "/api/chat/models",
+            "notifications": "/api/notifications/stream/{user_id}",
+            "notification_history": "/api/notifications/history/{user_id}",
             "docs": "/docs",
             "redoc": "/redoc"
         }

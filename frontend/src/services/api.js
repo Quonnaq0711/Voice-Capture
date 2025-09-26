@@ -1,4 +1,5 @@
-import axios from 'axios';
+import axios from 'axios'
+
 
 const API_URL = 'http://localhost:8000/api/v1';
 
@@ -95,6 +96,29 @@ export const auth = {
     const response = await api.post('/auth/signup', { username, email, password });
     return response.data;
   },
+  
+  
+  verifyRegistrationOTP: async (email, otp) => {
+    console.log('API call with:', { email, otp });
+    console.log('Email type:', typeof email);
+    console.log('OTP type:', typeof otp);
+    const response = await api.post('/auth/verify-registration', { email, otp });
+    return response.data;
+  },
+
+  // Resend registration OTP
+resendRegistrationOTP: async (email) => {
+  const response = await api.post('/auth/resend-verification-otp', { email });
+  return response.data;
+},
+
+  // Get user profile
+  getProfile: async (token) => {
+    const response = await api.get('/profile/me', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return response.data;
+  },
 
   // User login
   login: async (email, password) => {
@@ -111,6 +135,22 @@ export const auth = {
     if (response.data.access_token) {
       localStorage.setItem('token', response.data.access_token);
     }
+    return response.data;
+  },
+
+  // Password Reset Request
+  resetPasswordRequest: async (email) => {
+    const response = await api.post('/auth/reset-password-request', { email });
+    return response.data;
+  },
+
+  
+  verifyPasswordOTP: async (email, otp, newPassword) => {
+    const response = await api.post('/auth/reset-password-confirm', { 
+      email, 
+      otp, 
+      new_password: newPassword 
+    });
     return response.data;
   },
 
@@ -146,10 +186,11 @@ export const auth = {
 // Chat related API
 export const chat = {
   // Save chat message
-  saveMessage: async (messageText, sender, sessionId = null) => {
+  saveMessage: async (messageText, sender, sessionId = null, agentType = 'dashboard') => {
     const payload = {
       message_text: messageText,
       sender: sender,
+      agent_type: agentType,
     };
     if (sessionId) {
       payload.session_id = sessionId;
@@ -186,6 +227,20 @@ export const chat = {
   deleteMessagesAfterIndex: async (messageIndex) => {
     const response = await api.delete(`/chat/messages/after/${messageIndex}`);
     return response.data;
+  },
+
+  // Optimize query
+  optimizeQuery: async (query) => {
+    // The personal assistant API runs on port 8001, so we make a direct call here.
+    const response = await axios.post('http://localhost:8001/api/chat/optimize', 
+      { query: query },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+    return response.data;
   }
 };
 
@@ -193,11 +248,13 @@ export const chat = {
 export const sessions = {
   // Create new session
   createSession: async (sessionName, firstMessageTime) => {
-    const response = await api.post('/chat/sessions', {
+    // The backend marks the newly created session as active, so create it first and then fetch the active session details
+    await api.post('/chat/sessions', {
       session_name: sessionName,
       first_message_time: firstMessageTime
     });
-    return response.data;
+    const activeSessionResponse = await api.get('/chat/sessions/active');
+    return activeSessionResponse.data;
   },
 
   // Get all user sessions
@@ -247,6 +304,12 @@ export const sessions = {
   // Mark a session as unread
   markSessionAsUnread: async (sessionId) => {
     const response = await api.put(`/chat/sessions/${sessionId}/unread`);
+    return response.data;
+  },
+
+  // Get count of unread sessions
+  getUnreadSessionsCount: async () => {
+    const response = await api.get('/chat/sessions/unread/count');
     return response.data;
   }
 }

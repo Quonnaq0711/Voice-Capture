@@ -4,6 +4,7 @@
  */
 
 const CHAT_API_BASE_URL = 'http://localhost:8001/api/chat';
+const CAREER_API_BASE_URL = 'http://localhost:8002/api/chat'; // Career agent API
 
 /**
  * Send a message to the AI assistant and get a response
@@ -12,9 +13,9 @@ const CHAT_API_BASE_URL = 'http://localhost:8001/api/chat';
  * @param {AbortSignal} signal - Optional abort signal for cancelling the request
  * @returns {Promise<Object>} - The AI response object
  */
-export const sendMessage = async (message, sessionId = null, signal = null) => {
+export const sendMessage = async (message, sessionId = null, signal = null, apiUrl = null) => {
   try {
-    const response = await fetch(`${CHAT_API_BASE_URL}/message`, {
+    const response = await fetch(apiUrl || `${CHAT_API_BASE_URL}/message`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -43,13 +44,16 @@ export const sendMessage = async (message, sessionId = null, signal = null) => {
   }
 };
 
+
 /**
  * Check the health status of the chat API
+ * @param {string} apiUrl - Optional API URL to check health for (defaults to personal assistant)
  * @returns {Promise<Object>} - Health status information
  */
-export const checkHealth = async () => {
+export const checkHealth = async (apiUrl = null) => {
   try {
-    const response = await fetch(`${CHAT_API_BASE_URL}/health`, {
+    const healthUrl = apiUrl ? `${apiUrl}/health` : `${CHAT_API_BASE_URL}/health`;
+    const response = await fetch(healthUrl, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -251,8 +255,8 @@ export const updateMessageAtIndex = async (messageIndex, newContent, sessionId =
  * @param {function} onError - Callback for errors
  * @returns {EventSource} - The EventSource object for controlling the stream
  */
-export const sendMessageStream = (message, sessionId, userId, onToken, onComplete, onError) => {
-  const url = new URL(`${CHAT_API_BASE_URL}/message/stream`);
+export const sendMessageStream = (message, sessionId, userId, onToken, onComplete, onError, streamApiUrl = null) => {
+  const url = new URL(streamApiUrl || `${CHAT_API_BASE_URL}/message/stream`);
   url.searchParams.append('message', message);
   if (sessionId) {
     url.searchParams.append('session_id', sessionId);
@@ -273,11 +277,83 @@ export const sendMessageStream = (message, sessionId, userId, onToken, onComplet
           if (onToken) onToken(data.content);
           break;
         case 'complete':
-          if (onComplete) onComplete(data.content);
+          if (onComplete) onComplete(data.content, null, data.follow_up_questions);
           eventSource.close();
           break;
         case 'error':
           if (onError) onError(data.content);
+          eventSource.close();
+          break;
+        case 'message':
+          // Initial assistant message is complete; treat it as a final response, not streaming
+          if (onComplete) onComplete(data.content);
+          break;
+        case 'career_insights':
+          // Handle career insights data
+          if (onComplete) onComplete(data.message, data.professional_data, data.follow_up_questions);
+          eventSource.close();
+          break;
+        case 'section_complete':
+          // Handle section completion and dispatch DOM event
+          const careerAgentElement = document.querySelector('[data-agent-type="career"]');
+          if (careerAgentElement && data.section && data.data) {
+            const sectionCompleteEvent = new CustomEvent('sectionComplete', {
+              detail: {
+                section: data.section,
+                data: data.data,
+                error: data.error || null
+              }
+            });
+            careerAgentElement.dispatchEvent(sectionCompleteEvent);
+            console.log('Section complete event dispatched:', data.section);
+          }
+          break;
+        case 'section_start':
+          // Handle section start and dispatch DOM event
+          const careerAgentStartElement = document.querySelector('[data-agent-type="career"]');
+          if (careerAgentStartElement && data.section) {
+            const sectionStartEvent = new CustomEvent('sectionStart', {
+              detail: {
+                section: data.section,
+                display_name: data.display_name,
+                description: data.description,
+                progress: data.progress || 0
+              }
+            });
+            careerAgentStartElement.dispatchEvent(sectionStartEvent);
+            console.log('Section start event dispatched:', data.section);
+          }
+          break;
+        case 'analysis_progress':
+          // Handle analysis progress and dispatch DOM event
+          const careerAgentProgressElement = document.querySelector('[data-agent-type="career"]');
+          if (careerAgentProgressElement) {
+            const progressEvent = new CustomEvent('analysisProgress', {
+              detail: {
+                progress: data.progress,
+                currentSection: data.current_section,
+                message: data.message,
+                status: data.status || 'analyzing'
+              }
+            });
+            careerAgentProgressElement.dispatchEvent(progressEvent);
+          }
+          break;
+        case 'analysis_complete':
+          // Handle analysis completion
+          const careerAgentCompleteElement = document.querySelector('[data-agent-type="career"]');
+          if (careerAgentCompleteElement) {
+            const completeEvent = new CustomEvent('analysisComplete', {
+              detail: {
+                success: !data.error,
+                professional_data: data.professional_data,
+                message: data.message,
+                performance_metrics: data.performance_metrics
+              }
+            });
+            careerAgentCompleteElement.dispatchEvent(completeEvent);
+          }
+          if (onComplete) onComplete(data.message, data.professional_data, data.follow_up_questions);
           eventSource.close();
           break;
         default:
@@ -328,4 +404,87 @@ export const handleApiError = (error) => {
   }
   
   return error.message || 'An unexpected error occurred. Please try again.';
+};
+
+/**
+ * Retrieve stored career insights for a specific user
+ * @param {number} userId - The user ID to retrieve career insights for
+ * @returns {Promise<Object>} - The career insights response object
+ */
+export const getCareerInsights = async (userId) => {
+  try {
+    // Validate user ID
+    if (!userId || typeof userId !== 'number') {
+      throw new Error('Valid user ID is required');
+    }
+
+    const response = await fetch(`${CAREER_API_BASE_URL}/insights/${userId}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error('Error retrieving career insights:', error);
+    throw error;
+  }
+};
+
+/**
+ * Retrieve career insights for a specific resume
+ * @param {number} resumeId - The resume ID to retrieve career insights for
+ * @param {number} userId - The user ID for ownership verification
+ * @returns {Promise<Object>} - The career insights response object
+ */
+export const getCareerInsightsByResume = async (resumeId, userId) => {
+  try {
+    // Validate parameters
+    if (!resumeId || typeof resumeId !== 'number') {
+      throw new Error('Valid resume ID is required');
+    }
+    if (!userId || typeof userId !== 'number') {
+      throw new Error('Valid user ID is required');
+    }
+
+    const response = await fetch(`${CAREER_API_BASE_URL}/insights/resume/${resumeId}?user_id=${userId}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error('Error retrieving career insights by resume:', error);
+    throw error;
+  }
+};
+
+/**
+ * Check if career insights exist for a user
+ * @param {number} userId - The user ID to check
+ * @returns {Promise<boolean>} - True if career insights exist, false otherwise
+ */
+export const hasCareerInsights = async (userId) => {
+  try {
+    const response = await getCareerInsights(userId);
+    return response.success && response.has_data;
+  } catch (error) {
+    console.error('Error checking career insights existence:', error);
+    return false;
+  }
 };
