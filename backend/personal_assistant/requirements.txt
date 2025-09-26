@@ -1,33 +1,33 @@
 # Personal Assistant Chat API Dependencies
 
 # Core FastAPI and web framework
-fastapi>=0.104.1
-uvicorn[standard]>=0.24.0
+fastapi
+uvicorn[standard]
 
 # Langchain and LLM integration
-langchain>=0.3.0
-langchain-community>=0.3.0
-langchain-core>=0.3.0
-langchain-ollama>=0.2.0
-ollama==0.1.7
+langchain
+langchain-community
+langchain-core
+langchain-ollama
+ollama
 
 # HTTP client for Ollama integration
-httpx>=0.25.0
-requests>=2.31.0
+httpx
+requests
 
 # Server-Sent Events support
-sse-starlette>=1.6.5
+sse-starlette
 
 # Data validation and serialization
-pydantic>=2.5.0
+pydantic
 
 # Async support
-aiofiles>=23.2.0
+aiofiles
 
 # Logging and monitoring
-structlog>=23.2.0
+structlog
 
 # Development and testing
-pytest>=7.4.0
-pytest-asyncio>=0.21.0
-httpx>=0.25.0  # For testing HTTP endpoints
+pytest
+pytest-asyncio
+httpx # For testing HTTP endpoints
