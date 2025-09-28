@@ -47,8 +47,8 @@ echo "📥 Pulling Ollama models..."
 # Basic models (choose based on your needs and VM resources)
 MODELS=(
     "gemma3:latest"      # Default model as specified
-    #"gemma3:7b"         # Specific version of Gemma3
-    #"codellama:7b"       # Code generation
+    "gemma3:7b"         # Specific version of Gemma3
+    "codellama:7b"       # Code generation
     # "llama2:7b"        # Alternative general purpose
     # "mistral:7b"       # Alternative general model
     # "llama2:13b"       # Larger model (requires more RAM)
