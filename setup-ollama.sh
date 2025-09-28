@@ -35,7 +35,7 @@ fi
 
 # Verify GPU is accessible inside container
 echo "🔍 Verifying GPU access in Ollama container..."
-if docker exec sadaora-ollama-staging nvidia-smi > /dev/null 2>&1; then
+if docker exec idii-ollama-staging nvidia-smi > /dev/null 2>&1; then
     echo "✅ GPU accessible in Ollama container"
 else
     echo "⚠️ GPU not accessible in container, falling back to CPU"
@@ -62,7 +62,7 @@ for model in "${MODELS[@]}"; do
         echo "✅ Successfully pulled $model"
         # Test model with GPU
         echo "🧪 Testing $model with GPU acceleration..."
-        docker exec sadaora-ollama-staging ollama run "$model" "Hello" --verbose || echo "⚠️ Model test failed"
+        docker exec idii-ollama-staging ollama run "$model" "Hello" --verbose || echo "⚠️ Model test failed"
     else
         echo "❌ Failed to pull $model"
     fi
