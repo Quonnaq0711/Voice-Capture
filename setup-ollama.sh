@@ -2,19 +2,20 @@
 
 echo "🤖 Setting up Ollama models..."
 
-run ollama pull gemma3@lastest
-
-# Wait for Ollama service to be ready
-echo "⏳ Waiting for Ollama service to start..."
-sleep 30
+# Configuration - adjust container name to match your docker-compose
+CONTAINER_NAME="idii-ollama-staging"
+COMPOSE_FILE="docker-compose.staging.yml"
+SERVICE_NAME="idii-ollama-staging"
 
 # Function to check if Ollama is ready
 wait_for_ollama() {
     local max_attempts=30
     local attempt=1
     
+    echo "⏳ Waiting for Ollama service to start..."
+    
     while [ $attempt -le $max_attempts ]; do
-        if docker-compose -f docker-compose.staging.yml exec -T idii-ollama-staging ollama list > /dev/null 2>&1; then
+        if docker compose -f "$COMPOSE_FILE" exec -T "$SERVICE_NAME" ollama list > /dev/null 2>&1; then
             echo "✅ Ollama service is ready"
             return 0
         fi
@@ -25,6 +26,8 @@ wait_for_ollama() {
     done
     
     echo "❌ Ollama service failed to start after $max_attempts attempts"
+    echo "🔍 Checking container logs..."
+    docker logs "$CONTAINER_NAME" --tail 50
     return 1
 }
 
@@ -35,8 +38,9 @@ fi
 
 # Verify GPU is accessible inside container
 echo "🔍 Verifying GPU access in Ollama container..."
-if docker exec idii-ollama-staging nvidia-smi > /dev/null 2>&1; then
+if docker exec "$CONTAINER_NAME" nvidia-smi > /dev/null 2>&1; then
     echo "✅ GPU accessible in Ollama container"
+    docker exec "$CONTAINER_NAME" nvidia-smi
 else
     echo "⚠️ GPU not accessible in container, falling back to CPU"
 fi
@@ -46,34 +50,35 @@ echo "📥 Pulling Ollama models..."
 
 # Basic models (choose based on your needs and VM resources)
 MODELS=(
-    "gemma3:latest"      # Default model as specified
-    "gemma3:7b"         # Specific version of Gemma3
+    "gemma3:latest"      # Default model (note: gemma3 may not exist, using gemma2)
+    "gemma3:7b"          # Specific version of Gemma2
     "codellama:7b"       # Code generation
     # "llama2:7b"        # Alternative general purpose
     # "mistral:7b"       # Alternative general model
-    # "llama2:13b"       # Larger model (requires more RAM)
+    # "llama3.2:3b"      # Smaller, faster model
 )
 
 for model in "${MODELS[@]}"; do
     echo "📥 Pulling model: $model"
-    docker-compose -f docker-compose.staging.yml exec -T idii.ollama.staging ollama pull "$model"
-    
-    if [ $? -eq 0 ]; then
+    if docker compose -f "$COMPOSE_FILE" exec -T "$SERVICE_NAME" ollama pull "$model"; then
         echo "✅ Successfully pulled $model"
-        # Test model with GPU
-        echo "🧪 Testing $model with GPU acceleration..."
-        docker exec idii-ollama-staging ollama run "$model" "Hello" --verbose || echo "⚠️ Model test failed"
+        
+        # Test model
+        echo "🧪 Testing $model..."
+        docker exec "$CONTAINER_NAME" ollama run "$model" "Say hi" || echo "⚠️ Model test failed"
     else
         echo "❌ Failed to pull $model"
     fi
 done
 
 # Show GPU memory usage after model loading
-echo "📊 GPU memory usage after model loading:"
-docker exec idii-ollama-staging nvidia-smi --query-gpu=memory.used,memory.total,utilization.gpu --format=csv,noheader
+if docker exec "$CONTAINER_NAME" nvidia-smi > /dev/null 2>&1; then
+    echo "📊 GPU memory usage after model loading:"
+    docker exec "$CONTAINER_NAME" nvidia-smi --query-gpu=memory.used,memory.total,utilization.gpu --format=csv,noheader
+fi
 
 # List installed models
 echo "📋 Installed models:"
-docker-compose -f docker-compose.staging.yml exec -T idii.ollama.staging ollama list
+docker compose -f "$COMPOSE_FILE" exec -T "$SERVICE_NAME" ollama list
 
 echo "✅ Ollama setup complete!"
