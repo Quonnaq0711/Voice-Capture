@@ -5,7 +5,7 @@ echo "🤖 Setting up Ollama models..."
 # Configuration - adjust container name to match your docker-compose
 CONTAINER_NAME="idii-ollama-staging"
 COMPOSE_FILE="docker-compose.staging.yml"
-SERVICE_NAME="idii-ollama-staging"
+SERVICE_NAME="ollama-staging"
 
 # Function to check if Ollama is ready
 wait_for_ollama() {
