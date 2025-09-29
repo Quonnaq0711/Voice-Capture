@@ -15,7 +15,7 @@ wait_for_ollama() {
     echo "⏳ Waiting for Ollama service to start..."
     
     while [ $attempt -le $max_attempts ]; do
-        if docker compose -f "$COMPOSE_FILE" exec -T "$SERVICE_NAME" ollama list > /dev/null 2>&1; then
+        if docker-compose -f "$COMPOSE_FILE" exec -T "$SERVICE_NAME" ollama list > /dev/null 2>&1; then
             echo "✅ Ollama service is ready"
             return 0
         fi
@@ -60,7 +60,7 @@ MODELS=(
 
 for model in "${MODELS[@]}"; do
     echo "📥 Pulling model: $model"
-    if docker compose -f "$COMPOSE_FILE" exec -T "$SERVICE_NAME" ollama pull "$model"; then
+    if docker-compose -f "$COMPOSE_FILE" exec -T "$SERVICE_NAME" ollama pull "$model"; then
         echo "✅ Successfully pulled $model"
         
         # Test model
@@ -79,6 +79,6 @@ fi
 
 # List installed models
 echo "📋 Installed models:"
-docker compose -f "$COMPOSE_FILE" exec -T "$SERVICE_NAME" ollama list
+docker-compose -f "$COMPOSE_FILE" exec -T "$SERVICE_NAME" ollama list
 
 echo "✅ Ollama setup complete!"
