@@ -27,9 +27,9 @@ echo "👨🏽‍💻 Pulling latest..."
 git pull origin containerization
 
 echo "🏗️ Building... Starting services...."
-docker compose --env-file .env.staging -f docker- .staging.yml down
-docker compose --env-file .env.staging -f docker- ompose.staging.yml build --no-cache
-docker compose --env-file .env.staging -f docker- ompose.staging.yml up -d
+docker-compose --env-file .env.staging -f docker-compose.staging.yml down
+docker-compose --env-file .env.staging -f docker-compose.staging.yml build --no-cache
+docker-compose --env-file .env.staging -f docker-compose.staging.yml up -d
 
 echo "Waiting on services..."
 sleep 45
