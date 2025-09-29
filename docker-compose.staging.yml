@@ -1,4 +1,4 @@
-version: "3.9"
+# version: "3.9"
 
 services:
   backend-staging:
@@ -97,11 +97,11 @@ services:
               count: 1 
               capabilities: [gpu]
     runtime: nvidia
-    command: > 
-      python -m uvicorn main:app
-      --host 0.0.0.0
-      --port 8001
-      --reload
+    # command: > 
+    #   python -m uvicorn main:app
+    #   --host 0.0.0.0
+    #   --port 8001
+    #   --reload
 
   nginx-staging:
     image: nginx:alpine
