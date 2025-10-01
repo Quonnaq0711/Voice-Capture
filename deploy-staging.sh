@@ -49,4 +49,4 @@ echo "   Ollama (GPU): http://$EXTERNAL_IP:11434/api/tags"
 echo ""
 echo "⚡ GPU Status:"
 nvidia-smi --query-gpu=utilization.gpu,memory.used,memory.total --format=csv,noheader
-echo "🌍 Application should be available at: https://Idii.co"
+echo "🌍 Application should be available at: https://staging.idii.co"
