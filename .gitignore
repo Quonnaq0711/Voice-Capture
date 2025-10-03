@@ -247,3 +247,4 @@ data/ollama-staging/id_ed25519
 data/postgres-staging/
 nginx/ssl/origin.crt
 nginx/ssl/origin.key
+data/ollama-staging/
