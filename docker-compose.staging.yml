@@ -131,3 +131,4 @@ networks:
   staging-network:
     driver: bridge
     name: idii-staging
+    external: true
