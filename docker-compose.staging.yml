@@ -52,13 +52,13 @@ services:
         REACT_APP_PA_URL: http://35.236.232.158:8001
         REACT_ENVIRONMENT: staging
     container_name: idii-frontend-staging
-    ports:
-      - "3000:80"
+    # ports:
+      # - "3000:80"
     restart: unless-stopped
     networks:
       - staging-network
-    volumes:
-      - ./frontend:/app
+    # volumes:
+    #   - ./frontend:/app
     # command: npm start
 
   db-staging:
