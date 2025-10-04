@@ -36,6 +36,7 @@ node_modules/
 # Virtual environments
 .env
 .env.prod
+.env.staging
 .envrc
 .venv/
 venv/
