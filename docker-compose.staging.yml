@@ -48,9 +48,9 @@ services:
       context: ./frontend
       dockerfile: Dockerfile.prod
       args:
-        REACT_APP_BACKEND_URL: http://35.236.232.158:8000
-        REACT_APP_PA_URL: http://35.236.232.158:8001
-        REACT_ENVIRONMENT: staging
+        REACT_APP_BACKEND_URL: https://staging.idii.co/api
+        REACT_APP_PA_URL: https://staging.idii.co/pa-api 
+        REACT_ENVIRONMENT: staging 
     container_name: idii-frontend-staging
     # ports:
       # - "3000:80"
