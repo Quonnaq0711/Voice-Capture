@@ -106,7 +106,9 @@ services:
     #   --reload
 
   nginx-staging:
-    image: nginx:alpine
+    build: 
+      context: .
+      dockerfile: nginx.Dockerfile
     container_name: idii-nginx-staging
     restart: unless-stopped
     ports:
@@ -114,11 +116,9 @@ services:
       - "443:443"
     volumes:
       - ./frontend/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./nginx/ssl:/etc/nginx/ssl:ro  
       - ./logs/nginx:/var/log/nginx
     networks:
       - staging-network
-
     depends_on:
       - frontend-staging
       - backend-staging
