@@ -59,7 +59,7 @@ services:
       - staging-network
     volumes:
       - ./frontend:/app
-    command: npm start
+    # command: npm start
 
   db-staging:
     image: postgres:15
