@@ -11,8 +11,8 @@ from backend.services import password_reset_service
 
 from ..services.email_service import EmailService
 from ..services.otp_service import OTPService
-from backend.services.email_validation_service import EmailValidationService
-from backend.services.password_reset_service import PasswordResetService
+from services.email_validation_service import EmailValidationService
+from services.password_reset_service import PasswordResetService
 from ..models import schemas
 from ..models.user import User
 from ..utils.auth import (
