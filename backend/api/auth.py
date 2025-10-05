@@ -229,7 +229,6 @@ async def reset_password_confirm(
             detail="Failed to reset password"
         )
 
-# Resume Functions
 
 @router.post("/token/refresh", response_model=schemas.Token)
 async def refresh_token(current_user: User = Depends(get_current_user)):
@@ -238,6 +237,8 @@ async def refresh_token(current_user: User = Depends(get_current_user)):
         data={"sub": current_user.email}, expires_delta=access_token_expires
     )
     return {"access_token": access_token, "token_type": "bearer"}
+
+# Resume Functions
 
 import uuid
 from ..models.resume import Resume
