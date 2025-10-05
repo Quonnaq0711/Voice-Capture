@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from backend.api import auth, chat, profile, sessions
+from api import auth, chat, profile, sessions
 from .models.user import Base
 from .models.chat import ChatMessage
 from .models.session import ChatSession
