@@ -7,7 +7,7 @@ from datetime import timedelta
 from typing import List
 import aiofiles
 
-from backend.services import password_reset_service
+from services import password_reset_service
 
 from ..services.email_service import EmailService
 from ..services.otp_service import OTPService
