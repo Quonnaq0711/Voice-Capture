@@ -5,7 +5,7 @@ import asyncio
 import logging
 from typing import Optional
 
-load_dotenv('.env.staging')
+load_dotenv()
 
 # Set up logging
 logging.basicConfig(level=logging.DEBUG)
