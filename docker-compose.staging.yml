@@ -22,10 +22,11 @@ services:
       --host 0.0.0.0
       --port 8000
       
+  
   personal-assistant-staging:
     build:
-      context: ./backend/personal_assistant
-      dockerfile: Dockerfile.prod
+      context: .  # Change from ./backend/personal_assistant to project root
+      dockerfile: backend/personal_assistant/Dockerfile.prod
     container_name: idii-PA-staging
     restart: unless-stopped
     ports:
@@ -40,8 +41,7 @@ services:
     command: >
         python -m uvicorn main:app
         --host 0.0.0.0
-        --port 8001
-          
+        --port 8001          
 
   frontend-staging:
     build:

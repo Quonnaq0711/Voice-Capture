@@ -2,7 +2,7 @@ from datetime import datetime
 import json
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text
 from sqlalchemy.orm import relationship
-from backend.db.database import Base
+from db.database import Base
 
 class CareerInsight(Base):
     __tablename__ = "career_insights"

@@ -15,14 +15,14 @@ backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 parent_dir = os.path.dirname(backend_dir)
 sys.path.insert(0, parent_dir)
 
-from backend.main import app
-from backend.db.database import get_db, Base
-from backend.models.user import User
-from backend.models.profile import UserProfile
-from backend.models.chat import ChatMessage
-from backend.models.session import ChatSession
-from backend.models.resume import Resume
-from backend.utils.auth import get_password_hash, create_access_token
+from main import app
+from db.database import get_db, Base
+from models.user import User
+from models.profile import UserProfile
+from models.chat import ChatMessage
+from models.session import ChatSession
+from models.resume import Resume
+from utils.auth import get_password_hash, create_access_token
 
 # Create test database
 SQLALCHEMY_DATABASE_URL = "sqlite:///./test.db"

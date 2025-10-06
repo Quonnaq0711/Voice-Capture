@@ -6,12 +6,12 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
-from backend.services.email_validation_service import EmailValidationService
-from backend.services.otp_service import OTPService
-from backend.services.password_reset_service import PasswordResetService
+from services.email_validation_service import EmailValidationService
+from services.otp_service import OTPService
+from services.password_reset_service import PasswordResetService
 
-from ..db.database import get_db
-from ..models.user import User
+from db.database import get_db
+from models.user import User
 
 # Configure secret key and algorithm
 SECRET_KEY = "your-secret-key-please-change-in-production"  # Should use environment variables in production

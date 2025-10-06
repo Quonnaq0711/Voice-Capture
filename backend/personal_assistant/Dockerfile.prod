@@ -5,17 +5,23 @@ WORKDIR /app
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     curl \
+    libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Upgrade pip
 RUN pip install --no-cache-dir --upgrade pip
 
-# Copy requirements first for better caching
-COPY requirements.txt .
+# Copy requirements
+COPY backend/personal_assistant/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code with relative imports
-COPY . .
+# Copy shared backend modules
+COPY backend/db/ /app/db/
+COPY backend/models/ /app/models/
+COPY backend/utils/ /app/utils/
+
+# Copy PA files
+COPY backend/personal_assistant/ /app/
 
 # Create non-root user
 RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
@@ -23,5 +29,4 @@ USER appuser
 
 EXPOSE 8001
 
-# Use relative imports - no -m flag needed
 CMD ["gunicorn", "main:app", "-w", "4", "-k", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8001"]

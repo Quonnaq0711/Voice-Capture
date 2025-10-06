@@ -4,7 +4,7 @@ import io
 from unittest.mock import patch, mock_open
 from fastapi import status
 from PIL import Image
-from backend.models.profile import UserProfile
+from models.profile import UserProfile
 
 class TestProfileAPI:
     """Test cases for Profile API endpoints"""

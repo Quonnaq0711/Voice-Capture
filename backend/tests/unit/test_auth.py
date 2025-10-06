@@ -5,9 +5,9 @@ from unittest.mock import patch, mock_open, AsyncMock
 from fastapi import status
 from datetime import datetime
 
-from backend.models.user import User
-from backend.models.resume import Resume
-from backend.utils.auth import get_password_hash
+from models.user import User
+from models.resume import Resume
+from utils.auth import get_password_hash
 
 class TestAuthAPI:
     """Test cases for Authentication API endpoints"""

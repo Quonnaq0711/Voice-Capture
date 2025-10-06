@@ -119,7 +119,7 @@ class StreamingResumeAnalyzer:
                 # Send notification via direct service call instead of HTTP
                 # This is more efficient for internal communication
                 try:
-                    from backend.personal_assistant.notification_service import notification_service
+                    from personal_assistant.notification_service import notification_service
                     
                     if notification_type == "progress":
                         await notification_service.send_career_analysis_progress(

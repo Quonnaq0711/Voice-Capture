@@ -15,15 +15,13 @@ RUN pip install --no-cache-dir --upgrade pip
 # Create non-root user
 RUN groupadd -r appuser && useradd -r -g appuser appuser
 
-# Copy backend requirements (context is now project root)
+# Copy and install Python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy entire project (for relative imports)
+# Copy application code
 COPY . .
 
-# Set PYTHONPATH so Python can find the backend package
-ENV PYTHONPATH=/app
 
 # Change ownership
 RUN chown -R appuser:appuser /app
@@ -36,5 +34,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     
 EXPOSE 8000
 
-# Use module path since we're running from project root
-CMD ["python", "-m", "uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
+CMD ["gunicorn", "main:app", "-w", "4", "-k", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8000"]
