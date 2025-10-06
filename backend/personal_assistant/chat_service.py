@@ -14,12 +14,12 @@ from concurrent.futures import ThreadPoolExecutor
 import httpx
 import json
 from sqlalchemy.orm import Session
-from backend.db.database import SessionLocal
-from backend.models.resume import Resume
-from backend.models.chat import ChatMessage
-from backend.models.session import ChatSession
-from backend.models.user import User
-from backend.models.profile import UserProfile
+from db.database import SessionLocal
+from models.resume import Resume
+from models.chat import ChatMessage
+from models.session import ChatSession
+from models.user import User
+from models.profile import UserProfile
 from prompts import FOLLOW_UP_PROMPT, OPTIMIZE_QUERY_PROMPT
 
 # Configure logging

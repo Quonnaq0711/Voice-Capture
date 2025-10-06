@@ -3,7 +3,7 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from sqlalchemy import create_engine, text
-from backend.db.database import SQLALCHEMY_DATABASE_URL
+from db.database import SQLALCHEMY_DATABASE_URL
 
 def migrate_career_fields():
     """Add new career-related fields to user_profiles table"""

@@ -9,9 +9,9 @@ import os
 # Add the backend directory to the Python path to allow for absolute imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 
-from personal_assistant.main import app
-from personal_assistant.chat_service import get_chat_service, ChatService
-from backend.db.database import get_db
+from main import app
+from chat_service import get_chat_service, ChatService
+from db.database import get_db
 
 # Mock ChatService for testing
 class MockChatService(ChatService):
