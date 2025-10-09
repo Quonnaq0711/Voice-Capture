@@ -44,7 +44,9 @@ api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
-    if (error.response.status === 401 && !originalRequest._retry) {
+
+    // If it's a 401 error and not already retried, and not the refresh token endpoint itself
+    if (error.response && error.response.status === 401 && !originalRequest._retry && !originalRequest.url.includes('/auth/token/refresh')) {
       if (isRefreshing) {
         return new Promise(function(resolve, reject) {
           failedQueue.push({resolve, reject});
@@ -76,6 +78,13 @@ api.interceptors.response.use(
         });
       });
     }
+
+    // For refresh token endpoint failures or other errors, logout immediately
+    if (error.response && error.response.status === 401 && originalRequest.url && originalRequest.url.includes('/auth/token/refresh')) {
+      auth.logout();
+      window.location.href = '/login';
+    }
+
     return Promise.reject(error);
   }
 );
@@ -368,6 +377,114 @@ export const profile = {
   // Get avatar URL
   getAvatarUrl: async () => {
     const response = await api.get('/profile/avatar');
+    return response.data;
+  }
+};
+
+// Activities related API
+export const activities = {
+  // Get recent activities
+  getRecentActivities: async (limit = 10) => {
+    const response = await api.get(`/activities/recent?limit=${limit}`);
+    return response.data;
+  },
+
+  // Get all user activities with filtering
+  getUserActivities: async (options = {}) => {
+    const {
+      limit = 20,
+      offset = 0,
+      activityType = null,
+      activitySource = null,
+      daysBack = 30
+    } = options;
+
+    let url = `/activities/?limit=${limit}&offset=${offset}&days_back=${daysBack}`;
+    if (activityType) url += `&activity_type=${activityType}`;
+    if (activitySource) url += `&activity_source=${activitySource}`;
+
+    const response = await api.get(url);
+    return response.data;
+  },
+
+  // Get activity summary
+  getActivitySummary: async (daysBack = 7) => {
+    const response = await api.get(`/activities/summary?days_back=${daysBack}`);
+    return response.data;
+  },
+
+  // Create a new activity
+  createActivity: async (activityData) => {
+    const response = await api.post('/activities/', activityData);
+    return response.data;
+  },
+
+  // Track specific activity types
+  trackChatActivity: async (source, sessionId = null, messageId = null, agentType = null) => {
+    let url = `/activities/track/chat?source=${source}`;
+    if (sessionId) url += `&session_id=${sessionId}`;
+    if (messageId) url += `&message_id=${messageId}`;
+    if (agentType) url += `&agent_type=${agentType}`;
+
+    const response = await api.post(url);
+    return response.data;
+  },
+
+  trackResumeAnalysis: async (resumeFilename = null) => {
+    let url = '/activities/track/resume-analysis';
+    if (resumeFilename) url += `?resume_filename=${resumeFilename}`;
+
+    const response = await api.post(url);
+    return response.data;
+  },
+
+  trackAgentInteraction: async (agentType, interactionType = 'general') => {
+    const response = await api.post(`/activities/track/agent-interaction?agent_type=${agentType}&interaction_type=${interactionType}`);
+    return response.data;
+  }
+};
+
+// Career Insights related API
+export const careerInsights = {
+  // Get career insights summary for dashboard
+  getSummary: async () => {
+    const response = await api.get('/career-insights/summary');
+    return response.data;
+  },
+
+  // Get latest career insight data
+  getLatest: async () => {
+    const response = await api.get('/career-insights/latest');
+    return response.data;
+  },
+
+  // Get all career insights
+  getAll: async (limit = 10) => {
+    const response = await api.get(`/career-insights/all?limit=${limit}`);
+    return response.data;
+  }
+};
+
+// Daily Recommendations related API
+export const dailyRecommendations = {
+  // Get today's recommendations (or generate if not exists)
+  getRecommendations: async (date = null) => {
+    let url = '/daily-recommendations';
+    if (date) url += `?date=${date}`;
+
+    const response = await api.get(url);
+    return response.data;
+  },
+
+  // Force generate new recommendations for today
+  generateRecommendations: async () => {
+    const response = await api.post('/daily-recommendations/generate');
+    return response.data;
+  },
+
+  // Get recommendations history
+  getHistory: async (limit = 7) => {
+    const response = await api.get(`/daily-recommendations/history?limit=${limit}`);
     return response.data;
   }
 };

@@ -232,8 +232,22 @@ class ResumeAnalyzer:
             db.add(career_insight)
             db.commit()
             db.refresh(career_insight)
-            
+
             logger.info(f"Stored career insight for user {user_id}, resume {resume_id}")
+
+            # Generate dashboard summaries using the same ChatService
+            try:
+                summaries = await self._generate_dashboard_summaries(professional_data)
+                if summaries:
+                    career_insight.set_dashboard_summaries(summaries)
+                    db.commit()
+                    logger.info(f"Generated and stored dashboard summaries for insight {career_insight.id}")
+                else:
+                    logger.warning(f"No summaries generated for insight {career_insight.id}")
+            except Exception as summary_error:
+                logger.warning(f"Failed to generate dashboard summaries: {summary_error}")
+                # Don't fail the main operation if summary generation fails
+
             return career_insight
             
         except Exception as e:
@@ -369,3 +383,359 @@ class ResumeAnalyzer:
                 "type": "normal_response",
                 "message": "I encountered an unexpected error. Please try again later."
             }
+
+    async def _generate_dashboard_summaries(self, professional_data: Dict[str, Any]) -> Dict[str, str]:
+        """
+        Generate dashboard summaries for career insights using Career Agent's ChatService.
+        This method is called internally after resume analysis to create concise summaries.
+
+        Args:
+            professional_data: The complete career analysis data
+
+        Returns:
+            Dictionary with summaries for each section
+        """
+        try:
+            summaries = {}
+
+            # Generate summaries for each section using the same ChatService
+            summary_prompts = {
+                'professional_identity': self._create_professional_identity_prompt,
+                'work_experience': self._create_work_experience_prompt,
+                'skills_analysis': self._create_skills_analysis_prompt,
+                'market_position': self._create_market_position_prompt,
+                'salary_analysis': self._create_salary_analysis_prompt
+            }
+
+            for section_key, prompt_creator in summary_prompts.items():
+                mapped_key = self._get_section_mapping(section_key)
+                section_data = professional_data.get(mapped_key)
+
+                # Handle nested data structure - extract the inner data
+                if section_data and isinstance(section_data, dict):
+                    # If the data is nested (like {'professionalIdentity': {'professionalIdentity': {...}}})
+                    if mapped_key in section_data:
+                        section_data = section_data[mapped_key]
+
+                if section_data:
+                    try:
+                        prompt = prompt_creator(section_data)
+                        summary = await self._generate_section_summary(prompt)
+                        if summary:
+                            summaries[section_key] = summary
+                        else:
+                            # Fallback summary
+                            summaries[section_key] = self._get_fallback_summary(section_key, section_data)
+                    except Exception as e:
+                        logger.warning(f"Failed to generate summary for {section_key}: {e}")
+                        summaries[section_key] = self._get_fallback_summary(section_key, section_data)
+
+            logger.info(f"Generated dashboard summaries for {len(summaries)} sections")
+            return summaries
+
+        except Exception as e:
+            logger.error(f"Error generating dashboard summaries: {e}")
+            return self._get_fallback_summaries(professional_data)
+
+    def _get_section_mapping(self, section_key: str) -> str:
+        """Map summary section keys to professional data keys"""
+        mapping = {
+            'professional_identity': 'professionalIdentity',
+            'work_experience': 'workExperience',
+            'skills_analysis': 'skillsAnalysis',
+            'market_position': 'marketPosition',
+            'salary_analysis': 'salaryAnalysis'
+        }
+        return mapping.get(section_key, section_key)
+
+    async def _generate_section_summary(self, prompt: str) -> Optional[str]:
+        """Generate a summary for a single section using ChatService"""
+        try:
+            system_prompt = "You are a professional career advisor. Generate exactly 3 bullet points using • symbol. Each bullet should be 6-8 words maximum. Be specific, direct, and impactful. No generic advice. Follow the exact format requested."
+
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": prompt}
+            ]
+
+            formatted_prompt = self.chat_service._format_messages_for_ollama(messages)
+            response = await self.chat_service.generate_response(formatted_prompt, "insight_summary")
+            summary = response.get("response", "").strip()
+
+            if summary:
+                return self._clean_summary_response(summary)
+
+            return None
+
+        except Exception as e:
+            logger.error(f"Error generating section summary: {e}")
+            return None
+
+    def _clean_summary_response(self, summary: str) -> str:
+        """Clean and format the LLM response to ensure exactly 3 bullet points"""
+        try:
+            # Remove common wrapper formatting
+            summary = summary.strip('"').strip("'")
+            summary = summary.replace('**', '').replace('*', '')
+
+            # Remove introductory phrases more comprehensively
+            # First, handle complex patterns with "based on" + something + "here are"
+            complex_patterns = [
+                r'based on.*?here are.*?:',
+                r'here are.*?bullet points.*?:',
+                r'the following are.*?:',
+                r'three bullet points.*?:'
+            ]
+
+            import re
+            for pattern in complex_patterns:
+                summary = re.sub(pattern, '', summary, flags=re.IGNORECASE | re.DOTALL).strip()
+
+            # Remove simple prefixes
+            prefixes_to_remove = [
+                'AI:', 'AI ', 'Here is ', 'Here\'s ', 'Summary: ', 'Answer: ', 'Response:', 'Result:',
+                'Here are three bullet points', 'Here are 3 bullet points', 'The three bullet points are',
+                'Below are three bullet points', 'Based on the data', 'Here are the bullet points',
+                'Three bullet points summarizing', 'Here are three detailed bullet points',
+                'The following are three bullet points', 'I\'ll provide three bullet points',
+                'Here are three professional insights', 'Three key insights include',
+                ', here are the bullet points:', 'here are the bullet points:'
+            ]
+            for prefix in prefixes_to_remove:
+                if summary.lower().startswith(prefix.lower()):
+                    summary = summary[len(prefix):].strip()
+
+            # Clean up any remaining intro patterns with colons
+            intro_patterns = [
+                'summarizing the professional\'s profile:',
+                'about this professional:',
+                'for this candidate:',
+                'regarding the professional:',
+                'about their experience:',
+                'for their profile:'
+            ]
+            for pattern in intro_patterns:
+                if pattern in summary.lower():
+                    # Split on the pattern and take everything after it
+                    parts = summary.lower().split(pattern)
+                    if len(parts) > 1:
+                        # Reconstruct from original case but skip the intro part
+                        original_parts = summary.split(pattern, 1)
+                        if len(original_parts) > 1:
+                            summary = original_parts[1].strip()
+
+            # Clean up whitespace while preserving line breaks for bullets
+            lines = summary.split('\n')
+            cleaned_lines = []
+
+            for line in lines:
+                line = line.strip()
+                if line and not line.lower().startswith('ai'):  # Skip AI: lines entirely
+                    # Normalize bullet symbols to consistent format
+                    if line.startswith('- '):
+                        line = '• ' + line[2:]
+                    elif line.startswith('* '):
+                        line = '• ' + line[2:]
+                    elif line.startswith('•'):
+                        # Ensure space after bullet
+                        if not line.startswith('• '):
+                            line = '• ' + line[1:].strip()
+                    else:
+                        # Add bullet if line doesn't have one
+                        line = '• ' + line
+
+                    # Only add non-empty content lines
+                    if len(line) > 2:  # More than just "• "
+                        cleaned_lines.append(line)
+
+            # Ensure exactly 3 bullet points
+            if len(cleaned_lines) > 3:
+                cleaned_lines = cleaned_lines[:3]
+            elif len(cleaned_lines) < 3 and cleaned_lines:
+                # If we have fewer than 3, try to split the content
+                if len(cleaned_lines) == 1:
+                    # Try to split single bullet into multiple
+                    content = cleaned_lines[0][2:]  # Remove bullet
+                    sentences = [s.strip() for s in content.split('.') if s.strip()]
+                    if len(sentences) >= 3:
+                        cleaned_lines = [f'• {sentences[i]}' for i in range(3)]
+                    elif len(sentences) == 2:
+                        # Add a generic third point
+                        cleaned_lines = [f'• {sentences[0]}', f'• {sentences[1]}', '• Professional expertise in relevant domain']
+                elif len(cleaned_lines) == 2:
+                    # Add a generic third point
+                    cleaned_lines.append('• Strong professional background and capabilities')
+
+            # Join lines back together (exactly 3 bullets)
+            if cleaned_lines:
+                summary = '\n'.join(cleaned_lines[:3])
+            else:
+                # Fallback if no valid content found
+                summary = '• Professional experience and expertise\n• Industry knowledge and skills\n• Strong career foundation'
+
+            return summary
+
+        except Exception as e:
+            logger.error(f"Error cleaning summary response: {e}")
+            return '• Professional experience and expertise\n• Industry knowledge and skills\n• Strong career foundation'
+
+    def _create_professional_identity_prompt(self, identity_data: Dict[str, Any]) -> str:
+        """Create prompt for professional identity summary"""
+        title = identity_data.get('title', '')
+        role = identity_data.get('currentRole', '')
+        industry = identity_data.get('currentIndustry', '')
+        company = identity_data.get('currentCompany', '')
+        highlights = identity_data.get('keyHighlights', [])
+
+        return f"""
+        Based on this professional data, write exactly 3 bullet points (start each with •):
+
+        Title: {title}
+        Role: {role}
+        Industry: {industry}
+        Company: {company}
+        Achievements: {'; '.join(highlights[:2]) if highlights else 'Professional experience'}
+
+        Output format - ONLY the 3 bullet points, no introduction or explanation:
+        • [Detailed sentence about current role, seniority level, and years of experience]
+        • [Detailed sentence about industry specialization, domain expertise, and key areas]
+        • [Detailed sentence about major achievements, impact, or unique value proposition]
+
+        IMPORTANT: Your response must start immediately with the first bullet point. Do not include any introductory text.
+        """
+
+    def _create_work_experience_prompt(self, work_exp_data: Dict[str, Any]) -> str:
+        """Create prompt for work experience summary"""
+        total_years = work_exp_data.get('totalYears', 0)
+        analytics = work_exp_data.get('analytics', {})
+        companies = work_exp_data.get('companies', [])
+        industries = work_exp_data.get('industries', [])
+
+        # Get company names
+        company_names = [comp.get('name', '') for comp in companies[:3]] if companies and isinstance(companies, list) else []
+        # Safe handling of industries
+        try:
+            industry_names = list(set(str(ind) for ind in industries[:3])) if industries and isinstance(industries, list) else []
+        except (TypeError, AttributeError):
+            industry_names = []
+
+        return f"""
+        Based on this work experience data, write exactly 3 bullet points (start each with •):
+
+        Experience: {total_years} years
+        Companies: {', '.join(company_names[:2]) if company_names else 'Multiple firms'}
+        Industries: {', '.join(industry_names[:2]) if industry_names else 'Various sectors'}
+
+        Output format - ONLY the 3 bullet points, no introduction or explanation:
+        • [Detailed sentence about {total_years} years of progressive experience, career growth, and advancement]
+        • [Detailed sentence about company diversity, organizational types, or stability patterns across roles]
+        • [Detailed sentence about industry breadth, sector expertise, or cross-functional capabilities developed]
+
+        IMPORTANT: Your response must start immediately with the first bullet point. Do not include any introductory text.
+        """
+
+    def _create_skills_analysis_prompt(self, skills_data: Dict[str, Any]) -> str:
+        """Create prompt for skills analysis summary"""
+        hard_skills = skills_data.get('hardSkills', [])
+        soft_skills = skills_data.get('softSkills', [])
+        core_strengths = skills_data.get('coreStrengths', [])
+
+        # Get top skills by level
+        top_hard_skills = sorted(hard_skills, key=lambda x: x.get('level', 0), reverse=True)[:3]
+        top_skills_names = [f"{skill.get('skill', '')} ({skill.get('level', 0)}%)" for skill in top_hard_skills]
+
+        # Get core strength areas
+        strength_areas = [strength.get('area', '') for strength in core_strengths[:2]]
+
+        return f"""
+        Based on this skills data, write exactly 3 bullet points (start each with •):
+
+        Top Skills: {', '.join([skill.split('(')[0].strip() for skill in top_skills_names[:3]])}
+        Expertise Areas: {', '.join(strength_areas[:2]) if strength_areas else 'Technical competencies'}
+        Total Skills: {len(hard_skills)}
+
+        Output format - ONLY the 3 bullet points, no introduction or explanation:
+        • [Detailed sentence about top technical skills, proficiency levels, and practical application experience]
+        • [Detailed sentence about specialized expertise areas, domain knowledge, and advanced capabilities]
+        • [Detailed sentence about skill portfolio breadth, learning agility, and adaptability across technologies]
+
+        IMPORTANT: Your response must start immediately with the first bullet point. Do not include any introductory text.
+        """
+
+    def _create_market_position_prompt(self, market_data: Dict[str, Any]) -> str:
+        """Create prompt for market position summary"""
+        competitiveness = market_data.get('competitiveness', 0)
+        skill_relevance = market_data.get('skillRelevance', 0)
+        industry_demand = market_data.get('industryDemand', 0)
+        career_potential = market_data.get('careerPotential', 0)
+
+        return f"""
+        Based on this market position data, write exactly 3 bullet points (start each with •):
+
+        Competitiveness: {competitiveness}%
+        Skill Relevance: {skill_relevance}%
+        Industry Demand: {industry_demand}%
+        Career Potential: {career_potential}%
+
+        Output format - ONLY the 3 bullet points, no introduction or explanation:
+        • [Detailed sentence about {competitiveness}% market competitiveness, ranking vs peers, and competitive advantages]
+        • [Detailed sentence about {skill_relevance}% skill relevance, current market demands, and expertise alignment]
+        • [Detailed sentence about {career_potential}% growth potential, advancement opportunities, and future market trends]
+
+        IMPORTANT: Your response must start immediately with the first bullet point. Do not include any introductory text.
+        """
+    def _create_salary_analysis_prompt(self, salary_data: Dict[str, Any]) -> str:
+        """Create prompt for salary analysis summary"""
+        current_salary = salary_data.get('currentSalary', {})
+        market_comparison = salary_data.get('marketComparison', {})
+        current_amount = current_salary.get('amount', 0)
+        industry_avg = market_comparison.get('industryAverage', 0)
+        percentile = market_comparison.get('percentile', 0)
+
+        if industry_avg > 0:
+            vs_market_pct = round((current_amount / industry_avg) * 100)
+            position = "above" if vs_market_pct > 100 else "below" if vs_market_pct < 100 else "at"
+        else:
+            position = "aligned with"
+
+        return f"""
+        Based on this salary data, write exactly 3 bullet points (start each with •):
+
+        Current: ${current_amount}K
+        Market Average: ${industry_avg}K
+        Percentile: {percentile}th
+        Position: {position} market rate
+
+        Output format - ONLY the 3 bullet points, no introduction or explanation:
+        • [Detailed sentence about ${current_amount}K current salary, market positioning, and compensation competitive advantage]
+        • [Detailed sentence about {percentile}th percentile ranking, comparison to ${industry_avg}K industry average, and peer performance]
+        • [Detailed sentence about earning growth potential, advancement opportunities, and future compensation trajectory]
+
+        IMPORTANT: Your response must start immediately with the first bullet point. Do not include any introductory text.
+        """
+
+    def _get_fallback_summary(self, section_key: str, section_data: Dict[str, Any]) -> str:
+        """Generate fallback summary for a specific section"""
+        fallback_generators = {
+            'professional_identity': lambda data: f"• {data.get('currentRole', 'Professional')} in {data.get('currentIndustry', 'industry')}\n• Experienced industry professional\n• Strong professional background",
+            'work_experience': lambda data: f"• {data.get('totalYears', 0)} years progressive experience\n• Proven career advancement\n• Strong professional track record",
+            'skills_analysis': lambda data: f"• Strong technical foundation\n• {len(data.get('hardSkills', []))} core competencies\n• Diverse skill portfolio",
+            'market_position': lambda data: f"• {data.get('competitiveness', 0)}% market competitiveness\n• Strong industry positioning\n• Competitive professional profile",
+            'salary_analysis': lambda data: f"• ${data.get('currentSalary', {}).get('amount', 0)}K current compensation\n• Competitive market positioning\n• Strong earning potential"
+        }
+
+        generator = fallback_generators.get(section_key)
+        if generator:
+            return generator(section_data)
+        return "Professional insights available in detailed analysis"
+
+    def _get_fallback_summaries(self, professional_data: Dict[str, Any]) -> Dict[str, str]:
+        """Generate all fallback summaries when LLM is unavailable"""
+        summaries = {}
+
+        for section_key in ['professional_identity', 'work_experience', 'skills_analysis', 'market_position', 'salary_analysis']:
+            section_data = professional_data.get(self._get_section_mapping(section_key))
+            if section_data:
+                summaries[section_key] = self._get_fallback_summary(section_key, section_data)
+
+        return summaries
