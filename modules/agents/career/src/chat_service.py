@@ -28,7 +28,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class ChatService:
-    def __init__(self, model_name: str = "gemma3:latest", base_url: str = "http://localhost:11435"):
+    def __init__(self, model_name: str = "gemma3:latest", base_url: str = "https://ollama2-staging:11435"):
         self.model_name = model_name
         self.base_url = base_url
         self.store = {}

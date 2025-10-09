@@ -21,10 +21,10 @@ logger = logging.getLogger(__name__)
 
 def check_ollama_running():
     """
-    Check if Ollama is running on localhost:11434
+    Check if Ollama is running on ollama-staging:11434
     """
     try:
-        response = requests.get('http://localhost:11434/api/tags', timeout=5)
+        response = requests.get('https://ollama-staging:11434/api/tags', timeout=5)
         return response.status_code == 200
     except requests.exceptions.RequestException:
         return False
@@ -34,7 +34,7 @@ def check_model_available(model_name="gemma3:latest"):
     Check if the specified model is available in Ollama
     """
     try:
-        response = requests.get('http://localhost:11434/api/tags', timeout=5)
+        response = requests.get('https://ollama-staging:11434/api/tags', timeout=5)
         if response.status_code == 200:
             models = response.json().get('models', [])
             return any(model.get('name') == model_name for model in models)
@@ -94,7 +94,7 @@ def main():
     # Check if Ollama is running
     logger.info("Checking Ollama service...")
     if not check_ollama_running():
-        logger.error("Ollama is not running on localhost:11434")
+        logger.error("Ollama is not running on ollama-staging:11434")
         logger.error("Please start Ollama first:")
         logger.error("  1. Open a terminal")
         logger.error("  2. Run: ollama serve")

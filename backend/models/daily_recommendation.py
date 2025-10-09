@@ -5,7 +5,7 @@ from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Bool
 from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
-from ..db.database import Base
+from db.database import Base
 
 class DailyRecommendation(Base):
     __tablename__ = "daily_recommendations"

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Startup script for the Career Agent Chat API.
-This script checks that Ollama is running on localhost:11435 with the required model
+This script checks that Ollama is running on ollama2-staging:11435 with the required model
 and then starts the FastAPI server on localhost:8002.
 """
 
@@ -22,7 +22,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-OLLAMA_BASE_URL = "http://localhost:11435"
+OLLAMA_BASE_URL = "https://ollama2-staging:11435"
 OLLAMA_TAGS_ENDPOINT = f"{OLLAMA_BASE_URL}/api/tags"
 MODEL_NAME = "gemma3:latest"
 API_HOST = "0.0.0.0"
