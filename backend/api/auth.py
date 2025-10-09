@@ -3,7 +3,7 @@ import os
 from fastapi import APIRouter, Body, Depends, HTTPException, status, UploadFile, File
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
-from datetime import timedelta
+from datetime import timedelta, datetime, timezone
 from typing import List
 import aiofiles
 
@@ -158,7 +158,11 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = 
             detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
+
+    # Update last_login timestamp for scheduler tracking
+    user.last_login = datetime.now(timezone.utc)
+    db.commit()
+
     # Create access token
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
