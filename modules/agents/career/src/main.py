@@ -54,7 +54,7 @@ async def root():
 
 if __name__ == "__main__":
     logger.info("Starting Career Agent API server...")
-    logger.info("Make sure Ollama is running on localhost:11435")
+    logger.info("Make sure Ollama is running on ollama2-staging:11435")
     logger.info("API will be available at http://localhost:8002")
     logger.info("API documentation at http://localhost:8002/docs")
     

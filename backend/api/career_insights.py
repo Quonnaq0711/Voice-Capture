@@ -7,10 +7,10 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 from typing import List, Optional, Dict, Any
-from ..models.career_insight import CareerInsight
-from ..models.user import User
-from ..api.auth import get_current_user
-from ..db.database import get_db
+from models.career_insight import CareerInsight
+from models.user import User
+from api.auth import get_current_user
+from db.database import get_db
 
 # Configure logging
 logger = logging.getLogger(__name__)

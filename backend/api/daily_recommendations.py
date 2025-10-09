@@ -6,11 +6,11 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import Optional
-from ..models.user import User
-from ..models.daily_recommendation import DailyRecommendation
-from ..services.recommendation_service import RecommendationService
-from ..api.auth import get_current_user
-from ..db.database import get_db
+from models.user import User
+from models.daily_recommendation import DailyRecommendation
+from services.recommendation_service import RecommendationService
+from api.auth import get_current_user
+from db.database import get_db
 
 # Configure logging
 logger = logging.getLogger(__name__)

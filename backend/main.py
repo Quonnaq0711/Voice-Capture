@@ -1,19 +1,19 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from backend.api import auth, chat, profile, sessions, activities, career_insights, daily_recommendations
-from backend.models.user import Base
-from backend.models.chat import ChatMessage
-from backend.models.session import ChatSession
-from backend.models.resume import Resume
-from backend.models.profile import UserProfile
-from backend.models.activity import UserActivity
-from backend.models.career_insight import CareerInsight
-from backend.models.daily_recommendation import DailyRecommendation
-from backend.services.email_service import EmailService
-from backend.services.otp_service import OTPService
-from backend.services.scheduler_service import daily_scheduler
-from backend.db.database import engine
+from api import auth, chat, profile, sessions, activities, career_insights, daily_recommendations
+from models.user import Base
+from models.chat import ChatMessage
+from models.session import ChatSession
+from models.resume import Resume
+from models.profile import UserProfile
+from models.activity import UserActivity
+from models.career_insight import CareerInsight
+from models.daily_recommendation import DailyRecommendation
+from services.email_service import EmailService
+from services.otp_service import OTPService
+from services.scheduler_service import daily_scheduler
+from db.database import engine
 import os
 
 

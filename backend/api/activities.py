@@ -1,11 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
-from backend.db.database import get_db
-from backend.utils.auth import get_current_user
-from backend.models.user import User
-from backend.models.activity import UserActivity
-from backend.services.activity_service import ActivityService
+from db.database import get_db
+from utils.auth import get_current_user
+from models.user import User
+from models.activity import UserActivity
+from services.activity_service import ActivityService
 from pydantic import BaseModel
 from datetime import datetime
 
