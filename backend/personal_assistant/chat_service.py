@@ -32,7 +32,7 @@ class ChatService:
     Provides conversational AI capabilities with memory management.
     """
     
-    def __init__(self, model_name: str = "gemma3:latest", base_url: str = "http://staging.idii.co:11434"):
+    def __init__(self, model_name: str = "gemma3:latest", base_url: str = "https://ollama-staging:11434"):
         """
         Initialize the chat service with Ollama LLM.
         

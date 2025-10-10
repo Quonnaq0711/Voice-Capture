@@ -42,10 +42,10 @@ docker exec idii-ollama-staging nvidia-smi
 
 echo "✅ Deployment Complete!"
 echo "🎭 Staging URLs:"
-echo "   Frontend: http://$EXTERNAL_IP:3000"
-echo "   Backend: http://$EXTERNAL_IP:8000/docs"
-echo "   Personal Assistant: http://$EXTERNAL_IP:8001/docs"
-echo "   Ollama (GPU): http://$EXTERNAL_IP:11434/api/tags"
+echo "   Frontend: http://staging.idii.co:3000"
+echo "   Backend: http://staging.idii.co:8000/docs"
+echo "   Personal Assistant: http://staging.idii.co:8001/docs"
+echo "   Ollama (GPU): http://staging.idii.co:11434/api/tags"
 echo ""
 echo "⚡ GPU Status:"
 nvidia-smi --query-gpu=utilization.gpu,memory.used,memory.total --format=csv,noheader

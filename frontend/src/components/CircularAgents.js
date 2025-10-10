@@ -27,7 +27,7 @@ if (typeof document !== 'undefined' && !document.getElementById('circular-agents
   document.head.appendChild(styleSheet);
 }
 
-const CircularAgents = ({ agents, avatarUrl, user, triggerAnimation = false }) => {
+const CircularAgents = ({ agents, avatarUrl, user, triggerAnimation = false, onAgentClick }) => {
   const navigate = useNavigate();
   const containerRef = useRef(null);
   const [radius, setRadius] = useState(280);
@@ -39,7 +39,7 @@ const CircularAgents = ({ agents, avatarUrl, user, triggerAnimation = false }) =
       if (containerRef.current) {
         const { width } = containerRef.current.getBoundingClientRect();
         // Set radius to be a fraction of the container width, with min/max values
-        const newRadius = Math.min(380, Math.max(220, width / 2.2));
+        const newRadius = Math.min(320, Math.max(180, width / 2.8));
         setRadius(newRadius);
       }
     };
@@ -76,7 +76,7 @@ const CircularAgents = ({ agents, avatarUrl, user, triggerAnimation = false }) =
   ];
 
   return (
-    <div ref={containerRef} className="relative flex items-center justify-center w-full h-[500px] md:h-[600px] mt-8">
+    <div ref={containerRef} className="relative flex items-center justify-center w-full h-[600px] md:h-[700px] mt-8">
       {/* Center Avatar */}
       <div className="absolute z-10 flex flex-col items-center" style={{ transform: 'translateY(-30px)' }}>
         <div className="h-36 w-36 md:h-40 md:w-40 rounded-full bg-gray-200 flex items-center justify-center">
@@ -115,7 +115,14 @@ const CircularAgents = ({ agents, avatarUrl, user, triggerAnimation = false }) =
               }}
             >
               <button
-                onClick={() => navigate(agent.path)}
+                onClick={() => {
+                  // Call the tracking function if provided
+                  if (onAgentClick) {
+                    onAgentClick(agent);
+                  }
+                  // Navigate to the agent page
+                  navigate(agent.path);
+                }}
                 aria-label={`Explore ${agent.name}`}
                 className="relative transform transition-transform duration-300 hover:scale-110 focus:outline-none focus:ring-4 focus:ring-blue-300 focus:ring-opacity-50 rounded-full"
               >

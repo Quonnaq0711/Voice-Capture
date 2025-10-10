@@ -2,6 +2,22 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 import logging
+import os
+import sys
+
+# Add the backend directory to the Python path
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..', '..')))
+
+# Import all models to ensure SQLAlchemy relationships are properly established
+from backend.models.user import User
+from backend.models.resume import Resume
+from backend.models.career_insight import CareerInsight
+from backend.models.profile import UserProfile
+from backend.models.activity import UserActivity
+from backend.models.daily_recommendation import DailyRecommendation
+from backend.models.chat import ChatMessage
+from backend.models.session import ChatSession
+
 from api import router as chat_router
 from streaming_api import router as streaming_router
 
@@ -38,7 +54,7 @@ async def root():
 
 if __name__ == "__main__":
     logger.info("Starting Career Agent API server...")
-    logger.info("Make sure Ollama is running on localhost:11435")
+    logger.info("Make sure Ollama is running on ollama2-staging:11435")
     logger.info("API will be available at http://localhost:8002")
     logger.info("API documentation at http://localhost:8002/docs")
     

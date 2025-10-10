@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { profile as profileAPI, sessions as sessionsAPI, auth } from '../services/api';
+import { profile as profileAPI, sessions as sessionsAPI, auth, activities as activitiesAPI } from '../services/api';
 import { getCareerInsights, hasCareerInsights, getCareerInsightsByResume } from '../services/chatApi';
 import PersonalAssistant from './PersonalAssistant';
 // Progress tracking is now handled in ChatDialog
@@ -413,6 +413,18 @@ const DocumentManager = ({ analysisProgress, setAnalysisProgress, setSectionStat
     }
 
     try {
+      // Track resume analysis activity
+      await activitiesAPI.createActivity({
+        activity_type: 'resume_analysis',
+        activity_source: 'career',
+        activity_title: 'Resume Analysis - Document History',
+        activity_description: `Analyzed resume: ${document.original_filename}`,
+        activity_metadata: {
+          resume_filename: document.original_filename,
+          document_id: document.id,
+          source_type: 'document_history'
+        }
+      });
       // Reset analysis state
       setAnalysisProgress({
         isAnalyzing: true,
@@ -799,6 +811,7 @@ const professionalData = {
 const CareerAgent = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [userData, setUserData] = useState({ username: '', email: '' });
   const [avatarUrl, setAvatarUrl] = useState(null);
   const [isAssistantDialogOpen, setIsAssistantDialogOpen] = useState(false);
@@ -913,6 +926,21 @@ const CareerAgent = () => {
 
   // Track the last analyzed document to load its specific insights
   const [lastAnalyzedDocumentId, setLastAnalyzedDocumentId] = useState(null);
+
+  // Handle URL parameters for tab navigation
+  useEffect(() => {
+    const urlParams = new URLSearchParams(location.search);
+    const tabParam = urlParams.get('tab');
+
+    if (tabParam) {
+      // Map tab parameter to valid insightsTab values
+      const validTabs = ['identity', 'work', 'skills', 'market', 'salary'];
+      if (validTabs.includes(tabParam)) {
+        setActiveTab('insights'); // Switch to insights tab
+        setInsightsTab(tabParam); // Set the specific insights tab
+      }
+    }
+  }, [location.search]);
 
   // Fetch user data on component mount
   useEffect(() => {
@@ -1327,6 +1355,35 @@ const CareerAgent = () => {
     }
 
     try {
+      // Get the most recent document to include filename in activity tracking
+      let mostRecentFilename = null;
+      try {
+        const documentList = await auth.getResumes();
+        if (documentList && documentList.length > 0) {
+          // Documents are typically sorted by upload date, get the most recent
+          const mostRecentDoc = documentList[0];
+          mostRecentFilename = mostRecentDoc.original_filename;
+        }
+      } catch (error) {
+        console.warn('Could not fetch documents for activity tracking:', error);
+      }
+
+      // Track resume analysis activity
+      const activityDescription = mostRecentFilename
+        ? `Analyzed most recent resume: ${mostRecentFilename}`
+        : 'Analyzed most recent resume';
+
+      await activitiesAPI.createActivity({
+        activity_type: 'resume_analysis',
+        activity_source: 'career',
+        activity_title: 'Resume Analysis - Recent Resume',
+        activity_description: activityDescription,
+        activity_metadata: {
+          source_type: 'analyze_recent_resume',
+          user_id: user.id,
+          resume_filename: mostRecentFilename
+        }
+      });
       // Reset analysis state
       setAnalysisProgress({
         isAnalyzing: true,
@@ -1474,9 +1531,25 @@ const CareerAgent = () => {
     }
   };
 
+  // Track activity when user interacts with components
+  const trackActivity = async (activityType, activitySource, title, description = null, metadata = {}) => {
+    try {
+      await activitiesAPI.createActivity({
+        activity_type: activityType,
+        activity_source: activitySource,
+        activity_title: title,
+        activity_description: description,
+        activity_metadata: metadata
+      });
+    } catch (error) {
+      console.error('Error tracking activity:', error);
+    }
+  };
+
   // Handler for Personal Assistant dialog
   const handlePersonalAssistant = () => {
     setIsAssistantDialogOpen(true);
+    // Note: Chat activity is now tracked when messages are actually sent in ChatDialog
   };
 
   // Navigation handlers
@@ -3569,13 +3642,14 @@ const careerInsights = {
             </div>
 
             )}
+
               {insightsTab === 'salary' && (/* Salary Analysis Section */
             <div className="bg-white rounded-2xl shadow-lg p-8">
               <div className="flex items-center space-x-3 mb-6">
                 <CurrencyDollarIcon className="h-6 w-6 text-green-600" />
                 <h3 className="text-xl font-semibold text-gray-900">Salary Analysis & Trends</h3>
               </div>
-              
+
               {/* Current Salary Overview */}
               <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
                 <div className="bg-gradient-to-r from-green-50 to-green-100 rounded-xl p-6 text-center">
@@ -3587,7 +3661,7 @@ const careerInsights = {
                     {professionalData.salaryAnalysis?.currentSalary?.confidence || 0}% confidence
                   </p>
                 </div>
-                
+
                 <div className="bg-gradient-to-r from-blue-50 to-blue-100 rounded-xl p-6 text-center">
                   <div className="text-3xl font-bold text-blue-600 mb-2">
                     ${professionalData.salaryAnalysis?.marketComparison?.industryAverage || 'N/A'}K
@@ -3597,7 +3671,7 @@ const careerInsights = {
                     {professionalData.salaryAnalysis?.marketComparison?.percentile || 0}th percentile
                   </p>
                 </div>
-                
+
                 <div className="bg-gradient-to-r from-purple-50 to-purple-100 rounded-xl p-6 text-center">
                   <div className="text-3xl font-bold text-purple-600 mb-2">
                     {((professionalData.salaryAnalysis?.currentSalary?.amount || 0) / (professionalData.salaryAnalysis?.marketComparison?.industryAverage || 1) * 100).toFixed(0)}%
@@ -3607,7 +3681,7 @@ const careerInsights = {
                     {(professionalData.salaryAnalysis?.currentSalary?.amount || 0) > (professionalData.salaryAnalysis?.marketComparison?.industryAverage || 0) ? 'Above' : 'Below'} average
                   </p>
                 </div>
-                
+
                 <div className="bg-gradient-to-r from-orange-50 to-orange-100 rounded-xl p-6 text-center">
                   <div className="text-3xl font-bold text-orange-600 mb-2">
                     {professionalData.salaryAnalysis?.marketComparison?.locationAdjustment || 1.0}x
@@ -3616,7 +3690,7 @@ const careerInsights = {
                   <p className="text-xs text-orange-600 mt-1">Cost adjustment</p>
                 </div>
               </div>
-              
+
               {/* Salary Trends Charts */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
                 {/* Historical Salary Trend */}
@@ -3631,7 +3705,7 @@ const careerInsights = {
                         const historicalData = professionalData.salaryAnalysis?.historicalTrend || [];
                         const timelineStart = professionalData.workExperience?.timelineStart;
                         const timelineEnd = professionalData.workExperience?.timelineEnd;
-                        
+
                         // Ensure data covers the complete timeline
                         if (historicalData.length > 0 && timelineStart && timelineEnd) {
                           // Create a copy and sort data by year to ensure proper chronological order
@@ -3640,8 +3714,8 @@ const careerInsights = {
                         return historicalData;
                       })()}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                        <XAxis 
-                          dataKey="year" 
+                        <XAxis
+                          dataKey="year"
                           stroke="#666"
                           fontSize={12}
                           domain={[
@@ -3651,12 +3725,12 @@ const careerInsights = {
                           type="number"
                           scale="linear"
                         />
-                        <YAxis 
+                        <YAxis
                           stroke="#666"
                           fontSize={12}
                           tickFormatter={(value) => `$${value}K`}
                         />
-                        <Tooltip 
+                        <Tooltip
                           formatter={(value, name) => [`$${value}K`, 'Salary']}
                           labelFormatter={(label) => `Year: ${label}`}
                           content={({ active, payload, label }) => {
@@ -3674,10 +3748,10 @@ const careerInsights = {
                             return null;
                           }}
                         />
-                        <Line 
-                          type="monotone" 
-                          dataKey="salary" 
-                          stroke="#10B981" 
+                        <Line
+                          type="monotone"
+                          dataKey="salary"
+                          stroke="#10B981"
                           strokeWidth={3}
                           dot={{ fill: '#10B981', strokeWidth: 2, r: 4 }}
                           activeDot={{ r: 6, stroke: '#10B981', strokeWidth: 2 }}
@@ -3686,7 +3760,7 @@ const careerInsights = {
                     </ResponsiveContainer>
                   </div>
                 </div>
-                
+
                 {/* Projected Growth */}
                 <div>
                   <h4 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
@@ -3697,7 +3771,7 @@ const careerInsights = {
                     <ResponsiveContainer width="100%" height="100%">
                       <LineChart data={(() => {
                         const projectedData = professionalData.salaryAnalysis?.projectedGrowth || [];
-                        
+
                         // Ensure data covers the next 5 years starting from current year
                         if (projectedData.length > 0) {
                           // Create a copy and sort data by year to ensure proper chronological order
@@ -3706,20 +3780,20 @@ const careerInsights = {
                         return projectedData;
                       })()}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                        <XAxis 
-                          dataKey="year" 
+                        <XAxis
+                          dataKey="year"
                           stroke="#666"
                           fontSize={12}
                           domain={['dataMin', 'dataMax']}
                           type="number"
                           scale="linear"
                         />
-                        <YAxis 
+                        <YAxis
                           stroke="#666"
                           fontSize={12}
                           tickFormatter={(value) => `$${value}K`}
                         />
-                        <Tooltip 
+                        <Tooltip
                           formatter={(value, name) => [`$${value}K`, 'Projected Salary']}
                           labelFormatter={(label) => `Year: ${label}`}
                           content={({ active, payload, label }) => {
@@ -3737,10 +3811,10 @@ const careerInsights = {
                             return null;
                           }}
                         />
-                        <Line 
-                          type="monotone" 
-                          dataKey="salary" 
-                          stroke="#3B82F6" 
+                        <Line
+                          type="monotone"
+                          dataKey="salary"
+                          stroke="#3B82F6"
                           strokeWidth={3}
                           strokeDasharray={(professionalData.salaryAnalysis?.projectedGrowth || []).some(item => item.scenario === 'conservative') ? "5 5" : "0"}
                           dot={{ fill: '#3B82F6', strokeWidth: 2, r: 4 }}
@@ -3751,7 +3825,7 @@ const careerInsights = {
                   </div>
                 </div>
               </div>
-              
+
               {/* Salary Factors Analysis */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                 {/* Salary Impact Factors */}
@@ -3771,11 +3845,11 @@ const careerInsights = {
                         <span className="text-sm font-medium text-gray-700 w-20">{factor.name}</span>
                         <div className="flex-1 mx-4">
                           <div className="w-full bg-gray-200 rounded-full h-3">
-                            <div 
+                            <div
                               className="h-3 rounded-full transition-all duration-500"
-                              style={{ 
-                                width: `${factor.value}%`, 
-                                backgroundColor: factor.color 
+                              style={{
+                                width: `${factor.value}%`,
+                                backgroundColor: factor.color
                               }}
                             ></div>
                           </div>
@@ -3785,7 +3859,7 @@ const careerInsights = {
                     ))}
                   </div>
                 </div>
-                
+
                 {/* Salary Optimization Recommendations */}
                 <div>
                   <h4 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
@@ -4389,20 +4463,33 @@ const careerInsights = {
                 </div>
               );
             }
+            // Check if tab is disabled (unimplemented features)
+            const isDisabled = ['planning', 'job-search', 'resume-builder'].includes(tab.id);
+
             return (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
+                onClick={isDisabled ? undefined : () => setActiveTab(tab.id)}
+                disabled={isDisabled}
                 className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-left transition-all duration-200 ${
-                  activeTab === tab.id
+                  isDisabled
+                    ? 'text-gray-400 cursor-not-allowed opacity-50'
+                    : activeTab === tab.id
                     ? 'bg-orange-500 text-white shadow-md'
                     : 'text-gray-700 hover:bg-gray-100'
                 }`}
               >
                 <IconComponent className={`h-5 w-5 ${
-                  activeTab === tab.id ? 'text-white' : 'text-gray-500'
+                  isDisabled
+                    ? 'text-gray-300'
+                    : activeTab === tab.id ? 'text-white' : 'text-gray-500'
                 }`} />
                 <span className="font-medium">{tab.name}</span>
+                {isDisabled && (
+                  <span className="ml-auto text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded">
+                    Coming Soon
+                  </span>
+                )}
               </button>
             );
           })}
