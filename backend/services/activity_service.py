@@ -2,8 +2,8 @@ from datetime import datetime, timedelta
 from typing import List, Optional, Dict, Any
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, and_
-from models.activity import UserActivity
-from models.user import User
+from backend.models.activity import UserActivity
+from backend.models.user import User
 
 
 class ActivityService:

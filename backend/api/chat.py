@@ -3,11 +3,11 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 from typing import List
 
-from models import schemas
-from models.chat import ChatMessage
-from models.user import User
-from utils.auth import get_current_user
-from db.database import get_db
+from backend.models import schemas
+from backend.models.chat import ChatMessage
+from backend.models.user import User
+from backend.utils.auth import get_current_user
+from backend.db.database import get_db
 
 router = APIRouter()
 

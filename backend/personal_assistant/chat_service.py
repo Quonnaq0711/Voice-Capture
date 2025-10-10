@@ -14,25 +14,29 @@ from concurrent.futures import ThreadPoolExecutor
 import httpx
 import json
 from sqlalchemy.orm import Session
-from db.database import SessionLocal
-from models.resume import Resume
-from models.chat import ChatMessage
-from models.session import ChatSession
-from models.user import User
-from models.profile import UserProfile
-from prompts import FOLLOW_UP_PROMPT, OPTIMIZE_QUERY_PROMPT
+from backend.db.database import SessionLocal
+from backend.models.resume import Resume
+from backend.models.chat import ChatMessage
+from backend.models.session import ChatSession
+from backend.models.user import User
+from backend.models.profile import UserProfile
+from backend.models.daily_recommendation import DailyRecommendation
+from backend.personal_assistant.prompts import FOLLOW_UP_PROMPT, OPTIMIZE_QUERY_PROMPT
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Get Ollama URL from environment variable, fallback to localhost for local development
+DEFAULT_DASHBOARD_OLLAMA_URL = os.getenv("DASHBOARD_OLLAMA_URL", "https://ollama-staging:11434")
 
 class ChatService:
     """
     Chat service that integrates with local Ollama LLM using Langchain.
     Provides conversational AI capabilities with memory management.
     """
-    
-    def __init__(self, model_name: str = "gemma3:latest", base_url: str = "https://ollama-staging:11434"):
+
+    def __init__(self, model_name: str = "gemma3:latest", base_url: str = DEFAULT_DASHBOARD_OLLAMA_URL):
         """
         Initialize the chat service with Ollama LLM.
         

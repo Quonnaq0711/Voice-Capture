@@ -4,8 +4,8 @@ import secrets
 import bcrypt
 from fastapi import HTTPException
 import pyotp
-from models.user import User
-from services import email_service
+from backend.models.user import User
+from backend.services import email_service
 from sqlalchemy.orm import Session
 from enum import Enum
 

@@ -21,9 +21,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-
-OLLAMA_BASE_URL = "https://ollama2-staging:11435"
-OLLAMA_TAGS_ENDPOINT = f"{OLLAMA_BASE_URL}/api/tags"
+# Get Ollama URL from environment variable, same as chat_service.py
+DEFAULT_CAREER_OLLAMA_URL = os.getenv("CAREER_OLLAMA_URL", "https://ollama2-staging:11435")
+OLLAMA_TAGS_ENDPOINT = f"{DEFAULT_CAREER_OLLAMA_URL}/api/tags"
 MODEL_NAME = "gemma3:latest"
 API_HOST = "0.0.0.0"
 API_PORT = 8002
@@ -104,9 +104,9 @@ def main() -> Optional[bool]:
     logger.info("=" * 60)
 
     # Verify Ollama is available
-    logger.info("Checking Ollama service at %s...", OLLAMA_BASE_URL)
+    logger.info("Checking Ollama service at %s...", DEFAULT_CAREER_OLLAMA_URL)
     if not check_ollama_running():
-        logger.error("Ollama is not running on %s", OLLAMA_BASE_URL)
+        logger.error("Ollama is not running on %s", DEFAULT_CAREER_OLLAMA_URL)
         logger.error("Please start Ollama first:")
         logger.error("  1. Open a terminal")
         logger.error("  2. Run: ollama serve --address 0.0.0.0:11435")
