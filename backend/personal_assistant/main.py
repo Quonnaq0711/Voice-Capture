@@ -134,7 +134,7 @@ async def api_health():
 
 if __name__ == "__main__":
     logger.info("Starting Personal Assistant Chat API server...")
-    logger.info("Make sure Ollama is running on localhost:11434")
+    logger.info("Make sure Ollama is running on ollama-staging:11434")
     logger.info("API will be available at http://localhost:8001")
     logger.info("API documentation at http://localhost:8001/docs")
     

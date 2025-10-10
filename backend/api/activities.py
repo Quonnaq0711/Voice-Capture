@@ -1,0 +1,259 @@
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.orm import Session
+from typing import List, Optional
+from db.database import get_db
+from utils.auth import get_current_user
+from models.user import User
+from models.activity import UserActivity
+from services.activity_service import ActivityService
+from pydantic import BaseModel
+from datetime import datetime
+
+
+router = APIRouter(prefix="/activities", tags=["activities"])
+
+
+class ActivityResponse(BaseModel):
+    """Response model for activity data"""
+    id: int
+    activity_type: str
+    activity_source: str
+    activity_title: str
+    activity_description: Optional[str]
+    activity_metadata: dict
+    created_at: str
+    updated_at: str
+    session_id: Optional[int]
+    message_id: Optional[int]
+
+    class Config:
+        from_attributes = True
+
+
+class ActivitySummaryResponse(BaseModel):
+    """Response model for activity summary"""
+    total_activities: int
+    activity_types: dict
+    activity_sources: dict
+    days_analyzed: int
+    period_start: str
+    period_end: str
+
+
+class CreateActivityRequest(BaseModel):
+    """Request model for creating activities"""
+    activity_type: str
+    activity_source: str
+    activity_title: str
+    activity_description: Optional[str] = None
+    activity_metadata: Optional[dict] = None
+    session_id: Optional[int] = None
+    message_id: Optional[int] = None
+
+
+@router.get("/recent", response_model=List[ActivityResponse])
+async def get_recent_activities(
+    limit: int = Query(10, description="Number of recent activities to return", ge=1, le=50),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get recent activities for the current user
+    """
+    try:
+        activities = ActivityService.get_recent_activities(
+            db=db,
+            user_id=current_user.id,
+            limit=limit
+        )
+
+        return [
+            ActivityResponse(
+                id=activity.id,
+                activity_type=activity.activity_type,
+                activity_source=activity.activity_source,
+                activity_title=activity.activity_title,
+                activity_description=activity.activity_description,
+                activity_metadata=activity.activity_metadata or {},
+                created_at=activity.created_at.isoformat() if activity.created_at else "",
+                updated_at=activity.updated_at.isoformat() if activity.updated_at else "",
+                session_id=activity.session_id,
+                message_id=activity.message_id
+            )
+            for activity in activities
+        ]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching recent activities: {str(e)}")
+
+
+@router.get("/", response_model=List[ActivityResponse])
+async def get_user_activities(
+    limit: int = Query(20, description="Number of activities to return", ge=1, le=100),
+    offset: int = Query(0, description="Number of activities to skip", ge=0),
+    activity_type: Optional[str] = Query(None, description="Filter by activity type"),
+    activity_source: Optional[str] = Query(None, description="Filter by activity source"),
+    days_back: int = Query(30, description="Number of days to look back", ge=1, le=365),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get user activities with optional filtering and pagination
+    """
+    try:
+        activities = ActivityService.get_user_activities(
+            db=db,
+            user_id=current_user.id,
+            limit=limit,
+            offset=offset,
+            activity_type=activity_type,
+            activity_source=activity_source,
+            days_back=days_back
+        )
+
+        return [
+            ActivityResponse(
+                id=activity.id,
+                activity_type=activity.activity_type,
+                activity_source=activity.activity_source,
+                activity_title=activity.activity_title,
+                activity_description=activity.activity_description,
+                activity_metadata=activity.activity_metadata or {},
+                created_at=activity.created_at.isoformat() if activity.created_at else "",
+                updated_at=activity.updated_at.isoformat() if activity.updated_at else "",
+                session_id=activity.session_id,
+                message_id=activity.message_id
+            )
+            for activity in activities
+        ]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching activities: {str(e)}")
+
+
+@router.get("/summary", response_model=ActivitySummaryResponse)
+async def get_activity_summary(
+    days_back: int = Query(7, description="Number of days to analyze", ge=1, le=365),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get activity summary for the current user
+    """
+    try:
+        summary = ActivityService.get_activity_summary(
+            db=db,
+            user_id=current_user.id,
+            days_back=days_back
+        )
+
+        return ActivitySummaryResponse(**summary)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching activity summary: {str(e)}")
+
+
+@router.post("/", response_model=ActivityResponse)
+async def create_activity(
+    request: CreateActivityRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Create a new activity for the current user
+    """
+    try:
+        activity = ActivityService.create_activity(
+            db=db,
+            user_id=current_user.id,
+            activity_type=request.activity_type,
+            activity_source=request.activity_source,
+            activity_title=request.activity_title,
+            activity_description=request.activity_description,
+            activity_metadata=request.activity_metadata,
+            session_id=request.session_id,
+            message_id=request.message_id
+        )
+
+        return ActivityResponse(
+            id=activity.id,
+            activity_type=activity.activity_type,
+            activity_source=activity.activity_source,
+            activity_title=activity.activity_title,
+            activity_description=activity.activity_description,
+            activity_metadata=activity.activity_metadata or {},
+            created_at=activity.created_at.isoformat() if activity.created_at else "",
+            updated_at=activity.updated_at.isoformat() if activity.updated_at else "",
+            session_id=activity.session_id,
+            message_id=activity.message_id
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error creating activity: {str(e)}")
+
+
+@router.post("/track/chat")
+async def track_chat_activity(
+    source: str,
+    session_id: Optional[int] = None,
+    message_id: Optional[int] = None,
+    agent_type: Optional[str] = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Track a chat activity
+    """
+    try:
+        activity = ActivityService.track_chat_activity(
+            db=db,
+            user_id=current_user.id,
+            source=source,
+            session_id=session_id,
+            message_id=message_id,
+            agent_type=agent_type
+        )
+
+        return {"message": "Chat activity tracked successfully", "activity_id": activity.id}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error tracking chat activity: {str(e)}")
+
+
+@router.post("/track/resume-analysis")
+async def track_resume_analysis(
+    resume_filename: Optional[str] = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Track a resume analysis activity
+    """
+    try:
+        activity = ActivityService.track_resume_analysis(
+            db=db,
+            user_id=current_user.id,
+            resume_filename=resume_filename
+        )
+
+        return {"message": "Resume analysis activity tracked successfully", "activity_id": activity.id}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error tracking resume analysis: {str(e)}")
+
+
+@router.post("/track/agent-interaction")
+async def track_agent_interaction(
+    agent_type: str,
+    interaction_type: str = "general",
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Track an agent interaction activity
+    """
+    try:
+        activity = ActivityService.track_agent_interaction(
+            db=db,
+            user_id=current_user.id,
+            agent_type=agent_type,
+            interaction_type=interaction_type
+        )
+
+        return {"message": "Agent interaction tracked successfully", "activity_id": activity.id}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error tracking agent interaction: {str(e)}")

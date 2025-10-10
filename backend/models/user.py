@@ -22,6 +22,7 @@ class User(Base):
     
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+    last_login = Column(DateTime, nullable=True)  # Track last login for active user detection
 
     # Relationships
     resumes = relationship("Resume", back_populates="user")
@@ -29,3 +30,5 @@ class User(Base):
     chat_sessions = relationship("ChatSession", back_populates="user")
     profile = relationship("UserProfile", back_populates="user", uselist=False)
     career_insights = relationship("CareerInsight", back_populates="user")
+    activities = relationship("UserActivity", back_populates="user")
+    daily_recommendations = relationship("DailyRecommendation", back_populates="user", lazy="dynamic")
