@@ -9,10 +9,10 @@ import json
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..', '..')))
 
 import PyPDF2
-from db.database import SessionLocal
-from models.resume import Resume
-from models.career_insight import CareerInsight
-from models.user import User
+from backend.db.database import SessionLocal
+from backend.models.resume import Resume
+from backend.models.career_insight import CareerInsight
+from backend.models.user import User
 from prompts import RESUME_ANALYSIS_SYSTEM_PROMPT, RESUME_ANALYSIS_PROMPT_TEMPLATE, INTENT_DETECTION_PROMPT
 from chat_service import ChatService
 

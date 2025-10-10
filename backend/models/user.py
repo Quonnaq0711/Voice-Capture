@@ -1,8 +1,8 @@
 from datetime import datetime
 from sqlalchemy import Column, Integer, Nullable, String, DateTime, Boolean, true
 from sqlalchemy.orm import relationship
-from db.database import Base
-from models.career_insight import CareerInsight
+from backend.db.database import Base
+from backend.models.career_insight import CareerInsight
 
 class User(Base):
     __tablename__ = "users"

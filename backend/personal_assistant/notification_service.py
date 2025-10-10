@@ -275,10 +275,105 @@ async def get_notification_status():
         "timestamp": datetime.now().isoformat()
     }
 
+class CareerProgressRequest(BaseModel):
+    """Request model for career progress notifications."""
+    user_id: int
+    session_id: str
+    current_section: str
+    progress: float
+    total_sections: int
+    status: str = "analyzing"
+
+class CareerCompleteRequest(BaseModel):
+    """Request model for career completion notifications."""
+    user_id: int
+    session_id: str
+    sections_completed: int
+
+class CareerErrorRequest(BaseModel):
+    """Request model for career error notifications."""
+    user_id: int
+    session_id: str
+    error: str
+    current_section: Optional[str] = None
+
+@router.post("/career-progress")
+async def receive_career_progress(request: CareerProgressRequest):
+    """Receive career analysis progress update from Career Agent.
+
+    Args:
+        request: Career progress request data
+    """
+    try:
+        await notification_service.send_career_analysis_progress(
+            user_id=request.user_id,
+            session_id=request.session_id,
+            current_section=request.current_section,
+            progress=request.progress,
+            total_sections=request.total_sections,
+            status=request.status
+        )
+
+        return {
+            "status": "success",
+            "message": "Progress notification sent",
+            "user_id": request.user_id
+        }
+    except Exception as e:
+        logger.error(f"Error sending career progress notification: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/career-complete")
+async def receive_career_complete(request: CareerCompleteRequest):
+    """Receive career analysis completion notification from Career Agent.
+
+    Args:
+        request: Career completion request data
+    """
+    try:
+        await notification_service.send_career_analysis_complete(
+            user_id=request.user_id,
+            session_id=request.session_id,
+            sections_completed=request.sections_completed
+        )
+
+        return {
+            "status": "success",
+            "message": "Completion notification sent",
+            "user_id": request.user_id
+        }
+    except Exception as e:
+        logger.error(f"Error sending career completion notification: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/career-error")
+async def receive_career_error(request: CareerErrorRequest):
+    """Receive career analysis error notification from Career Agent.
+
+    Args:
+        request: Career error request data
+    """
+    try:
+        await notification_service.send_career_analysis_error(
+            user_id=request.user_id,
+            session_id=request.session_id,
+            error_message=request.error,
+            current_section=request.current_section
+        )
+
+        return {
+            "status": "success",
+            "message": "Error notification sent",
+            "user_id": request.user_id
+        }
+    except Exception as e:
+        logger.error(f"Error sending career error notification: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.post("/test/{user_id}")
 async def send_test_notification(user_id: int, message: str = "Test notification"):
     """Send a test notification to a user.
-    
+
     Args:
         user_id: Target user ID
         message: Test message
@@ -290,9 +385,9 @@ async def send_test_notification(user_id: int, message: str = "Test notification
             message=message,
             priority="normal"
         )
-        
+
         await notification_service.send_notification(user_id, notification)
-        
+
         return {
             "status": "success",
             "message": "Test notification sent",

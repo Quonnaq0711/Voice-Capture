@@ -14,21 +14,24 @@ from datetime import datetime
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from sqlalchemy.orm import Session
-from db.database import SessionLocal
-from models.profile import UserProfile
-from models.career_insight import CareerInsight
-from models.user import User
-from models.chat import ChatMessage
-from models.session import ChatSession
-from models.resume import Resume
+from backend.db.database import SessionLocal
+from backend.models.profile import UserProfile
+from backend.models.career_insight import CareerInsight
+from backend.models.user import User
+from backend.models.chat import ChatMessage
+from backend.models.session import ChatSession
+from backend.models.resume import Resume
 from prompts import FOLLOW_UP_PROMPT
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Get Ollama URL from environment variable, fallback to localhost for local development
+DEFAULT_CAREER_OLLAMA_URL = os.getenv("CAREER_OLLAMA_URL", "https://ollama2-staging:11435")
+
 class ChatService:
-    def __init__(self, model_name: str = "gemma3:latest", base_url: str = "https://ollama2-staging:11435"):
+    def __init__(self, model_name: str = "gemma3:latest", base_url: str = DEFAULT_CAREER_OLLAMA_URL):
         self.model_name = model_name
         self.base_url = base_url
         self.store = {}

@@ -10,7 +10,7 @@ import os
 # Add project root to path for imports
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', '..', '..'))
 
-from db.database import get_db
+from backend.db.database import get_db
 
 router = APIRouter(prefix="/api/chat", tags=["career-chat"])
 
