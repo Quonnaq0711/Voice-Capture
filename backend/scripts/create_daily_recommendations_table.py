@@ -8,9 +8,9 @@ import os
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
-from backend.db.database import engine, Base
-from backend.models.daily_recommendation import DailyRecommendation
-from backend.models.user import User
+from db.database import engine, Base
+from models.daily_recommendation import DailyRecommendation
+from models.user import User
 import logging
 
 # Configure logging

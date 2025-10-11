@@ -7,25 +7,25 @@ from datetime import timedelta, datetime, timezone
 from typing import List
 import aiofiles
 
-from backend.services import password_reset_service
+from services import password_reset_service
 
-from backend.services.email_service import EmailService
-from backend.services.otp_service import OTPService
-from backend.services.email_validation_service import EmailValidationService
-from backend.services.password_reset_service import PasswordResetService
-from backend.models import schemas
-from backend.models.user import User
-from backend.utils.auth import (
+from services.email_service import EmailService
+from services.otp_service import OTPService
+from services.email_validation_service import EmailValidationService
+from services.password_reset_service import PasswordResetService
+from models import schemas
+from models.user import User
+from utils.auth import (
     get_password_hash,
     verify_password,
     create_access_token,
     get_current_user,
     ACCESS_TOKEN_EXPIRE_MINUTES
 )
-from backend.db.database import get_db
-from backend.services.email_validation_service import EmailValidationService
+from db.database import get_db
+from services.email_validation_service import EmailValidationService
 
-from backend.services.password_reset_service import PasswordResetService
+from services.password_reset_service import PasswordResetService
 
 router = APIRouter()
 
@@ -245,7 +245,7 @@ async def refresh_token(current_user: User = Depends(get_current_user)):
 # Resume Functions
 
 import uuid
-from backend.models.resume import Resume
+from models.resume import Resume
 
 @router.post("/upload-resume", response_model=schemas.ResumeUploadResponse)
 async def upload_resume(

@@ -9,7 +9,7 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from sqlalchemy import create_engine, text
-from backend.db.database import SQLALCHEMY_DATABASE_URL
+from db.database import SQLALCHEMY_DATABASE_URL
 
 def add_dashboard_summaries_columns():
     """Add dashboard_summaries and summaries_generated_at columns to career_insights table"""
