@@ -12,8 +12,8 @@ import logging
 import asyncio
 import json
 from sse_starlette.sse import EventSourceResponse
-from backend.personal_assistant.chat_service import get_chat_service, ChatService
-from backend.db.database import get_db
+from chat_service import get_chat_service, ChatService
+from db.database import get_db
 from sqlalchemy.orm import Session
 
 # Configure logging

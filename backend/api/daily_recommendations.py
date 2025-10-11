@@ -6,11 +6,11 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import Optional
-from backend.models.user import User
-from backend.models.daily_recommendation import DailyRecommendation
-from backend.services.recommendation_service import RecommendationService
-from backend.api.auth import get_current_user
-from backend.db.database import get_db
+from models.user import User
+from models.daily_recommendation import DailyRecommendation
+from services.recommendation_service import RecommendationService
+from api.auth import get_current_user
+from db.database import get_db
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -160,7 +160,7 @@ async def generate_recommendations_for_all_users(
     This endpoint is for testing the scheduler functionality.
     """
     try:
-        from ..services.scheduler_service import daily_scheduler
+        from services.scheduler_service import daily_scheduler
 
         # Only allow admin users to trigger this (you can add admin check here)
         logger.info(f"Manual trigger of daily recommendations by user {current_user.id}")

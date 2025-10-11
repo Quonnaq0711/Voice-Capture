@@ -9,8 +9,8 @@ import os
 # Add the parent directory to sys.path to import modules
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 
-from backend.db.database import engine, SessionLocal
-from backend.models import UserActivity, User, Base
+from db.database import engine, SessionLocal
+from models import UserActivity, User, Base
 from sqlalchemy import text
 
 def create_activities_table():
@@ -43,7 +43,7 @@ def add_sample_activities():
     try:
         print("Adding sample activities...")
 
-        from backend.services.activity_service import ActivityService
+        from services.activity_service import ActivityService
 
         db = SessionLocal()
 

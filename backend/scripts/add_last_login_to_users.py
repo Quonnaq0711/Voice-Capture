@@ -7,7 +7,7 @@ import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 
 from sqlalchemy import text
-from backend.db.database import engine
+from db.database import engine
 from datetime import datetime
 
 def add_last_login_column():

@@ -1,6 +1,6 @@
 from fastapi import HTTPException, logger
-from backend.services.email_service import EmailService
-from backend.services.otp_service import OTPPurpose, OTPService
+from services.email_service import EmailService
+from services.otp_service import OTPPurpose, OTPService
 from sqlalchemy.orm import Session
 
 class EmailValidationService:

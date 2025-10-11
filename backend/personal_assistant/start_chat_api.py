@@ -20,7 +20,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Get Ollama URL from environment variable, same as chat_service.py
-DEFAULT_DASHBOARD_OLLAMA_URL = os.getenv("DASHBOARD_OLLAMA_URL", "https://ollama-staging:11434")
+DEFAULT_DASHBOARD_OLLAMA_URL = os.getenv("DASHBOARD_OLLAMA_URL", "http://ollama-staging:11434")
 
 def check_ollama_running():
     """
