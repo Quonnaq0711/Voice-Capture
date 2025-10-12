@@ -82,13 +82,21 @@ app.include_router(
 )
 
 # Mount static files for avatars
-avatar_dir = os.path.join(os.path.dirname(__file__), "avatars")
-os.makedirs(avatar_dir, exist_ok=True)
+# Use /app/avatars for Docker volume mount, fallback to backend/avatars for local dev
+if os.path.exists("/app/avatars"):
+    avatar_dir = "/app/avatars"
+else:
+    avatar_dir = os.path.join(os.path.dirname(__file__), "avatars")
+    os.makedirs(avatar_dir, exist_ok=True)
 app.mount("/avatars", StaticFiles(directory=avatar_dir), name="avatars")
 
 # Mount static files for resumes
-resume_dir = os.path.join(os.path.dirname(__file__), "resumes")
-os.makedirs(resume_dir, exist_ok=True)
+# Use /app/resumes for Docker volume mount, fallback to backend/resumes for local dev
+if os.path.exists("/app/resumes"):
+    resume_dir = "/app/resumes"
+else:
+    resume_dir = os.path.join(os.path.dirname(__file__), "resumes")
+    os.makedirs(resume_dir, exist_ok=True)
 app.mount("/resumes", StaticFiles(directory=resume_dir), name="resumes")
 
 # Health check endpoints

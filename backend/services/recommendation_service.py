@@ -3,6 +3,7 @@ Daily Recommendation Generation Service
 """
 import logging
 import json
+import os
 import httpx
 import asyncio
 from datetime import datetime, timezone
@@ -19,7 +20,10 @@ logger = logging.getLogger(__name__)
 class RecommendationService:
     """Service for generating daily AI recommendations"""
 
-    def __init__(self, llm_base_url: str = "http://localhost:8002"):
+    def __init__(self, llm_base_url: str = None):
+        # Use environment variable for Career Agent URL, fallback to localhost for development
+        if llm_base_url is None:
+            llm_base_url = os.getenv("CAREER_AGENT_URL", "http://localhost:8002")
         self.llm_base_url = llm_base_url
         # Set very long timeout for local LLM - can be very slow
         self.client = httpx.AsyncClient(timeout=600.0)  # 10 minutes for local LLM
@@ -227,7 +231,7 @@ class RecommendationService:
         try:
             # Prepare prompt for LLM
             prompt = self._build_recommendation_prompt(context_data)
-            logger.info(f"Calling LLM service for recommendation generation")
+            logger.info(f"Calling LLM service at {self.llm_base_url}/api/chat/message for recommendation generation")
 
             # Call LLM API using the same endpoint as career agent
             response = await self.client.post(
@@ -237,6 +241,8 @@ class RecommendationService:
                 },
                 timeout=600.0  # 10 minutes for local LLM processing
             )
+
+            logger.info(f"LLM service responded with status: {response.status_code}")
 
             if response.status_code == 200:
                 llm_response = response.json()
@@ -285,10 +291,12 @@ class RecommendationService:
             logger.error(f"LLM service timeout (600s): {e}")
             return []
         except httpx.ConnectError as e:
-            logger.error(f"Cannot connect to LLM service: {e}")
+            logger.error(f"Cannot connect to LLM service at {self.llm_base_url}: {e}")
             return []
         except Exception as e:
-            logger.error(f"Error calling LLM service: {e}")
+            logger.error(f"Error calling LLM service at {self.llm_base_url}: {type(e).__name__} - {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
             return []
 
     def _build_recommendation_prompt(self, context_data: Dict[str, Any]) -> str:

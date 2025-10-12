@@ -28,7 +28,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Get Ollama URL from environment variable, fallback to localhost for local development
-DEFAULT_CAREER_OLLAMA_URL = os.getenv("CAREER_OLLAMA_URL", "https://ollama2-staging:11435")
+DEFAULT_CAREER_OLLAMA_URL = os.getenv("CAREER_OLLAMA_URL", "http://ollama2-staging:11434")
 
 class ChatService:
     def __init__(self, model_name: str = "gemma3:latest", base_url: str = DEFAULT_CAREER_OLLAMA_URL):
@@ -160,7 +160,7 @@ class ChatService:
             profile_data = None
             if user_id and db:
                 profile_data = await self.get_user_profile(user_id, db)
-            
+
             # Get latest career insights for context
             career_insights = None
             if user_id and db:

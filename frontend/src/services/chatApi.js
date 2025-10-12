@@ -3,8 +3,31 @@
  * Handles all HTTP requests to the chat backend running on localhost:8001
  */
 
-const CHAT_API_BASE_URL = 'http://localhost:8001/api/chat';
-const CAREER_API_BASE_URL = 'http://localhost:8002/api/chat'; // Career agent API
+// Use relative paths for API calls (proxied through Nginx)
+// In production: /api/pa/ -> http://idii-PA-staging:8001/api/chat/
+// In development: http://localhost:8001/api/chat
+const CHAT_API_BASE_URL = process.env.NODE_ENV === 'production'
+  ? '/api/pa'  // Proxied through Nginx in production
+  : 'http://localhost:8001/api/chat';  // Direct connection in development
+
+const CAREER_API_BASE_URL = process.env.NODE_ENV === 'production'
+  ? '/api/career'  // Proxied through Nginx in production
+  : 'http://localhost:8002/api/chat';  // Direct connection in development
+
+/**
+ * Helper function to build absolute URL from relative or absolute path
+ * Needed for EventSource and URL constructor which require full URLs
+ * @param {string} path - The API path (can be relative or absolute)
+ * @returns {string} - Absolute URL
+ */
+const buildAbsoluteUrl = (path) => {
+  // If path already starts with http:// or https://, return as is
+  if (path.startsWith('http://') || path.startsWith('https://')) {
+    return path;
+  }
+  // Otherwise, prepend with window.location.origin to make it absolute
+  return `${window.location.origin}${path}`;
+};
 
 /**
  * Send a message to the AI assistant and get a response
@@ -256,7 +279,11 @@ export const updateMessageAtIndex = async (messageIndex, newContent, sessionId =
  * @returns {EventSource} - The EventSource object for controlling the stream
  */
 export const sendMessageStream = (message, sessionId, userId, onToken, onComplete, onError, streamApiUrl = null) => {
-  const url = new URL(streamApiUrl || `${CHAT_API_BASE_URL}/message/stream`);
+  // Build absolute URL (needed for EventSource)
+  const baseUrl = streamApiUrl || `${CHAT_API_BASE_URL}/message/stream`;
+  const absoluteUrl = buildAbsoluteUrl(baseUrl);
+
+  const url = new URL(absoluteUrl);
   url.searchParams.append('message', message);
   if (sessionId) {
     url.searchParams.append('session_id', sessionId);

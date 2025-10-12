@@ -6,31 +6,31 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y \
     curl \
     libpq-dev \
+    gcc \
     && rm -rf /var/lib/apt/lists/*
 
 # Upgrade pip
 RUN pip install --no-cache-dir --upgrade pip
 
 # Copy requirements
-COPY backend/personal_assistant/requirements.txt .
+COPY modules/agents/career/src/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy shared backend modules
+# Copy shared backend modules (needed for database and models)
 COPY backend/db/ /app/backend/db/
 COPY backend/models/ /app/backend/models/
 COPY backend/utils/ /app/backend/utils/
-COPY backend/personal_assistant/ /app/backend/personal_assistant/
 
 # Create __init__.py files for backend module
 RUN touch /app/backend/__init__.py
 
-# Copy PA main files to /app
-COPY backend/personal_assistant/ /app/
+# Copy Career Agent files
+COPY modules/agents/career/src/ /app/
 
 # Create non-root user
 RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
 USER appuser
 
-EXPOSE 8001
+EXPOSE 8002
 
-CMD ["gunicorn", "main:app", "-w", "4", "-k", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8001"]
+CMD ["gunicorn", "main:app", "-w", "4", "-k", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8002"]

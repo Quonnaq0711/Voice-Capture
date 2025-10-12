@@ -192,11 +192,11 @@ class UserProfile(UserProfileBase):
     
     @property
     def effective_avatar_url(self) -> str:
-        """Return user's avatar URL or default avatar if none set"""
+        """Return user's avatar URL or default avatar if none set - returns relative path"""
         if self.avatar_url:
-            return f"http://localhost:8000{self.avatar_url}"
+            return self.avatar_url
         else:
-            return "http://localhost:8000/avatars/default.png"
+            return "/avatars/default.png"
 
 class UserWithProfile(User):
     profile: Optional[UserProfile] = None

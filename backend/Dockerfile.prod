@@ -15,11 +15,11 @@ RUN pip install --no-cache-dir --upgrade pip
 # Create non-root user
 RUN groupadd -r appuser && useradd -r -g appuser appuser
 
-# Copy backend requirements (context is now project root)
-COPY requirements.txt .
+# Copy backend requirements (context is project root)
+COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy entire project (for relative imports)
+# Copy entire project to support backend.* imports
 COPY . .
 
 # Set PYTHONPATH so Python can find the backend package

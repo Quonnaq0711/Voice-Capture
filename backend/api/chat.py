@@ -65,7 +65,7 @@ async def get_chat_history(
     # If no session_id provided, get messages from active session
     if session_id is None:
         active_session = db.execute(
-            text("SELECT id FROM chat_sessions WHERE user_id = :user_id AND is_active = 1"),
+            text("SELECT id FROM chat_sessions WHERE user_id = :user_id AND is_active = TRUE"),
             {"user_id": current_user.id}
         ).fetchone()
         if active_session:
@@ -120,7 +120,7 @@ async def delete_messages_after_index(
     """Delete all messages after a specific index in the current session"""
     # Get active session
     active_session = db.execute(
-        text("SELECT id FROM chat_sessions WHERE user_id = :user_id AND is_active = 1"),
+        text("SELECT id FROM chat_sessions WHERE user_id = :user_id AND is_active = TRUE"),
         {"user_id": current_user.id}
     ).fetchone()
     

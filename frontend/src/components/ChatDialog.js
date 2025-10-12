@@ -14,19 +14,23 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
 
   const getApiUrls = useCallback(() => {
     // Map agent paths to their respective API URLs
+    // In production, use relative paths (proxied through Nginx)
+    // In development, use localhost URLs for direct connection
+    const isProduction = process.env.NODE_ENV === 'production';
+
     const agentApiMap = {
-      '/agents/career': 'http://localhost:8002/api/chat',
-      '/agents/money': 'http://localhost:8003/api/chat',
-      '/agents/mind': 'http://localhost:8004/api/chat',
-      '/agents/travel': 'http://localhost:8005/api/chat',
-      '/agents/body': 'http://localhost:8006/api/chat',
-      '/agents/family-life': 'http://localhost:8007/api/chat',
-      '/agents/hobby': 'http://localhost:8008/api/chat',
-      '/agents/knowledge': 'http://localhost:8009/api/chat',
-      '/agents/personal-dev': 'http://localhost:8010/api/chat',
-      '/agents/spiritual': 'http://localhost:8011/api/chat'
+      '/agents/career': isProduction ? '/api/career' : 'http://localhost:8002/api/chat',
+      '/agents/money': isProduction ? '/api/money' : 'http://localhost:8003/api/chat',
+      '/agents/mind': isProduction ? '/api/mind' : 'http://localhost:8004/api/chat',
+      '/agents/travel': isProduction ? '/api/travel' : 'http://localhost:8005/api/chat',
+      '/agents/body': isProduction ? '/api/body' : 'http://localhost:8006/api/chat',
+      '/agents/family-life': isProduction ? '/api/family-life' : 'http://localhost:8007/api/chat',
+      '/agents/hobby': isProduction ? '/api/hobby' : 'http://localhost:8008/api/chat',
+      '/agents/knowledge': isProduction ? '/api/knowledge' : 'http://localhost:8009/api/chat',
+      '/agents/personal-dev': isProduction ? '/api/personal-dev' : 'http://localhost:8010/api/chat',
+      '/agents/spiritual': isProduction ? '/api/spiritual' : 'http://localhost:8011/api/chat'
     };
-    
+
     // Find matching agent API URL
     for (const [path, baseUrl] of Object.entries(agentApiMap)) {
       if (location.pathname.startsWith(path)) {
@@ -36,7 +40,7 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
         };
       }
     }
-    
+
     // For dashboard and other pages, use default (personal assistant)
     return {
       messageUrl: null, // Will use default from chatApi.js
@@ -695,21 +699,25 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
     try {
       // Determine which API to check based on current location
       let apiUrl = null;
-      
+
       // Map agent paths to their respective API URLs
+      // In production, use relative paths (proxied through Nginx)
+      // In development, use localhost URLs for direct connection
+      const isProduction = process.env.NODE_ENV === 'production';
+
       const agentApiMap = {
-        '/agents/career': 'http://localhost:8002/api/chat',
-        '/agents/money': 'http://localhost:8003/api/chat',
-        '/agents/mind': 'http://localhost:8004/api/chat',
-        '/agents/travel': 'http://localhost:8005/api/chat',
-        '/agents/body': 'http://localhost:8006/api/chat',
-        '/agents/family-life': 'http://localhost:8007/api/chat',
-        '/agents/hobby': 'http://localhost:8008/api/chat',
-        '/agents/knowledge': 'http://localhost:8009/api/chat',
-        '/agents/personal-dev': 'http://localhost:8010/api/chat',
-        '/agents/spiritual': 'http://localhost:8011/api/chat'
+        '/agents/career': isProduction ? '/api/career' : 'http://localhost:8002/api/chat',
+        '/agents/money': isProduction ? '/api/money' : 'http://localhost:8003/api/chat',
+        '/agents/mind': isProduction ? '/api/mind' : 'http://localhost:8004/api/chat',
+        '/agents/travel': isProduction ? '/api/travel' : 'http://localhost:8005/api/chat',
+        '/agents/body': isProduction ? '/api/body' : 'http://localhost:8006/api/chat',
+        '/agents/family-life': isProduction ? '/api/family-life' : 'http://localhost:8007/api/chat',
+        '/agents/hobby': isProduction ? '/api/hobby' : 'http://localhost:8008/api/chat',
+        '/agents/knowledge': isProduction ? '/api/knowledge' : 'http://localhost:8009/api/chat',
+        '/agents/personal-dev': isProduction ? '/api/personal-dev' : 'http://localhost:8010/api/chat',
+        '/agents/spiritual': isProduction ? '/api/spiritual' : 'http://localhost:8011/api/chat'
       };
-      
+
       // Find matching agent API URL
       for (const [path, url] of Object.entries(agentApiMap)) {
         if (location.pathname.startsWith(path)) {
@@ -717,7 +725,7 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
           break;
         }
       }
-      
+
       // For dashboard and other pages, use default (personal assistant)
       const health = await checkHealth(apiUrl);
       setApiStatus(health.status === 'healthy' ? 'healthy' : 'unhealthy');

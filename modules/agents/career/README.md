@@ -123,7 +123,7 @@ curl "http://localhost:8002/api/chat/health"
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
 │   Frontend      │    │   Career API    │    │   Ollama LLM    │
 │   (React)       │◄──►│   (FastAPI)     │◄──►│   (Local)       │
-│   Port: 3000    │    │   Port: 8002    │    │   Port: 11435   │
+│   Port: 3000    │    │   Port: 8002    │    │   Port: 11435 (ext) / 11434 (int)   │
 └─────────────────┘    └─────────────────┘    └─────────────────┘
                                 │
                                 ▼
@@ -152,7 +152,7 @@ curl "http://localhost:8002/api/chat/health"
 
 You can configure the service using environment variables:
 
-- `OLLAMA_BASE_URL`: Ollama server URL (default: http://localhost:11435)
+- `OLLAMA_BASE_URL`: Ollama server URL (default: http://ollama2-staging:11434 in Docker, http://localhost:11435 for local)
 - `OLLAMA_MODEL`: Model name (default: gemma3:latest)
 - `API_PORT`: API server port (default: 8002)
 - `LOG_LEVEL`: Logging level (default: INFO)
@@ -165,7 +165,7 @@ To use a different Ollama model, modify the `ChatService` initialization in `cha
 ```python
 chat_service = ChatService(
     model_name="your-model-name",
-    base_url="http://localhost:11435"
+    base_url="http://ollama2-staging:11434"  # In Docker
 )
 ```
 
@@ -334,7 +334,7 @@ pytest tests/unit/ -x
 
 1. **"Connection refused" errors**
    - Ensure Ollama is running: `ollama serve`
-   - Check if port 11435 is accessible
+   - Check if port 11435 (external) or 11434 (container-internal) is accessible
    - Verify the base_url configuration
 
 2. **"Model not found" errors**
