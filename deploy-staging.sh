@@ -35,17 +35,23 @@ echo "Waiting on services..."
 sleep 45
 
 echo "🤖 Setting up Ollama models..."
-./setup-ollama.sh
+./setup-ollama-updated.sh
 
 echo "🧪 Testing GPU acceleration..."
+echo "GPU in Ollama 1 (PA):"
 docker exec idii-ollama-staging nvidia-smi
+echo ""
+echo "GPU in Ollama 2 (Career):"
+docker exec idii-ollama2-staging nvidia-smi
 
 echo "✅ Deployment Complete!"
 echo "🎭 Staging URLs:"
 echo "   Frontend: http://staging.idii.co:3000"
 echo "   Backend: http://staging.idii.co:8000/docs"
 echo "   Personal Assistant: http://staging.idii.co:8001/docs"
-echo "   Ollama (GPU): http://staging.idii.co:11434/api/tags"
+echo "   Career Agent: http://staging.idii.co:8002/docs"
+echo "   Ollama 1 (PA GPU): http://staging.idii.co:11434/api/tags"
+echo "   Ollama 2 (Career GPU): http://staging.idii.co:11435/api/tags"
 echo ""
 echo "⚡ GPU Status:"
 nvidia-smi --query-gpu=utilization.gpu,memory.used,memory.total --format=csv,noheader

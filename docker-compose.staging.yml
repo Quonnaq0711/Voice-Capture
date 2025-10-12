@@ -2,25 +2,35 @@
 
 services:
   backend-staging:
-    build: 
-      context: ./backend
-      dockerfile: Dockerfile.prod
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.prod
     container_name: idii-backend-staging
     restart: unless-stopped
     ports:
       - "8000:8000"
     env_file:
       - .env.staging
+    environment:
+      DB_TYPE: postgresql
+      DB_HOST: db-staging
+      DB_PORT: 5432
+      DB_NAME: productdb-staging
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
     depends_on:
       - db-staging
     networks:
       - staging-network
     labels:
       - "environment=staging"
-    command: >
-      python -m uvicorn main:app
-      --host 0.0.0.0
-      --port 8000
+    volumes:
+      # Persist user uploads (resumes and avatars) - multi-user with user_id subdirectories
+      - /home/idii/data/user-uploads/resumes:/app/resumes
+      - /home/idii/data/user-uploads/avatars:/app/avatars
+      # SQLite backup kept for migration reference
+      - /home/idii/data/database:/app/db-backup:ro
+    # Use default CMD from Dockerfile (backend.main:app with PYTHONPATH)
       
   
   personal-assistant-staging:
@@ -33,11 +43,21 @@ services:
       - "8001:8001"
     env_file:
       - .env.staging
+    environment:
+      DB_TYPE: postgresql
+      DB_HOST: db-staging
+      DB_PORT: 5432
+      DB_NAME: productdb-staging
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
     depends_on:
       - db-staging
       - ollama-staging
     networks:
       - staging-network
+    volumes:
+      # SQLite backup kept for migration reference
+      - /home/idii/data/database:/app/db-backup:ro
     command: >
         python -m uvicorn main:app
         --host 0.0.0.0
@@ -69,12 +89,19 @@ services:
       POSTGRES_USER: ${DB_USER:-postgres}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
       POSTGRES_DB: ${DB_NAME:-productdb-staging}
+      POSTGRES_INITDB_ARGS: "-E UTF8 --locale=en_US.UTF-8"
     ports:
       - "5432:5432"
     volumes:
-      - ./data/postgres-staging:/var/lib/postgresql/data
+      # Data persistence - survives container updates
+      - /home/idii/data/postgres-staging:/var/lib/postgresql/data
     networks:
       - staging-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   ollama-staging:
     image: ollama/ollama:latest
@@ -90,20 +117,76 @@ services:
     volumes:
       - ./data/ollama-staging:/root/.ollama
     networks:
-      - staging-network
+      staging-network:
+        aliases:
+          - ollama-staging
     deploy:
       resources:
         reservations:
           devices:
-            - driver: nvidia 
-              count: 1 
+            - driver: nvidia
+              count: 1
               capabilities: [gpu]
     runtime: nvidia
-    # command: > 
-    #   python -m uvicorn main:app
-    #   --host 0.0.0.0
-    #   --port 8001
-    #   --reload
+
+  ollama2-staging:
+    image: ollama/ollama:latest
+    container_name: idii-ollama2-staging
+    restart: unless-stopped
+    ports:
+      - "11435:11434"
+    environment:
+      OLLAMA_ORIGINS: "${OLLAMA_ORIGINS:-*}"
+      OLLAMA_HOST: "0.0.0.0:11434"
+      NVIDIA_VISIBLE_DEVICES: "all"
+      NVIDIA_DRIVER_CAPABILITIES: "compute,utility"
+    volumes:
+      - ./data/ollama2-staging:/root/.ollama
+    networks:
+      staging-network:
+        aliases:
+          - ollama2-staging
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    runtime: nvidia
+
+  career-agent-staging:
+    build:
+      context: .
+      dockerfile: modules/agents/career/Dockerfile.prod
+    container_name: idii-career-agent-staging
+    restart: unless-stopped
+    ports:
+      - "8002:8002"
+    env_file:
+      - .env.staging
+    environment:
+      CAREER_OLLAMA_URL: "http://ollama2-staging:11434"
+      DB_TYPE: postgresql
+      DB_HOST: db-staging
+      DB_PORT: 5432
+      DB_NAME: productdb-staging
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+    depends_on:
+      - db-staging
+      - ollama2-staging
+    networks:
+      - staging-network
+    volumes:
+      # Share resumes with backend
+      - /home/idii/data/user-uploads/resumes:/app/resumes
+      # SQLite backup kept for migration reference
+      - /home/idii/data/database:/app/db-backup:ro
+    command: >
+      python -m uvicorn main:app
+      --host 0.0.0.0
+      --port 8002
 
   nginx-staging:
     build: 
@@ -131,4 +214,3 @@ networks:
   staging-network:
     driver: bridge
     name: idii-staging
-    external: true

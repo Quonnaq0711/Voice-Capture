@@ -776,7 +776,8 @@ const ResumeManager = () => {
 
   const handlePreview = (resume) => {
     // Open resume in new tab for preview
-    const resumeUrl = `http://localhost:8000/resumes/${resume.user_id}/${resume.filename}`;
+    // Use relative path that works in both development and production
+    const resumeUrl = `/resumes/${resume.user_id}/${resume.filename}`;
     window.open(resumeUrl, '_blank');
   };
 

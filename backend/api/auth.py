@@ -262,7 +262,11 @@ async def upload_resume(
         )
 
     # Create user directory if not exists
-    base_resume_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "resumes")
+    # Use /app/resumes for Docker volume mount, fallback to backend/resumes for local dev
+    if os.path.exists("/app/resumes"):
+        base_resume_dir = "/app/resumes"
+    else:
+        base_resume_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "resumes")
     user_resume_dir = os.path.join(base_resume_dir, str(current_user.id))
     os.makedirs(user_resume_dir, exist_ok=True)
 

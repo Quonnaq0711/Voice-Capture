@@ -402,7 +402,10 @@ const DocumentManager = ({ analysisProgress, setAnalysisProgress, setSectionStat
 
   const handlePreview = (document) => {
     // Open document in new tab for preview
-    const documentUrl = `http://localhost:8000/resumes/${document.user_id}/${document.filename}`;
+    // Use relative path (proxied through Nginx in production)
+    const documentUrl = process.env.NODE_ENV === 'production'
+      ? `/resumes/${document.user_id}/${document.filename}`
+      : `http://localhost:8000/resumes/${document.user_id}/${document.filename}`;
     window.open(documentUrl, '_blank');
   };
 
@@ -467,7 +470,11 @@ const DocumentManager = ({ analysisProgress, setAnalysisProgress, setSectionStat
       });
       
       // Call the streaming API with the specific document ID
-      const response = await fetch('http://localhost:8002/api/career/analyze_resume_streaming', {
+      // Use relative path in production (proxied through Nginx), localhost in development
+      const apiUrl = process.env.NODE_ENV === 'production'
+        ? '/api/career/analyze_resume_streaming'
+        : 'http://localhost:8002/api/career/analyze_resume_streaming';
+      const response = await fetch(apiUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -571,7 +578,16 @@ const DocumentManager = ({ analysisProgress, setAnalysisProgress, setSectionStat
                     currentSection: null
                   };
                 });
-                
+
+                // Add section completion notification
+                const sectionName = data.section.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
+                addNotification({
+                  type: 'complete',
+                  title: `✅ ${sectionName} Complete`,
+                  message: `${sectionName} analysis completed successfully! New insights are now available in your career profile.`,
+                  timestamp: Date.now()
+                });
+
                 // Also dispatch event for compatibility
                 const completeEvent = new CustomEvent('sectionComplete', {
                   detail: {
@@ -1095,10 +1111,10 @@ const CareerAgent = () => {
         // Add completion notification
         const sectionName = section.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
         addNotification({
-          type: 'success',
-          title: 'Section Completed',
-          message: `${sectionName} analysis completed successfully`,
-          details: 'New insights are now available in your career profile'
+          type: 'complete',
+          title: `✅ ${sectionName} Complete`,
+          message: `${sectionName} analysis completed successfully! New insights are now available in your career profile.`,
+          timestamp: Date.now()
         });
       }
     };
@@ -1423,7 +1439,11 @@ const CareerAgent = () => {
       });
 
       // Call the backend streaming endpoint
-      const response = await fetch('http://localhost:8002/api/career/analyze_resume_streaming', {
+      // Use relative path in production (proxied through Nginx), localhost in development
+      const apiUrl = process.env.NODE_ENV === 'production'
+        ? '/api/career/analyze_resume_streaming'
+        : 'http://localhost:8002/api/career/analyze_resume_streaming';
+      const response = await fetch(apiUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1452,7 +1472,31 @@ const CareerAgent = () => {
               const data = JSON.parse(line.slice(6));
               
               // Handle different types of streaming responses
-              if (data.type === 'section_progress') {
+              if (data.type === 'error') {
+                // Handle error from streaming response
+                console.error('Streaming analysis error:', data.message);
+                setAnalysisProgress(prev => ({
+                  ...prev,
+                  isAnalyzing: false,
+                  error: data.message
+                }));
+
+                addNotification({
+                  type: 'error',
+                  title: 'Analysis Error',
+                  message: data.message || 'An error occurred during analysis',
+                  details: data.error_details ? JSON.stringify(data.error_details) : ''
+                });
+                break; // Stop processing further chunks
+              } else if (data.type === 'status') {
+                // Handle status updates
+                console.log('Analysis status:', data.message, 'Progress:', data.progress);
+                setAnalysisProgress(prev => ({
+                  ...prev,
+                  progress: data.progress || prev.progress,
+                  currentSection: data.message
+                }));
+              } else if (data.type === 'section_progress') {
                 // Dispatch section progress event
                 const progressEvent = new CustomEvent('analysisProgress', {
                   detail: {

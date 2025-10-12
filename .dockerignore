@@ -1,9 +1,64 @@
+# Git
 .git
 .gitignore
+
+# Data directories (largest files - exclude from build context)
+data/
+data/ollama-staging/
+data/ollama2-staging/
+data/postgres-staging/
+
+# Node.js
+node_modules/
+frontend/node_modules/
+frontend/build/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+.venv
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+logs/
+nginx/logs/
+
+# Documentation
 README.md
+*.md
+docs/
+
+# Dockerfile (to avoid recursion)
 Dockerfile
 .dockerignore
-__pycache__
-*.pyc 
 
-.venv
+# Test coverage
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Backup files
+*.backup
+*.bak
+
+# OS files
+.DS_Store
+Thumbs.db

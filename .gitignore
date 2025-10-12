@@ -244,8 +244,11 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
-data/ollama-staging/id_ed25519
+# Persistent data directories (should not be in version control)
+data/ollama-staging/
+data/ollama2-staging/
 data/postgres-staging/
+
+# SSL certificates (generated per environment)
 nginx/ssl/origin.crt
 nginx/ssl/origin.key
-data/ollama-staging/
