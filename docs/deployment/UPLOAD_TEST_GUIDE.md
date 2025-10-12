@@ -112,7 +112,7 @@ ls -la /home/idii/data/user-uploads/resumes/
 ls -la /home/idii/data/user-uploads/avatars/
 
 # 5. Check if database data persists
-docker exec idii-db-staging psql -U postgres productdb-staging -c "SELECT COUNT(*) FROM users;"
+docker exec idii-db-staging psql -U postgres idii-staging -c "SELECT COUNT(*) FROM users;"
 
 # 6. Verify files and data are accessible from the frontend
 ```
@@ -132,7 +132,7 @@ sleep 20
 
 # 5. Verify all data is still present
 ls -la /home/idii/data/user-uploads/
-docker exec idii-db-staging psql -U postgres productdb-staging -c "\dt"
+docker exec idii-db-staging psql -U postgres idii-staging -c "\dt"
 
 # 6. Verify frontend can access files and database
 ```
@@ -167,7 +167,7 @@ environment:
   DB_TYPE: postgresql
   DB_HOST: db-staging
   DB_PORT: 5432
-  DB_NAME: productdb-staging
+  DB_NAME: idii-staging
   DB_USER: postgres
   DB_PASSWORD: ${DB_PASSWORD}
 ```
@@ -181,19 +181,19 @@ docker exec idii-db-staging du -sh /var/lib/postgresql/data
 docker exec idii-db-staging pg_isready -U postgres
 
 # Backup database
-docker exec idii-db-staging pg_dump -U postgres productdb-staging > backup_$(date +%Y%m%d).sql
+docker exec idii-db-staging pg_dump -U postgres idii-staging > backup_$(date +%Y%m%d).sql
 
 # Restore database
-cat backup.sql | docker exec -i idii-db-staging psql -U postgres productdb-staging
+cat backup.sql | docker exec -i idii-db-staging psql -U postgres idii-staging
 
 # Connect to database
-docker exec -it idii-db-staging psql -U postgres productdb-staging
+docker exec -it idii-db-staging psql -U postgres idii-staging
 
 # List all tables
-docker exec idii-db-staging psql -U postgres productdb-staging -c "\dt"
+docker exec idii-db-staging psql -U postgres idii-staging -c "\dt"
 
 # Check user count
-docker exec idii-db-staging psql -U postgres productdb-staging -c "SELECT COUNT(*) FROM users;"
+docker exec idii-db-staging psql -U postgres idii-staging -c "SELECT COUNT(*) FROM users;"
 ```
 
 ### SQLite Backup (Read-Only)
@@ -293,10 +293,10 @@ docker exec idii-backend-staging env | grep DB_
 4. Check database data integrity:
 ```bash
 # List all tables
-docker exec idii-db-staging psql -U postgres productdb-staging -c "\dt"
+docker exec idii-db-staging psql -U postgres idii-staging -c "\dt"
 
 # Check specific table
-docker exec idii-db-staging psql -U postgres productdb-staging -c "SELECT * FROM users LIMIT 5;"
+docker exec idii-db-staging psql -U postgres idii-staging -c "SELECT * FROM users LIMIT 5;"
 ```
 
 ### If Resume Analysis Fails
@@ -318,7 +318,7 @@ docker exec idii-career-agent-staging ls -la /app/resumes/[USER_ID]/
 
 4. Verify database contains resume metadata:
 ```bash
-docker exec idii-db-staging psql -U postgres productdb-staging -c "SELECT * FROM resumes WHERE user_id=[USER_ID];"
+docker exec idii-db-staging psql -U postgres idii-staging -c "SELECT * FROM resumes WHERE user_id=[USER_ID];"
 ```
 
 ## Multi-User Support
@@ -363,7 +363,7 @@ The system fully supports multiple users:
 mkdir -p ~/backups/$(date +%Y%m%d)
 
 # Backup PostgreSQL database
-docker exec idii-db-staging pg_dump -U postgres productdb-staging > ~/backups/$(date +%Y%m%d)/database.sql
+docker exec idii-db-staging pg_dump -U postgres idii-staging > ~/backups/$(date +%Y%m%d)/database.sql
 
 # Backup user uploads
 sudo tar -czf ~/backups/$(date +%Y%m%d)/user-uploads.tar.gz /home/idii/data/user-uploads/
@@ -393,7 +393,7 @@ docker-compose -f docker-compose.staging.yml up -d
 sleep 15
 
 # Restore database from SQL dump
-cat ~/backups/20250112/database.sql | docker exec -i idii-db-staging psql -U postgres productdb-staging
+cat ~/backups/20250112/database.sql | docker exec -i idii-db-staging psql -U postgres idii-staging
 ```
 
 ## Summary of Configuration

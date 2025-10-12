@@ -291,13 +291,13 @@ This directory contains all PostgreSQL data and persists across container restar
 docker exec idii-db-staging du -sh /var/lib/postgresql/data
 
 # Backup database
-docker exec idii-db-staging pg_dump -U postgres productdb-staging > backup_$(date +%Y%m%d).sql
+docker exec idii-db-staging pg_dump -U postgres idii-staging > backup_$(date +%Y%m%d).sql
 
 # Restore database
-cat backup_20250112.sql | docker exec -i idii-db-staging psql -U postgres productdb-staging
+cat backup_20250112.sql | docker exec -i idii-db-staging psql -U postgres idii-staging
 
 # Verify data integrity
-docker exec idii-db-staging psql -U postgres productdb-staging -c "\dt"
+docker exec idii-db-staging psql -U postgres idii-staging -c "\dt"
 ```
 
 ### User Uploads
@@ -397,7 +397,7 @@ docker-compose -f docker-compose.staging.yml down -v
 docker exec -it idii-backend-staging bash
 
 # Access database shell
-docker exec -it idii-db-staging psql -U postgres productdb-staging
+docker exec -it idii-db-staging psql -U postgres idii-staging
 
 # Access Ollama shell
 docker exec -it idii-ollama-staging bash
@@ -652,7 +652,7 @@ Key variables in `.env.staging`:
 # Database Configuration
 DB_HOST=db-staging
 DB_PORT=5432
-DB_NAME=productdb-staging
+DB_NAME=idii-staging
 DB_USER=postgres
 DB_PASSWORD=<secure-password>
 
@@ -684,7 +684,7 @@ Use this checklist for production deployments:
 - [ ] All code changes committed and pushed
 - [ ] `.env.staging` file updated with correct values
 - [ ] SSL certificates valid and not expired
-- [ ] Backup existing database: `docker exec idii-db-staging pg_dump -U postgres productdb-staging > backup.sql`
+- [ ] Backup existing database: `docker exec idii-db-staging pg_dump -U postgres idii-staging > backup.sql`
 - [ ] Verify disk space available (minimum 50GB free)
 - [ ] Verify GPU is accessible (`nvidia-smi`)
 - [ ] Verify data directories exist: `/home/idii/data/postgres-staging/`, `/home/idii/data/user-uploads/`
@@ -721,7 +721,7 @@ git checkout <previous-commit>
 docker-compose -f docker-compose.staging.yml up -d --build
 
 # Restore database if needed
-cat backup.sql | docker exec -i idii-db-staging psql -U postgres productdb-staging
+cat backup.sql | docker exec -i idii-db-staging psql -U postgres idii-staging
 ```
 
 ---
@@ -735,7 +735,7 @@ cat backup.sql | docker exec -i idii-db-staging psql -U postgres productdb-stagi
 mkdir -p ~/backups/$(date +%Y%m%d)
 
 # Backup PostgreSQL database
-docker exec idii-db-staging pg_dump -U postgres productdb-staging > ~/backups/$(date +%Y%m%d)/database.sql
+docker exec idii-db-staging pg_dump -U postgres idii-staging > ~/backups/$(date +%Y%m%d)/database.sql
 
 # Backup user uploads
 sudo tar -czf ~/backups/$(date +%Y%m%d)/user-uploads.tar.gz /home/idii/data/user-uploads/
@@ -765,7 +765,7 @@ docker-compose -f docker-compose.staging.yml up -d
 sleep 10
 
 # Restore database from SQL dump (alternative method)
-cat ~/backups/20250112/database.sql | docker exec -i idii-db-staging psql -U postgres productdb-staging
+cat ~/backups/20250112/database.sql | docker exec -i idii-db-staging psql -U postgres idii-staging
 ```
 
 ---

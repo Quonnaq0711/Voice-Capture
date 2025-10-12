@@ -8,7 +8,7 @@
 #   ./scripts/restore_postgres.sh <backup_file.sql.gz>
 #
 # Example:
-#   ./scripts/restore_postgres.sh /home/idii/backups/postgres/productdb-staging_20251012_002350.sql.gz
+#   ./scripts/restore_postgres.sh /home/idii/backups/postgres/idii-staging_20251012_002350.sql.gz
 #
 
 set -e  # Exit on error
@@ -16,7 +16,7 @@ set -e  # Exit on error
 # Configuration
 CONTAINER_NAME="idii-db-staging"
 DB_USER="postgres"
-DB_NAME="productdb-staging"
+DB_NAME="idii-staging"
 
 # Check arguments
 if [ $# -ne 1 ]; then
