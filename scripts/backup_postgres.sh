@@ -18,10 +18,10 @@ set -e  # Exit on error
 # Configuration
 BACKUP_DIR="/home/idii/backups/postgres"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-BACKUP_FILE="${BACKUP_DIR}/productdb-staging_${TIMESTAMP}.sql"
+BACKUP_FILE="${BACKUP_DIR}/idii-staging_${TIMESTAMP}.sql"
 CONTAINER_NAME="idii-db-staging"
 DB_USER="postgres"
-DB_NAME="productdb-staging"
+DB_NAME="idii-staging"
 RETENTION_DAYS=7
 
 # Create backup directory if it doesn't exist
@@ -79,7 +79,7 @@ fi
 # Clean up old backups
 echo ""
 echo "Cleaning up old backups (older than ${RETENTION_DAYS} days)..."
-DELETED_COUNT=$(find "${BACKUP_DIR}" -name "productdb-staging_*.sql.gz" -mtime +${RETENTION_DAYS} -type f -delete -print | wc -l)
+DELETED_COUNT=$(find "${BACKUP_DIR}" -name "idii-staging_*.sql.gz" -mtime +${RETENTION_DAYS} -type f -delete -print | wc -l)
 
 if [ ${DELETED_COUNT} -gt 0 ]; then
     echo "✓ Deleted ${DELETED_COUNT} old backup(s)"

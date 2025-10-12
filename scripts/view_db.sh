@@ -6,7 +6,7 @@
 
 CONTAINER="idii-db-staging"
 DB_USER="postgres"
-DB_NAME="productdb-staging"
+DB_NAME="idii-staging"
 
 # Color codes for better readability
 RED='\033[0;31m'

@@ -15,7 +15,7 @@ services:
       DB_TYPE: postgresql
       DB_HOST: db-staging
       DB_PORT: 5432
-      DB_NAME: productdb-staging
+      DB_NAME: idii-staging
       DB_USER: ${DB_USER:-postgres}
       DB_PASSWORD: ${DB_PASSWORD:-postgres}
     depends_on:
@@ -47,7 +47,7 @@ services:
       DB_TYPE: postgresql
       DB_HOST: db-staging
       DB_PORT: 5432
-      DB_NAME: productdb-staging
+      DB_NAME: idii-staging
       DB_USER: ${DB_USER:-postgres}
       DB_PASSWORD: ${DB_PASSWORD:-postgres}
     depends_on:
@@ -88,7 +88,7 @@ services:
     environment:
       POSTGRES_USER: ${DB_USER:-postgres}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
-      POSTGRES_DB: ${DB_NAME:-productdb-staging}
+      POSTGRES_DB: ${DB_NAME:-idii-staging}
       POSTGRES_INITDB_ARGS: "-E UTF8 --locale=en_US.UTF-8"
     ports:
       - "5432:5432"
@@ -170,7 +170,7 @@ services:
       DB_TYPE: postgresql
       DB_HOST: db-staging
       DB_PORT: 5432
-      DB_NAME: productdb-staging
+      DB_NAME: idii-staging
       DB_USER: ${DB_USER:-postgres}
       DB_PASSWORD: ${DB_PASSWORD:-postgres}
     depends_on:

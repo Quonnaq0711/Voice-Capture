@@ -357,10 +357,10 @@ docker exec idii-db-staging pg_isready -U postgres
 # Expected: /var/run/postgresql:5432 - accepting connections
 
 # List all tables
-docker exec idii-db-staging psql -U postgres productdb-staging -c "\dt"
+docker exec idii-db-staging psql -U postgres idii-staging -c "\dt"
 
 # Check user count
-docker exec idii-db-staging psql -U postgres productdb-staging -c "SELECT COUNT(*) FROM users;"
+docker exec idii-db-staging psql -U postgres idii-staging -c "SELECT COUNT(*) FROM users;"
 ```
 
 ### GPU Status
@@ -568,7 +568,7 @@ sleep 30
 1. **Backup Data**:
    ```bash
    # Backup PostgreSQL database
-   docker exec idii-db-staging pg_dump -U postgres productdb-staging > backup_$(date +%Y%m%d).sql
+   docker exec idii-db-staging pg_dump -U postgres idii-staging > backup_$(date +%Y%m%d).sql
 
    # Backup user uploads
    sudo tar -czf backup_uploads_$(date +%Y%m%d).tar.gz /home/idii/data/user-uploads/
