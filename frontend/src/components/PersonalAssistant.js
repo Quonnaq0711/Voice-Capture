@@ -6,12 +6,23 @@ const PersonalAssistant = ({ user, isDialogOpen: externalIsDialogOpen, setIsDial
   const navigate = useNavigate();
   const location = useLocation();
   const [internalIsDialogOpen, setInternalIsDialogOpen] = useState(false);
-  
+
   // Use external state if provided, otherwise use internal state
   const isDialogOpen = externalIsDialogOpen !== undefined ? externalIsDialogOpen : internalIsDialogOpen;
   const setIsDialogOpen = externalSetIsDialogOpen || setInternalIsDialogOpen;
   const [showWelcome, setShowWelcome] = useState(true);
-  const [position, setPosition] = useState({ x: window.innerWidth - 150, y: window.innerHeight - 150 });
+
+  // Calculate safe initial position (120px is the approximate size of the assistant avatar)
+  const getInitialPosition = useCallback(() => {
+    const assistantSize = 120; // Approximate size of the assistant avatar
+    const padding = 20; // Padding from screen edges
+    return {
+      x: Math.max(padding, window.innerWidth - assistantSize - padding),
+      y: Math.max(padding, window.innerHeight - assistantSize - padding)
+    };
+  }, []);
+
+  const [position, setPosition] = useState(getInitialPosition());
   const [showCountdown, setShowCountdown] = useState(false);
   const [countdown, setCountdown] = useState(3);
   const [targetAgent, setTargetAgent] = useState(null);
@@ -23,6 +34,27 @@ const PersonalAssistant = ({ user, isDialogOpen: externalIsDialogOpen, setIsDial
       setHasDialogBeenOpened(true);
     }
   }, [externalIsDialogOpen]);
+
+  // Handle window resize to keep assistant visible
+  useEffect(() => {
+    const handleResize = () => {
+      setPosition(prevPosition => {
+        const assistantSize = 120;
+        const padding = 20;
+        const maxX = window.innerWidth - assistantSize - padding;
+        const maxY = window.innerHeight - assistantSize - padding;
+
+        // Constrain position within new viewport dimensions
+        return {
+          x: Math.min(Math.max(padding, prevPosition.x), maxX),
+          y: Math.min(Math.max(padding, prevPosition.y), maxY)
+        };
+      });
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
   
   // Available agents configuration
   const agents = [
@@ -40,8 +72,8 @@ const PersonalAssistant = ({ user, isDialogOpen: externalIsDialogOpen, setIsDial
   
   // Function to reset position to bottom right corner
   const resetPosition = useCallback(() => {
-    setPosition({ x: window.innerWidth - 150, y: window.innerHeight - 150 });
-  }, []);
+    setPosition(getInitialPosition());
+  }, [getInitialPosition]);
   
   // Get current agent based on location
   const getCurrentAgent = useCallback(() => {

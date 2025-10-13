@@ -5,14 +5,14 @@
 
 // Use relative paths for API calls (proxied through Nginx)
 // In production: /api/pa/ -> http://idii-PA-staging:8001/api/chat/
-// In development: http://localhost:8001/api/chat
+// In development: Use environment variables or fallback to dev ports
 const CHAT_API_BASE_URL = process.env.NODE_ENV === 'production'
   ? '/api/pa'  // Proxied through Nginx in production
-  : 'http://localhost:8001/api/chat';  // Direct connection in development
+  : (process.env.REACT_APP_PA_URL ? `${process.env.REACT_APP_PA_URL}/api/chat` : 'http://localhost:6001/api/chat');  // Dev mode: port 6001
 
 const CAREER_API_BASE_URL = process.env.NODE_ENV === 'production'
   ? '/api/career'  // Proxied through Nginx in production
-  : 'http://localhost:8002/api/chat';  // Direct connection in development
+  : (process.env.REACT_APP_CAREER_URL ? `${process.env.REACT_APP_CAREER_URL}/api/chat` : 'http://localhost:6002/api/chat');  // Dev mode: port 6002
 
 /**
  * Helper function to build absolute URL from relative or absolute path

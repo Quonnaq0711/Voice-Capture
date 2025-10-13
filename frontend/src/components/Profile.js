@@ -1107,9 +1107,25 @@ const CareerProfile = ({ profile, setProfile, onSave, loading }) => {
     setProfile(prev => ({ ...prev, [field]: value }));
   };
 
-  const handleArrayChange = (field, value) => {
+  // Handle comma-separated input by storing as string during editing
+  const handleArrayInputChange = (field, value) => {
+    // Store the raw string value directly without processing
+    setProfile(prev => ({ ...prev, [field]: value }));
+  };
+
+  // Convert string to array when input loses focus
+  const handleArrayBlur = (field, value) => {
     const array = value.split(',').map(item => item.trim()).filter(item => item);
     setProfile(prev => ({ ...prev, [field]: array }));
+  };
+
+  // Helper to get display value for array fields
+  const getArrayDisplayValue = (field) => {
+    const value = profile[field];
+    if (Array.isArray(value)) {
+      return value.join(', ');
+    }
+    return value || '';
   };
 
   return (
@@ -1230,41 +1246,45 @@ const CareerProfile = ({ profile, setProfile, onSave, loading }) => {
             <label className="block text-sm font-medium text-gray-700 mb-2">Technical Skills (comma separated)</label>
             <input
               type="text"
-              value={profile.skills ? profile.skills.join(', ') : ''}
-              onChange={(e) => handleArrayChange('skills', e.target.value)}
+              value={getArrayDisplayValue('skills')}
+              onChange={(e) => handleArrayInputChange('skills', e.target.value)}
+              onBlur={(e) => handleArrayBlur('skills', e.target.value)}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
               placeholder="e.g., JavaScript, Python, Project Management, Data Analysis"
             />
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Soft Skills (comma separated)</label>
             <input
               type="text"
-              value={profile.soft_skills ? profile.soft_skills.join(', ') : ''}
-              onChange={(e) => handleArrayChange('soft_skills', e.target.value)}
+              value={getArrayDisplayValue('soft_skills')}
+              onChange={(e) => handleArrayInputChange('soft_skills', e.target.value)}
+              onBlur={(e) => handleArrayBlur('soft_skills', e.target.value)}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
               placeholder="e.g., Communication, Leadership, Problem Solving, Teamwork"
             />
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Certifications & Achievements (comma separated)</label>
             <input
               type="text"
-              value={profile.certifications ? profile.certifications.join(', ') : ''}
-              onChange={(e) => handleArrayChange('certifications', e.target.value)}
+              value={getArrayDisplayValue('certifications')}
+              onChange={(e) => handleArrayInputChange('certifications', e.target.value)}
+              onBlur={(e) => handleArrayBlur('certifications', e.target.value)}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
               placeholder="e.g., PMP, AWS Certified, MBA, Published Research"
             />
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Areas for Skill Development (comma separated)</label>
             <input
               type="text"
-              value={profile.skill_gaps ? profile.skill_gaps.join(', ') : ''}
-              onChange={(e) => handleArrayChange('skill_gaps', e.target.value)}
+              value={getArrayDisplayValue('skill_gaps')}
+              onChange={(e) => handleArrayInputChange('skill_gaps', e.target.value)}
+              onBlur={(e) => handleArrayBlur('skill_gaps', e.target.value)}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
               placeholder="e.g., Machine Learning, Public Speaking, Strategic Planning"
             />
@@ -1324,8 +1344,9 @@ const CareerProfile = ({ profile, setProfile, onSave, loading }) => {
             <label className="block text-sm font-medium text-gray-700 mb-2">Industries of Interest (comma separated)</label>
             <input
               type="text"
-              value={profile.target_industries ? profile.target_industries.join(', ') : ''}
-              onChange={(e) => handleArrayChange('target_industries', e.target.value)}
+              value={getArrayDisplayValue('target_industries')}
+              onChange={(e) => handleArrayInputChange('target_industries', e.target.value)}
+              onBlur={(e) => handleArrayBlur('target_industries', e.target.value)}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
               placeholder="e.g., FinTech, HealthTech, AI/ML, Sustainability"
             />
@@ -1407,8 +1428,9 @@ const CareerProfile = ({ profile, setProfile, onSave, loading }) => {
           <label className="block text-sm font-medium text-gray-700 mb-2">Core Work Values (comma separated)</label>
           <input
             type="text"
-            value={profile.work_values ? profile.work_values.join(', ') : ''}
-            onChange={(e) => handleArrayChange('work_values', e.target.value)}
+            value={getArrayDisplayValue('work_values')}
+              onChange={(e) => handleArrayInputChange('work_values', e.target.value)}
+              onBlur={(e) => handleArrayBlur('work_values', e.target.value)}
             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all"
             placeholder="e.g., Innovation, Impact, Autonomy, Collaboration, Growth"
           />
@@ -1438,8 +1460,9 @@ const CareerProfile = ({ profile, setProfile, onSave, loading }) => {
             <label className="block text-sm font-medium text-gray-700 mb-2">Professional Strengths (comma separated)</label>
             <input
               type="text"
-              value={profile.professional_strengths ? profile.professional_strengths.join(', ') : ''}
-              onChange={(e) => handleArrayChange('professional_strengths', e.target.value)}
+              value={getArrayDisplayValue('professional_strengths')}
+              onChange={(e) => handleArrayInputChange('professional_strengths', e.target.value)}
+              onBlur={(e) => handleArrayBlur('professional_strengths', e.target.value)}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
               placeholder="e.g., Strategic thinking, Team building, Technical expertise"
             />
@@ -1449,8 +1472,9 @@ const CareerProfile = ({ profile, setProfile, onSave, loading }) => {
             <label className="block text-sm font-medium text-gray-700 mb-2">Areas for Professional Growth (comma separated)</label>
             <input
               type="text"
-              value={profile.growth_areas ? profile.growth_areas.join(', ') : ''}
-              onChange={(e) => handleArrayChange('growth_areas', e.target.value)}
+              value={getArrayDisplayValue('growth_areas')}
+              onChange={(e) => handleArrayInputChange('growth_areas', e.target.value)}
+              onBlur={(e) => handleArrayBlur('growth_areas', e.target.value)}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
               placeholder="e.g., Executive presence, Cross-cultural communication, Data science"
             />
@@ -1460,8 +1484,9 @@ const CareerProfile = ({ profile, setProfile, onSave, loading }) => {
             <label className="block text-sm font-medium text-gray-700 mb-2">Preferred Learning & Development Methods (comma separated)</label>
             <input
               type="text"
-              value={profile.learning_preferences ? profile.learning_preferences.join(', ') : ''}
-              onChange={(e) => handleArrayChange('learning_preferences', e.target.value)}
+              value={getArrayDisplayValue('learning_preferences')}
+              onChange={(e) => handleArrayInputChange('learning_preferences', e.target.value)}
+              onBlur={(e) => handleArrayBlur('learning_preferences', e.target.value)}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
               placeholder="e.g., Mentoring, Online courses, Conferences, On-the-job training"
             />
@@ -1573,9 +1598,21 @@ const BodyProfile = ({ profile, setProfile, onSave, loading }) => {
     setProfile(prev => ({ ...prev, [field]: value }));
   };
 
-  const handleArrayChange = (field, value) => {
+  const handleArrayInputChange = (field, value) => {
+    setProfile(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleArrayBlur = (field, value) => {
     const array = value.split(',').map(item => item.trim()).filter(item => item);
     setProfile(prev => ({ ...prev, [field]: array }));
+  };
+
+  const getArrayDisplayValue = (field) => {
+    const value = profile[field];
+    if (Array.isArray(value)) {
+      return value.join(', ');
+    }
+    return value || '';
   };
 
   return (
@@ -1623,8 +1660,9 @@ const BodyProfile = ({ profile, setProfile, onSave, loading }) => {
             <label className="block text-sm font-medium text-gray-700 mb-2">Exercise Preferences (comma separated)</label>
             <input
               type="text"
-              value={profile.exercise_preferences ? profile.exercise_preferences.join(', ') : ''}
-              onChange={(e) => handleArrayChange('exercise_preferences', e.target.value)}
+              value={getArrayDisplayValue('exercise_preferences')}
+              onChange={(e) => handleArrayInputChange('exercise_preferences', e.target.value)}
+              onBlur={(e) => handleArrayBlur('exercise_preferences', e.target.value)}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all"
               placeholder="e.g., Running, Weight Training, Yoga"
             />
@@ -1661,9 +1699,21 @@ const TravelProfile = ({ profile, setProfile, onSave, loading }) => {
     setProfile(prev => ({ ...prev, [field]: value }));
   };
 
-  const handleArrayChange = (field, value) => {
+  const handleArrayInputChange = (field, value) => {
+    setProfile(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleArrayBlur = (field, value) => {
     const array = value.split(',').map(item => item.trim()).filter(item => item);
     setProfile(prev => ({ ...prev, [field]: array }));
+  };
+
+  const getArrayDisplayValue = (field) => {
+    const value = profile[field];
+    if (Array.isArray(value)) {
+      return value.join(', ');
+    }
+    return value || '';
   };
 
   return (
@@ -1728,8 +1778,9 @@ const TravelProfile = ({ profile, setProfile, onSave, loading }) => {
             <label className="block text-sm font-medium text-gray-700 mb-2">Preferred Destinations (comma separated)</label>
             <input
               type="text"
-              value={profile.preferred_destinations ? profile.preferred_destinations.join(', ') : ''}
-              onChange={(e) => handleArrayChange('preferred_destinations', e.target.value)}
+              value={getArrayDisplayValue('preferred_destinations')}
+              onChange={(e) => handleArrayInputChange('preferred_destinations', e.target.value)}
+              onBlur={(e) => handleArrayBlur('preferred_destinations', e.target.value)}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
               placeholder="e.g., Europe, Asia, Beach destinations"
             />
@@ -1755,9 +1806,21 @@ const MindProfile = ({ profile, setProfile, onSave, loading }) => {
     setProfile(prev => ({ ...prev, [field]: value }));
   };
 
-  const handleArrayChange = (field, value) => {
+  const handleArrayInputChange = (field, value) => {
+    setProfile(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleArrayBlur = (field, value) => {
     const array = value.split(',').map(item => item.trim()).filter(item => item);
     setProfile(prev => ({ ...prev, [field]: array }));
+  };
+
+  const getArrayDisplayValue = (field) => {
+    const value = profile[field];
+    if (Array.isArray(value)) {
+      return value.join(', ');
+    }
+    return value || '';
   };
 
   return (
@@ -1799,8 +1862,9 @@ const MindProfile = ({ profile, setProfile, onSave, loading }) => {
             <label className="block text-sm font-medium text-gray-700 mb-2">Strengths (comma separated)</label>
             <input
               type="text"
-              value={profile.strengths ? profile.strengths.join(', ') : ''}
-              onChange={(e) => handleArrayChange('strengths', e.target.value)}
+              value={getArrayDisplayValue('strengths')}
+              onChange={(e) => handleArrayInputChange('strengths', e.target.value)}
+              onBlur={(e) => handleArrayBlur('strengths', e.target.value)}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
               placeholder="e.g., Communication, Problem-solving, Leadership"
             />
@@ -1810,8 +1874,9 @@ const MindProfile = ({ profile, setProfile, onSave, loading }) => {
             <label className="block text-sm font-medium text-gray-700 mb-2">Areas for Improvement (comma separated)</label>
             <input
               type="text"
-              value={profile.areas_for_improvement ? profile.areas_for_improvement.join(', ') : ''}
-              onChange={(e) => handleArrayChange('areas_for_improvement', e.target.value)}
+              value={getArrayDisplayValue('areas_for_improvement')}
+              onChange={(e) => handleArrayInputChange('areas_for_improvement', e.target.value)}
+              onBlur={(e) => handleArrayBlur('areas_for_improvement', e.target.value)}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
               placeholder="e.g., Time management, Public speaking"
             />
@@ -1906,9 +1971,21 @@ const FamilyProfile = ({ profile, setProfile, onSave, loading }) => {
 };
 
 const HobbyProfile = ({ profile, setProfile, onSave, loading }) => {
-  const handleArrayChange = (field, value) => {
+  const handleArrayInputChange = (field, value) => {
+    setProfile(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleArrayBlur = (field, value) => {
     const array = value.split(',').map(item => item.trim()).filter(item => item);
     setProfile(prev => ({ ...prev, [field]: array }));
+  };
+
+  const getArrayDisplayValue = (field) => {
+    const value = profile[field];
+    if (Array.isArray(value)) {
+      return value.join(', ');
+    }
+    return value || '';
   };
 
   return (
@@ -1924,8 +2001,9 @@ const HobbyProfile = ({ profile, setProfile, onSave, loading }) => {
             <label className="block text-sm font-medium text-gray-700 mb-2">Hobbies (comma separated)</label>
             <input
               type="text"
-              value={profile.hobbies ? profile.hobbies.join(', ') : ''}
-              onChange={(e) => handleArrayChange('hobbies', e.target.value)}
+              value={getArrayDisplayValue('hobbies')}
+              onChange={(e) => handleArrayInputChange('hobbies', e.target.value)}
+              onBlur={(e) => handleArrayBlur('hobbies', e.target.value)}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all"
               placeholder="e.g., Reading, Photography, Cooking, Gaming"
             />
@@ -1935,8 +2013,9 @@ const HobbyProfile = ({ profile, setProfile, onSave, loading }) => {
             <label className="block text-sm font-medium text-gray-700 mb-2">Interests (comma separated)</label>
             <input
               type="text"
-              value={profile.interests ? profile.interests.join(', ') : ''}
-              onChange={(e) => handleArrayChange('interests', e.target.value)}
+              value={getArrayDisplayValue('interests')}
+              onChange={(e) => handleArrayInputChange('interests', e.target.value)}
+              onBlur={(e) => handleArrayBlur('interests', e.target.value)}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all"
               placeholder="e.g., Technology, Art, Music, Sports"
             />
@@ -1946,8 +2025,9 @@ const HobbyProfile = ({ profile, setProfile, onSave, loading }) => {
             <label className="block text-sm font-medium text-gray-700 mb-2">Creative Pursuits (comma separated)</label>
             <input
               type="text"
-              value={profile.creative_pursuits ? profile.creative_pursuits.join(', ') : ''}
-              onChange={(e) => handleArrayChange('creative_pursuits', e.target.value)}
+              value={getArrayDisplayValue('creative_pursuits')}
+              onChange={(e) => handleArrayInputChange('creative_pursuits', e.target.value)}
+              onBlur={(e) => handleArrayBlur('creative_pursuits', e.target.value)}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all"
               placeholder="e.g., Writing, Painting, Music composition, Crafting"
             />
@@ -1973,9 +2053,21 @@ const KnowledgeProfile = ({ profile, setProfile, onSave, loading }) => {
     setProfile(prev => ({ ...prev, [field]: value }));
   };
 
-  const handleArrayChange = (field, value) => {
+  const handleArrayInputChange = (field, value) => {
+    setProfile(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleArrayBlur = (field, value) => {
     const array = value.split(',').map(item => item.trim()).filter(item => item);
     setProfile(prev => ({ ...prev, [field]: array }));
+  };
+
+  const getArrayDisplayValue = (field) => {
+    const value = profile[field];
+    if (Array.isArray(value)) {
+      return value.join(', ');
+    }
+    return value || '';
   };
 
   return (
@@ -2008,8 +2100,9 @@ const KnowledgeProfile = ({ profile, setProfile, onSave, loading }) => {
             <label className="block text-sm font-medium text-gray-700 mb-2">Preferred Learning Methods (comma separated)</label>
             <input
               type="text"
-              value={profile.preferred_learning_methods ? profile.preferred_learning_methods.join(', ') : ''}
-              onChange={(e) => handleArrayChange('preferred_learning_methods', e.target.value)}
+              value={getArrayDisplayValue('preferred_learning_methods')}
+              onChange={(e) => handleArrayInputChange('preferred_learning_methods', e.target.value)}
+              onBlur={(e) => handleArrayBlur('preferred_learning_methods', e.target.value)}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-all"
               placeholder="e.g., Online courses, Books, Workshops, Mentoring"
             />
@@ -2020,8 +2113,9 @@ const KnowledgeProfile = ({ profile, setProfile, onSave, loading }) => {
           <label className="block text-sm font-medium text-gray-700 mb-2">Learning Goals (comma separated)</label>
           <input
             type="text"
-            value={profile.learning_goals ? profile.learning_goals.join(', ') : ''}
-            onChange={(e) => handleArrayChange('learning_goals', e.target.value)}
+            value={getArrayDisplayValue('learning_goals')}
+              onChange={(e) => handleArrayInputChange('learning_goals', e.target.value)}
+              onBlur={(e) => handleArrayBlur('learning_goals', e.target.value)}
             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-all"
             placeholder="e.g., Learn new programming language, Improve communication skills"
           />
@@ -2046,9 +2140,21 @@ const SpiritualProfile = ({ profile, setProfile, onSave, loading }) => {
     setProfile(prev => ({ ...prev, [field]: value }));
   };
 
-  const handleArrayChange = (field, value) => {
+  const handleArrayInputChange = (field, value) => {
+    setProfile(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleArrayBlur = (field, value) => {
     const array = value.split(',').map(item => item.trim()).filter(item => item);
     setProfile(prev => ({ ...prev, [field]: array }));
+  };
+
+  const getArrayDisplayValue = (field) => {
+    const value = profile[field];
+    if (Array.isArray(value)) {
+      return value.join(', ');
+    }
+    return value || '';
   };
 
   return (
@@ -2079,8 +2185,9 @@ const SpiritualProfile = ({ profile, setProfile, onSave, loading }) => {
             <label className="block text-sm font-medium text-gray-700 mb-2">Spiritual Practices (comma separated)</label>
             <input
               type="text"
-              value={profile.spiritual_practices ? profile.spiritual_practices.join(', ') : ''}
-              onChange={(e) => handleArrayChange('spiritual_practices', e.target.value)}
+              value={getArrayDisplayValue('spiritual_practices')}
+              onChange={(e) => handleArrayInputChange('spiritual_practices', e.target.value)}
+              onBlur={(e) => handleArrayBlur('spiritual_practices', e.target.value)}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-transparent transition-all"
               placeholder="e.g., Meditation, Prayer, Yoga, Journaling"
             />
@@ -2091,8 +2198,9 @@ const SpiritualProfile = ({ profile, setProfile, onSave, loading }) => {
           <label className="block text-sm font-medium text-gray-700 mb-2">Stress Management Techniques (comma separated)</label>
           <input
             type="text"
-            value={profile.stress_management ? profile.stress_management.join(', ') : ''}
-            onChange={(e) => handleArrayChange('stress_management', e.target.value)}
+            value={getArrayDisplayValue('stress_management')}
+              onChange={(e) => handleArrayInputChange('stress_management', e.target.value)}
+              onBlur={(e) => handleArrayBlur('stress_management', e.target.value)}
             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-transparent transition-all"
             placeholder="e.g., Deep breathing, Exercise, Music, Nature walks"
           />
@@ -2226,7 +2334,13 @@ const Profile = () => {
   const fetchAvatar = async () => {
     try {
       const data = await profileAPI.getAvatarUrl();
-      setAvatarUrl(data.url);
+      // In development mode, prepend backend URL to relative avatar paths
+      let url = data.url;
+      if (process.env.NODE_ENV !== 'production' && url && url.startsWith('/')) {
+        const backendUrl = process.env.REACT_APP_BACKEND_URL || 'http://localhost:5000';
+        url = backendUrl + url;
+      }
+      setAvatarUrl(url);
     } catch (error) {
       // Avatar not found, ignore error
     }

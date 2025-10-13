@@ -10,7 +10,8 @@
 #
 # To run automatically with cron:
 #   crontab -e
-#   # Add: 0 2 * * * /home/rui/Projects/Product/scripts/backup_postgres.sh >> /home/rui/Projects/Product/logs/backup.log 2>&1
+#   # Add: 0 2 * * * /path/to/Product/scripts/backup_postgres.sh >> /path/to/Product/logs/backup.log 2>&1
+#   # Replace /path/to/Product with your actual project path
 #
 
 set -e  # Exit on error

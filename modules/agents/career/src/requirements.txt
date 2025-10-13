@@ -23,8 +23,9 @@ sse-starlette
 # Data validation and serialization
 pydantic
 
-# PDF processing
+# Document processing
 PyPDF2
+python-docx
 
 # Database
 sqlalchemy

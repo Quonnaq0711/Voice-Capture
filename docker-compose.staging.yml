@@ -58,10 +58,7 @@ services:
     volumes:
       # SQLite backup kept for migration reference
       - /home/idii/data/database:/app/db-backup:ro
-    command: >
-        python -m uvicorn main:app
-        --host 0.0.0.0
-        --port 8001          
+    # Use default CMD from Dockerfile (gunicorn with 4 workers)
 
   frontend-staging:
     build:
@@ -85,6 +82,30 @@ services:
     image: postgres:15
     container_name: idii-db-staging
     restart: unless-stopped
+
+    # Performance optimization for 500-1000 concurrent users (4-core CPU)
+    # These parameters are applied at PostgreSQL startup
+    command:
+      - "postgres"
+      - "-c"
+      - "max_connections=500"              # Increased from default 100 to support more connections
+      - "-c"
+      - "shared_buffers=2GB"               # 25% of 8GB RAM (optimal for dedicated DB)
+      - "-c"
+      - "work_mem=8MB"                     # Per-operation memory for sorting/hashing
+      - "-c"
+      - "maintenance_work_mem=256MB"       # Memory for VACUUM, CREATE INDEX operations
+      - "-c"
+      - "effective_cache_size=4GB"         # Hint to query planner (50-75% of RAM)
+      - "-c"
+      - "wal_buffers=16MB"                 # WAL write buffer optimization
+      - "-c"
+      - "checkpoint_completion_target=0.9" # Spread checkpoint I/O
+      - "-c"
+      - "random_page_cost=1.1"             # SSD optimization (default 4.0 for HDD)
+      - "-c"
+      - "max_prepared_transactions=100"    # For connection pooling
+
     environment:
       POSTGRES_USER: ${DB_USER:-postgres}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
@@ -183,10 +204,7 @@ services:
       - /home/idii/data/user-uploads/resumes:/app/resumes
       # SQLite backup kept for migration reference
       - /home/idii/data/database:/app/db-backup:ro
-    command: >
-      python -m uvicorn main:app
-      --host 0.0.0.0
-      --port 8002
+    # Use default CMD from Dockerfile (gunicorn with 4 workers)
 
   nginx-staging:
     build: 
