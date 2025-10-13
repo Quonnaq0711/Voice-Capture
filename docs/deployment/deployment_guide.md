@@ -102,12 +102,19 @@ cd Projects/Product
 ./deploy-staging.sh
 ```
 
-This script will:
-1. Stop and remove existing containers
-2. Build all Docker images
-3. Start all services
-4. Pull Ollama models
-5. Verify service health
+**What the script does:**
+1. ✅ Verifies GPU availability using `nvidia-smi`
+2. 🌐 Gets external IP from GCP metadata
+3. 📥 Pulls latest code from repository
+4. 🛑 Stops existing containers (`docker-compose down`)
+5. 🏗️ Builds all Docker images (with `--no-cache` flag)
+6. 🚀 Starts all services in detached mode
+7. ⏳ Waits 45 seconds for services to initialize
+8. 🤖 Sets up Ollama models via `setup-ollama-updated.sh`
+9. 🧪 Tests GPU acceleration in both Ollama containers
+10. 📊 Displays deployment summary with all service URLs
+
+**Deployment Time**: 5-10 minutes (depending on system resources and internet speed)
 
 For first-time deployment or troubleshooting, follow the [Detailed Deployment Steps](#detailed-deployment-steps).
 
@@ -772,11 +779,11 @@ cat ~/backups/20250112/database.sql | docker exec -i idii-db-staging psql -U pos
 
 ## Additional Resources
 
-- [Port Mapping Guide](./PORT_MAPPING_EXPLAINED.md)
-- [Deployment Scripts Guide](./DEPLOYMENT_SCRIPTS_EXPLAINED.md)
-- [Pre-Deployment Checklist](./PRE_DEPLOYMENT_CHECKLIST.md)
-- [Upload Testing Guide](./UPLOAD_TEST_GUIDE.md)
-- [Docker Compose Configuration](../../docker-compose.staging.yml)
+- [Database Initialization Guide](./database_initialization.md) - PostgreSQL setup and migration
+- [Deployment Documentation Index](./README.md) - Quick navigation to all deployment docs
+- [Docker Compose Configuration](../../docker-compose.staging.yml) - Container orchestration
+- [Architecture Documentation](../architecture/) - System architecture and design
+- [Development Setup](../development/) - Local development environment
 
 ---
 

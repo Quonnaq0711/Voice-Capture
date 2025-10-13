@@ -252,3 +252,10 @@ data/postgres-staging/
 # SSL certificates (generated per environment)
 nginx/ssl/origin.crt
 nginx/ssl/origin.key
+
+# Development mode files (created by deploy-dev.sh, should not be committed)
+.dev-pids/
+frontend/.env.development.local
+
+# Backup files (should not be committed, use Git for version control)
+*.backup

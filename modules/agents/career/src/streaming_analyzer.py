@@ -223,9 +223,20 @@ class StreamingResumeAnalyzer:
             
             resume_content = await self.resume_analyzer.read_resume_content(target_resume)
             if not resume_content:
+                error_message = "Failed to read resume content. The file may be empty, corrupted, or in an unsupported format. Please try uploading again."
+
+                # Send error notification
+                await self._send_notification(
+                    user_id=user_id,
+                    notification_type="error",
+                    session_id=session_id,
+                    error_message=error_message,
+                    current_section="document_parsing"
+                )
+
                 yield {
                     "type": "error",
-                    "message": "Failed to read resume content. Please try uploading again.",
+                    "message": error_message,
                     "timestamp": datetime.now().isoformat()
                 }
                 return
@@ -388,8 +399,7 @@ class StreamingResumeAnalyzer:
                         user_id=user_id,
                         notification_type="complete",
                         session_id=session_id,
-                        sections_completed=list(all_results.keys()),
-                        performance_metrics=performance_metrics
+                        sections_completed=len(all_results.keys())  # Send count, not list
                     )
                     
                     # Yield a success event without professional data to prevent overwriting the UI

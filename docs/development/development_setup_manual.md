@@ -1,4 +1,9 @@
-# Development Setup Guide
+# Development Setup Guide (Manual Installation)
+
+> **📖 Setup Method**: This guide covers **manual step-by-step installation** for all platforms (Windows, macOS, Linux).
+>
+> **🚀 Prefer Automated Setup?** Linux users can use automated deployment scripts instead:
+> See [development_setup_automated.md](development_setup_automated.md) for quick one-command deployment with `./deploy-dev.sh`.
 
 This guide provides step-by-step instructions to set up the Sadaora AI Assistant Platform development environment on a fresh computer.
 

@@ -38,7 +38,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include routes
+# Include routes with /api/v1 prefix (primary routes)
 app.include_router(
     auth.router,
     prefix="/api/v1/auth",
@@ -79,6 +79,49 @@ app.include_router(
     daily_recommendations.router,
     prefix="/api/v1",
     tags=["daily_recommendations"]
+)
+
+# Also include routes with /v1 prefix (for development mode frontend compatibility)
+app.include_router(
+    auth.router,
+    prefix="/v1/auth",
+    tags=["authentication-v1"]
+)
+
+app.include_router(
+    chat.router,
+    prefix="/v1/chat",
+    tags=["chat-v1"]
+)
+
+app.include_router(
+    profile.router,
+    prefix="/v1",
+    tags=["profile-v1"]
+)
+
+app.include_router(
+    sessions.router,
+    prefix="/v1/chat",
+    tags=["sessions-v1"]
+)
+
+app.include_router(
+    activities.router,
+    prefix="/v1",
+    tags=["activities-v1"]
+)
+
+app.include_router(
+    career_insights.router,
+    prefix="/v1",
+    tags=["career_insights-v1"]
+)
+
+app.include_router(
+    daily_recommendations.router,
+    prefix="/v1",
+    tags=["daily_recommendations-v1"]
 )
 
 # Mount static files for avatars
