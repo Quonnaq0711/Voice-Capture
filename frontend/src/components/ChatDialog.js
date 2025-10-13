@@ -19,7 +19,7 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
     const isProduction = process.env.NODE_ENV === 'production';
 
     const agentApiMap = {
-      '/agents/career': isProduction ? '/api/career' : 'http://localhost:8002/api/chat',
+      '/agents/career': isProduction ? '/api/career' : 'http://localhost:6002/api/chat',
       '/agents/money': isProduction ? '/api/money' : 'http://localhost:8003/api/chat',
       '/agents/mind': isProduction ? '/api/mind' : 'http://localhost:8004/api/chat',
       '/agents/travel': isProduction ? '/api/travel' : 'http://localhost:8005/api/chat',
@@ -706,7 +706,7 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
       const isProduction = process.env.NODE_ENV === 'production';
 
       const agentApiMap = {
-        '/agents/career': isProduction ? '/api/career' : 'http://localhost:8002/api/chat',
+        '/agents/career': isProduction ? '/api/career' : 'http://localhost:6002/api/chat',
         '/agents/money': isProduction ? '/api/money' : 'http://localhost:8003/api/chat',
         '/agents/mind': isProduction ? '/api/mind' : 'http://localhost:8004/api/chat',
         '/agents/travel': isProduction ? '/api/travel' : 'http://localhost:8005/api/chat',
@@ -1829,17 +1829,22 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
     let newWidth = resizeStartSize.current.width;
     let newHeight = resizeStartSize.current.height;
 
+    const minWidth = 320;
+    const minHeight = 400;
+    const maxWidth = window.innerWidth - 40; // Leave 20px padding on each side
+    const maxHeight = window.innerHeight - 40;
+
     if (resizeDirection.includes('right')) {
-      newWidth = Math.max(320, resizeStartSize.current.width + deltaX);
+      newWidth = Math.min(maxWidth, Math.max(minWidth, resizeStartSize.current.width + deltaX));
     }
     if (resizeDirection.includes('left')) {
-      newWidth = Math.max(320, resizeStartSize.current.width - deltaX);
+      newWidth = Math.min(maxWidth, Math.max(minWidth, resizeStartSize.current.width - deltaX));
     }
     if (resizeDirection.includes('bottom')) {
-      newHeight = Math.max(400, resizeStartSize.current.height + deltaY);
+      newHeight = Math.min(maxHeight, Math.max(minHeight, resizeStartSize.current.height + deltaY));
     }
     if (resizeDirection.includes('top')) {
-      newHeight = Math.max(400, resizeStartSize.current.height - deltaY);
+      newHeight = Math.min(maxHeight, Math.max(minHeight, resizeStartSize.current.height - deltaY));
     }
 
     setDialogSize({ width: newWidth, height: newHeight });
@@ -1908,46 +1913,170 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
     }
   }, [isResizing, handleResizeMove, handleResizeEnd]);
 
-  const getDialogStyle = () => {
-    const style = {
-      position: 'absolute',
-      width: `${dialogSize.width}px`,
-      height: `${dialogSize.height}px`,
-      transition: isResizing ? 'none' : 'opacity 0.3s ease-in-out, transform 0.3s ease-in-out',
-      opacity: 0,
-      transform: 'scale(0.95)',
+  // Force dialog reposition on window resize to keep it within viewport bounds
+  const [windowSize, setWindowSize] = useState({
+    width: window.innerWidth,
+    height: window.innerHeight
+  });
+
+  // Track if dialog needs repositioning
+  const [dialogKey, setDialogKey] = useState(0);
+
+  useEffect(() => {
+    const handleWindowResize = () => {
+      setWindowSize({
+        width: window.innerWidth,
+        height: window.innerHeight
+      });
+      // Force dialog reposition by changing key
+      setDialogKey(prev => prev + 1);
     };
 
-    // Position the dialog relative to the assistant
+    window.addEventListener('resize', handleWindowResize);
+    return () => window.removeEventListener('resize', handleWindowResize);
+  }, []);
+
+  // Force reposition when assistant moves
+  useEffect(() => {
+    setDialogKey(prev => prev + 1);
+  }, [assistantPosition.x, assistantPosition.y]);
+
+  const getDialogStyle = () => {
     const assistantX = assistantPosition.x;
     const assistantY = assistantPosition.y;
     const assistantWidth = 128; // w-32 in pixels
-    const spacing = 16; // 1rem
+    const assistantHeight = 128;
+    const spacing = 16; // Gap between assistant and dialog
+    const edgePadding = 20; // Minimum padding from viewport edges
 
-    // Default to left of the assistant, aligned at bottom
-    style.bottom = '0px';
-    style.right = `${assistantWidth + spacing}px`;
+    const viewportWidth = windowSize.width;
+    const viewportHeight = windowSize.height;
 
-    // Adjust if it goes off-screen to the left
-    if (assistantX < dialogSize.width + spacing) {
-      style.left = `${assistantWidth + spacing}px`;
-      style.right = 'auto';
+    const minWidth = 320;
+    const minHeight = 400;
+    const maxWidth = viewportWidth - 40; // Maximum width (leave padding)
+    const maxHeight = viewportHeight - 40; // Maximum height (leave padding)
+
+    // Calculate available space in each direction from the assistant
+    const spaceLeft = assistantX - edgePadding;
+    const spaceRight = viewportWidth - (assistantX + assistantWidth) - edgePadding;
+    const spaceAbove = assistantY - edgePadding;
+    const spaceBelow = viewportHeight - (assistantY + assistantHeight) - edgePadding;
+
+    // Determine horizontal placement (left or right of assistant)
+    let dialogX;
+    let dialogWidth = Math.min(maxWidth, dialogSize.width); // Respect max width
+    let horizontalPlacement;
+
+    // Choose the side with more space
+    if (spaceRight >= spaceLeft) {
+      // Place dialog to the right of assistant
+      horizontalPlacement = 'right';
+      dialogX = assistantX + assistantWidth + spacing;
+
+      // Check if dialog fits to the right
+      const availableWidth = viewportWidth - dialogX - edgePadding;
+      if (availableWidth < dialogWidth) {
+        // If it doesn't fit, try the left side if it has more space
+        if (spaceLeft > availableWidth && spaceLeft >= minWidth) {
+          horizontalPlacement = 'left';
+          const leftAvailableWidth = assistantX - spacing - edgePadding;
+          dialogWidth = Math.max(minWidth, Math.min(dialogWidth, leftAvailableWidth));
+          dialogX = assistantX - spacing - dialogWidth;
+        } else {
+          dialogWidth = Math.max(minWidth, availableWidth);
+        }
+      }
+    } else {
+      // Place dialog to the left of assistant
+      horizontalPlacement = 'left';
+
+      // Check if dialog fits to the left
+      const availableWidth = assistantX - spacing - edgePadding;
+      if (availableWidth < dialogWidth) {
+        // If it doesn't fit, try the right side if it has more space
+        if (spaceRight > availableWidth && spaceRight >= minWidth) {
+          horizontalPlacement = 'right';
+          dialogX = assistantX + assistantWidth + spacing;
+          const rightAvailableWidth = viewportWidth - dialogX - edgePadding;
+          dialogWidth = Math.max(minWidth, Math.min(dialogWidth, rightAvailableWidth));
+        } else {
+          dialogWidth = Math.max(minWidth, availableWidth);
+          dialogX = assistantX - spacing - dialogWidth;
+        }
+      } else {
+        dialogX = assistantX - spacing - dialogWidth;
+      }
     }
 
-    // Adjust if it goes off-screen to the top
-    if (assistantY < dialogSize.height) {
-        style.top = '0px';
-        style.bottom = 'auto';
+    // Ensure dialog doesn't go off-screen horizontally
+    dialogX = Math.max(edgePadding, Math.min(dialogX, viewportWidth - dialogWidth - edgePadding));
+
+    // Determine vertical placement
+    let dialogY;
+    let dialogHeight = Math.min(maxHeight, dialogSize.height); // Respect max height
+
+    // Try to align dialog bottom with assistant bottom (preferred)
+    dialogY = assistantY + assistantHeight - dialogHeight;
+
+    // Check if dialog fits above the bottom edge
+    if (dialogY < edgePadding) {
+      // Not enough space above, try aligning tops
+      dialogY = assistantY;
+
+      // Check if it fits below the top edge
+      const availableHeight = viewportHeight - dialogY - edgePadding;
+      if (availableHeight < dialogHeight) {
+        dialogHeight = Math.max(minHeight, availableHeight);
+      }
     }
 
-    // For the animation
-    setTimeout(() => {
+    // Additional check: if dialog extends below viewport, adjust upward
+    const dialogBottom = dialogY + dialogHeight;
+    if (dialogBottom > viewportHeight - edgePadding) {
+      dialogY = viewportHeight - edgePadding - dialogHeight;
+
+      // If still doesn't fit, shrink height
+      if (dialogY < edgePadding) {
+        dialogY = edgePadding;
+        dialogHeight = Math.max(minHeight, viewportHeight - 2 * edgePadding);
+      }
+    }
+
+    // Final bounds check - ensure dialog is within viewport
+    dialogY = Math.max(edgePadding, Math.min(dialogY, viewportHeight - dialogHeight - edgePadding));
+
+    // Update dialog size if it was constrained (avoid infinite loop during resize)
+    if (!isResizing && (dialogWidth !== dialogSize.width || dialogHeight !== dialogSize.height)) {
+      // Use setTimeout to avoid state update during render
+      setTimeout(() => {
+        setDialogSize({ width: dialogWidth, height: dialogHeight });
+      }, 0);
+    }
+
+    // Build style object with fixed positioning
+    const style = {
+      position: 'fixed',
+      left: `${dialogX}px`,
+      top: `${dialogY}px`,
+      width: `${dialogWidth}px`,
+      height: `${dialogHeight}px`,
+      transition: isResizing ? 'none' : 'all 0.3s ease-in-out',
+      opacity: 0,
+      transform: 'scale(0.95)',
+      zIndex: 50,
+    };
+
+    // Trigger animation using requestAnimationFrame for smoother performance
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
         const elem = document.getElementById('chat-dialog');
         if (elem) {
-            elem.style.opacity = 1;
-            elem.style.transform = 'scale(1)';
+          elem.style.opacity = '1';
+          elem.style.transform = 'scale(1)';
         }
-    }, 10);
+      });
+    });
 
     return style;
   };
@@ -1961,7 +2090,7 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
     >
       {/* Resize handles */}
       <div
-        className="absolute top-0 right-0 w-3 h-3 cursor-se-resize z-10"
+        className="absolute top-0 right-0 w-3 h-3 cursor-ne-resize z-10"
         onMouseDown={(e) => handleResizeStart(e, 'top-right')}
         style={{ background: 'transparent' }}
       />

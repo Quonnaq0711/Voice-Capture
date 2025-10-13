@@ -253,12 +253,14 @@ async def upload_resume(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    # Validate file extension
+    # Validate file extension - Support PDF, DOCX, and TXT formats
     file_extension = os.path.splitext(file.filename)[1].lower()
-    if file_extension not in [".pdf", ".txt"]:
+    ALLOWED_EXTENSIONS = [".pdf", ".docx", ".txt"]
+
+    if file_extension not in ALLOWED_EXTENSIONS:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only PDF and TXT files are allowed"
+            detail=f"Unsupported file format. Allowed formats: {', '.join(ALLOWED_EXTENSIONS)}"
         )
 
     # Create user directory if not exists

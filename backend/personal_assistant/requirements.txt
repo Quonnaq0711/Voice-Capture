@@ -3,6 +3,7 @@
 # Core FastAPI and web framework
 fastapi
 uvicorn[standard]
+gunicorn  # Production WSGI server for multi-worker support
 
 # Database
 sqlalchemy>=2.0.23
