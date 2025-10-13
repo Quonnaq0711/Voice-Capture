@@ -2,12 +2,16 @@ import datetime
 from email.policy import HTTP
 import secrets
 import bcrypt
+import os
 from fastapi import HTTPException
 import pyotp
 from backend.models.user import User
 from backend.services import email_service
 from sqlalchemy.orm import Session
 from enum import Enum
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class OTPPurpose(str, Enum):
@@ -46,9 +50,29 @@ class OTPService:
         user.hotp_counter += 1
         otp = pyotp.HOTP(user.hotp_secret).at(user.hotp_counter)
         user.otp_requested_at = datetime.datetime.now()
-        user.otp_failed_attempts = 0 
+        user.otp_failed_attempts = 0
         user.otp_purpose = purpose.value
         db.commit()
+
+        # Development mode: Print OTP to console
+        if os.getenv('ENVIRONMENT') == 'development':
+            logger.info("="*60)
+            logger.info("🔐 DEVELOPMENT MODE - OTP GENERATED")
+            logger.info("="*60)
+            logger.info(f"📧 Email: {email}")
+            logger.info(f"🎯 Purpose: {purpose.value}")
+            logger.info(f"🔑 OTP Code: {otp}")
+            logger.info(f"⏰ Valid for: {self.valid_time} minutes")
+            logger.info("="*60)
+            print("\n" + "="*60)
+            print("🔐 DEVELOPMENT MODE - OTP GENERATED")
+            print("="*60)
+            print(f"📧 Email: {email}")
+            print(f"🎯 Purpose: {purpose.value}")
+            print(f"🔑 OTP Code: {otp}")
+            print(f"⏰ Valid for: {self.valid_time} minutes")
+            print("="*60 + "\n")
+
         return otp
 
     async def verify_otp(self, db: Session, email: str, otp: str, purpose: OTPPurpose):

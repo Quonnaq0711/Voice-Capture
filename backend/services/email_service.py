@@ -33,7 +33,18 @@ class EmailService:
     async def send_email_via_mailgun(self, to_email: str, subject: str, html_content: str, text_content: str):
         """
         Send email via MailGun API
+        In development mode, skip actual email sending
         """
+        # Development mode: Skip actual email sending
+        if os.getenv('ENVIRONMENT') == 'development':
+            logger.info("="*60)
+            logger.info("📧 DEVELOPMENT MODE - Email Skipped (OTP in console)")
+            logger.info("="*60)
+            logger.info(f"To: {to_email}")
+            logger.info(f"Subject: {subject}")
+            logger.info("="*60)
+            return {"id": "dev-mode-skip", "message": "Email skipped in development mode"}
+
         try:
             logger.info(f"Sending email via MailGun to: {to_email}")
             
