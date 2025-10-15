@@ -1,0 +1,39 @@
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    libpq-dev \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+# Upgrade pip
+RUN pip install --no-cache-dir --upgrade pip
+
+# Copy requirements
+COPY modules/agents/career/src/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy shared backend modules (needed for database, models, and services)
+COPY backend/db/ /app/backend/db/
+COPY backend/models/ /app/backend/models/
+COPY backend/utils/ /app/backend/utils/
+COPY backend/services/ /app/backend/services/
+
+# Create __init__.py files for backend module
+RUN touch /app/backend/__init__.py
+
+# Copy Career Agent files
+COPY modules/agents/career/src/ /app/
+
+# Create non-root user
+RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
+USER appuser
+
+EXPOSE 8002
+
+# Optimized for 4-core CPU: 4 workers (limited by LLM processing, not CPU)
+# For 8-core CPU, increase to 6-8 workers
+CMD ["gunicorn", "main:app", "-w", "4", "-k", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8002", "--timeout", "120", "--worker-connections", "1000"]

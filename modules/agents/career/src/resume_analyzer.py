@@ -8,11 +8,11 @@ import json
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..', '..')))
 
-import PyPDF2
 from backend.db.database import SessionLocal
 from backend.models.resume import Resume
 from backend.models.career_insight import CareerInsight
 from backend.models.user import User
+from backend.services.document_parser_service import DocumentParserService
 from prompts import RESUME_ANALYSIS_SYSTEM_PROMPT, RESUME_ANALYSIS_PROMPT_TEMPLATE, INTENT_DETECTION_PROMPT
 from chat_service import ChatService
 
@@ -102,44 +102,50 @@ class ResumeAnalyzer:
             db.close()
     
     async def read_resume_content(self, resume: Resume) -> Optional[str]:
-        """Read the content of a resume file.
-        
+        """Read the content of a resume file using unified document parser.
+        Supports PDF, DOC, DOCX, and TXT formats.
+
         Args:
             resume: The Resume object
-            
+
         Returns:
             The content of the resume as a string, or None if error
         """
         try:
             if not resume or not resume.file_path:
+                logger.error("Resume or file path is missing")
                 return None
-                
+
             file_path = resume.file_path
-            
-            # For PDF files, use a PDF parser (simplified for this example)
-            if file_path.lower().endswith('.pdf'):
-                try:
-                    with open(file_path, 'rb') as file:
-                        reader = PyPDF2.PdfReader(file)
-                        content = ""
-                        for page in reader.pages:
-                            content += page.extract_text() or ""
-                    return content
-                except Exception as e:
-                    logger.error(f"Error parsing PDF file {file_path}: {str(e)}")
-                    return None            
-            # For text files, read directly
-            elif file_path.lower().endswith('.txt'):
-                with open(file_path, 'r', encoding='utf-8') as file:
-                    return file.read()
-            
-            # For other file types
+
+            # Check if file exists
+            if not os.path.exists(file_path):
+                logger.error(f"Resume file not found: {file_path}")
+                return None
+
+            # Check if format is supported
+            if not DocumentParserService.is_supported_format(file_path):
+                logger.warning(f"Unsupported file format: {file_path}")
+                return None
+
+            # Parse document using unified parser
+            content = DocumentParserService.parse_document(file_path)
+
+            if content:
+                logger.info(f"Successfully read resume content from {file_path} ({len(content)} characters)")
+                return content
             else:
-                logger.warning(f"Unsupported file type: {file_path}")
-                return f"[UNSUPPORTED FILE TYPE: {file_path}]"
-                
+                logger.warning(f"No content extracted from resume: {file_path}")
+                return None
+
+        except FileNotFoundError as e:
+            logger.error(f"File not found: {str(e)}")
+            return None
+        except ValueError as e:
+            logger.error(f"Invalid file format: {str(e)}")
+            return None
         except Exception as e:
-            logger.error(f"Error reading resume content: {str(e)}")
+            logger.error(f"Error reading resume content: {str(e)}", exc_info=True)
             return None
     
     async def analyze_resume(self, resume_content: str) -> Optional[Dict[str, Any]]:

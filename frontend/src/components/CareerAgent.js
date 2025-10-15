@@ -137,10 +137,14 @@ const DocumentUpload = ({ onUploadSuccess }) => {
   const handleFileUpload = async (file) => {
     if (!file) return;
 
-    // Validate file type
-    const allowedTypes = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+    // Validate file type - Support PDF, DOCX, and TXT
+    const allowedTypes = [
+      'application/pdf',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'text/plain'
+    ];
     if (!allowedTypes.includes(file.type)) {
-      showToast('Please upload a PDF, DOC, or DOCX file', 'error');
+      showToast('Please upload a PDF, DOCX, or TXT file', 'error');
       return;
     }
 
@@ -242,7 +246,7 @@ const DocumentUpload = ({ onUploadSuccess }) => {
         <input
           ref={fileInputRef}
           type="file"
-          accept=".pdf,.doc,.docx"
+          accept=".pdf,.docx,.txt"
           onChange={handleFileSelect}
           className="hidden"
         />
@@ -272,7 +276,7 @@ const DocumentUpload = ({ onUploadSuccess }) => {
                   Click to upload or drag and drop
                 </div>
                 <div className="text-sm text-gray-500">
-                  PDF, DOC, DOCX up to 10MB
+                  PDF, DOCX, TXT up to 10MB
                 </div>
               </div>
             </div>
@@ -402,7 +406,10 @@ const DocumentManager = ({ analysisProgress, setAnalysisProgress, setSectionStat
 
   const handlePreview = (document) => {
     // Open document in new tab for preview
-    const documentUrl = `http://localhost:8000/resumes/${document.user_id}/${document.filename}`;
+    // Use relative path (proxied through Nginx in production)
+    const documentUrl = process.env.NODE_ENV === 'production'
+      ? `/resumes/${document.user_id}/${document.filename}`
+      : `${process.env.REACT_APP_BACKEND_URL || 'http://localhost:5000'}/resumes/${document.user_id}/${document.filename}`;
     window.open(documentUrl, '_blank');
   };
 
@@ -467,7 +474,11 @@ const DocumentManager = ({ analysisProgress, setAnalysisProgress, setSectionStat
       });
       
       // Call the streaming API with the specific document ID
-      const response = await fetch('http://localhost:8002/api/career/analyze_resume_streaming', {
+      // Use relative path in production (proxied through Nginx), localhost in development
+      const apiUrl = process.env.NODE_ENV === 'production'
+        ? '/api/career/analyze_resume_streaming'
+        : (process.env.REACT_APP_CAREER_URL || 'http://localhost:6002') + '/api/career/analyze_resume_streaming';
+      const response = await fetch(apiUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -571,7 +582,16 @@ const DocumentManager = ({ analysisProgress, setAnalysisProgress, setSectionStat
                     currentSection: null
                   };
                 });
-                
+
+                // Add section completion notification
+                const sectionName = data.section.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
+                addNotification({
+                  type: 'complete',
+                  title: `✅ ${sectionName} Complete`,
+                  message: `${sectionName} analysis completed successfully! New insights are now available in your career profile.`,
+                  timestamp: Date.now()
+                });
+
                 // Also dispatch event for compatibility
                 const completeEvent = new CustomEvent('sectionComplete', {
                   detail: {
@@ -1095,10 +1115,10 @@ const CareerAgent = () => {
         // Add completion notification
         const sectionName = section.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
         addNotification({
-          type: 'success',
-          title: 'Section Completed',
-          message: `${sectionName} analysis completed successfully`,
-          details: 'New insights are now available in your career profile'
+          type: 'complete',
+          title: `✅ ${sectionName} Complete`,
+          message: `${sectionName} analysis completed successfully! New insights are now available in your career profile.`,
+          timestamp: Date.now()
         });
       }
     };
@@ -1191,7 +1211,13 @@ const CareerAgent = () => {
   const fetchAvatar = async () => {
     try {
       const data = await profileAPI.getAvatarUrl();
-      setAvatarUrl(data.url);
+      // In development mode, prepend backend URL to relative avatar paths
+      let url = data.url;
+      if (process.env.NODE_ENV !== 'production' && url && url.startsWith('/')) {
+        const backendUrl = process.env.REACT_APP_BACKEND_URL || 'http://localhost:5000';
+        url = backendUrl + url;
+      }
+      setAvatarUrl(url);
     } catch (error) {
       console.error('Error fetching avatar:', error);
     }
@@ -1423,7 +1449,11 @@ const CareerAgent = () => {
       });
 
       // Call the backend streaming endpoint
-      const response = await fetch('http://localhost:8002/api/career/analyze_resume_streaming', {
+      // Use relative path in production (proxied through Nginx), localhost in development
+      const apiUrl = process.env.NODE_ENV === 'production'
+        ? '/api/career/analyze_resume_streaming'
+        : (process.env.REACT_APP_CAREER_URL || 'http://localhost:6002') + '/api/career/analyze_resume_streaming';
+      const response = await fetch(apiUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1452,7 +1482,31 @@ const CareerAgent = () => {
               const data = JSON.parse(line.slice(6));
               
               // Handle different types of streaming responses
-              if (data.type === 'section_progress') {
+              if (data.type === 'error') {
+                // Handle error from streaming response
+                console.error('Streaming analysis error:', data.message);
+                setAnalysisProgress(prev => ({
+                  ...prev,
+                  isAnalyzing: false,
+                  error: data.message
+                }));
+
+                addNotification({
+                  type: 'error',
+                  title: 'Analysis Error',
+                  message: data.message || 'An error occurred during analysis',
+                  details: data.error_details ? JSON.stringify(data.error_details) : ''
+                });
+                break; // Stop processing further chunks
+              } else if (data.type === 'status') {
+                // Handle status updates
+                console.log('Analysis status:', data.message, 'Progress:', data.progress);
+                setAnalysisProgress(prev => ({
+                  ...prev,
+                  progress: data.progress || prev.progress,
+                  currentSection: data.message
+                }));
+              } else if (data.type === 'section_progress') {
                 // Dispatch section progress event
                 const progressEvent = new CustomEvent('analysisProgress', {
                   detail: {
@@ -4389,7 +4443,7 @@ const careerInsights = {
               <span className="text-white font-bold text-lg">S</span>
             </div>
             <div>
-              <h1 className="text-xl font-bold text-gray-900">Sadaora AI</h1>
+              <h1 className="text-xl font-bold text-gray-900">Idii.</h1>
               <p className="text-xs text-gray-500">Career Agent</p>
             </div>
           </div>

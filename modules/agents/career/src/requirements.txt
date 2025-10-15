@@ -1,5 +1,42 @@
+# Career Agent API Dependencies
+
+# Core FastAPI and web framework
 fastapi
-uvicorn
+uvicorn[standard]
+gunicorn
+
+# Langchain and LLM integration
 langchain
+langchain-community
+langchain-core
 langchain-ollama
 langgraph
+ollama
+
+# HTTP client for Ollama integration
+httpx
+requests
+
+# Server-Sent Events support
+sse-starlette
+
+# Data validation and serialization
+pydantic
+
+# Document processing
+PyPDF2
+python-docx
+
+# Database
+sqlalchemy
+psycopg2-binary
+
+# Async support
+aiofiles
+
+# Logging and monitoring
+structlog
+
+# Development and testing
+pytest
+pytest-asyncio

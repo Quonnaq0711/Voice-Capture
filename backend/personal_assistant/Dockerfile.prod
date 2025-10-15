@@ -16,11 +16,15 @@ COPY backend/personal_assistant/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy shared backend modules
-COPY backend/db/ /app/db/
-COPY backend/models/ /app/models/
-COPY backend/utils/ /app/utils/
+COPY backend/db/ /app/backend/db/
+COPY backend/models/ /app/backend/models/
+COPY backend/utils/ /app/backend/utils/
+COPY backend/personal_assistant/ /app/backend/personal_assistant/
 
-# Copy PA files
+# Create __init__.py files for backend module
+RUN touch /app/backend/__init__.py
+
+# Copy PA main files to /app
 COPY backend/personal_assistant/ /app/
 
 # Create non-root user
@@ -29,4 +33,6 @@ USER appuser
 
 EXPOSE 8001
 
-CMD ["gunicorn", "main:app", "-w", "4", "-k", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8001"]
+# Optimized for 4-core CPU: 4 workers (limited by LLM processing, not CPU)
+# For 8-core CPU, increase to 6-8 workers
+CMD ["gunicorn", "main:app", "-w", "4", "-k", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8001", "--timeout", "120", "--worker-connections", "1000"]

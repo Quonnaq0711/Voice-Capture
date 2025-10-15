@@ -38,7 +38,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include routes
+# Include routes with /api/v1 prefix (primary routes)
 app.include_router(
     auth.router,
     prefix="/api/v1/auth",
@@ -81,14 +81,65 @@ app.include_router(
     tags=["daily_recommendations"]
 )
 
+# Also include routes with /v1 prefix (for development mode frontend compatibility)
+app.include_router(
+    auth.router,
+    prefix="/v1/auth",
+    tags=["authentication-v1"]
+)
+
+app.include_router(
+    chat.router,
+    prefix="/v1/chat",
+    tags=["chat-v1"]
+)
+
+app.include_router(
+    profile.router,
+    prefix="/v1",
+    tags=["profile-v1"]
+)
+
+app.include_router(
+    sessions.router,
+    prefix="/v1/chat",
+    tags=["sessions-v1"]
+)
+
+app.include_router(
+    activities.router,
+    prefix="/v1",
+    tags=["activities-v1"]
+)
+
+app.include_router(
+    career_insights.router,
+    prefix="/v1",
+    tags=["career_insights-v1"]
+)
+
+app.include_router(
+    daily_recommendations.router,
+    prefix="/v1",
+    tags=["daily_recommendations-v1"]
+)
+
 # Mount static files for avatars
-avatar_dir = os.path.join(os.path.dirname(__file__), "avatars")
-os.makedirs(avatar_dir, exist_ok=True)
+# Use /app/avatars for Docker volume mount, fallback to backend/avatars for local dev
+if os.path.exists("/app/avatars"):
+    avatar_dir = "/app/avatars"
+else:
+    avatar_dir = os.path.join(os.path.dirname(__file__), "avatars")
+    os.makedirs(avatar_dir, exist_ok=True)
 app.mount("/avatars", StaticFiles(directory=avatar_dir), name="avatars")
 
 # Mount static files for resumes
-resume_dir = os.path.join(os.path.dirname(__file__), "resumes")
-os.makedirs(resume_dir, exist_ok=True)
+# Use /app/resumes for Docker volume mount, fallback to backend/resumes for local dev
+if os.path.exists("/app/resumes"):
+    resume_dir = "/app/resumes"
+else:
+    resume_dir = os.path.join(os.path.dirname(__file__), "resumes")
+    os.makedirs(resume_dir, exist_ok=True)
 app.mount("/resumes", StaticFiles(directory=resume_dir), name="resumes")
 
 # Health check endpoints

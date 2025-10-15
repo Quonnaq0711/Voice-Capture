@@ -41,7 +41,7 @@ async def create_session(
     try:
         # Deactivate all existing sessions for this user
         db.execute(
-            text("UPDATE chat_sessions SET is_active = 0 WHERE user_id = :user_id"),
+            text("UPDATE chat_sessions SET is_active = FALSE WHERE user_id = :user_id"),
             {"user_id": current_user.id}
         )
         
@@ -49,7 +49,7 @@ async def create_session(
         cursor = db.execute(
             text("""
             INSERT INTO chat_sessions (user_id, session_name, first_message_time, created_at, is_active, unread)
-            VALUES (:user_id, :session_name, :first_message_time, :created_at, 1, 0)
+            VALUES (:user_id, :session_name, :first_message_time, :created_at, TRUE, FALSE)
             """),
             {
                 "user_id": current_user.id, 
@@ -118,7 +118,7 @@ async def get_user_sessions(
         active_session = next((s for s in sessions if s['is_active']), None)
         if active_session:
             db.execute(
-                text("UPDATE chat_sessions SET unread = 0 WHERE id = :session_id"),
+                text("UPDATE chat_sessions SET unread = FALSE WHERE id = :session_id"),
                 {"session_id": active_session['id']}
             )
             db.commit()
@@ -156,7 +156,7 @@ async def mark_session_as_read(
         
         # Mark session as read
         db.execute(
-            text("UPDATE chat_sessions SET unread = 0 WHERE id = :session_id"),
+            text("UPDATE chat_sessions SET unread = FALSE WHERE id = :session_id"),
             {"session_id": session_id}
         )
         db.commit()
@@ -196,7 +196,7 @@ async def mark_session_as_unread(
         
         # Mark session as unread
         db.execute(
-            text("UPDATE chat_sessions SET unread = 1 WHERE id = :session_id"),
+            text("UPDATE chat_sessions SET unread = TRUE WHERE id = :session_id"),
             {"session_id": session_id}
         )
         db.commit()
@@ -292,13 +292,13 @@ async def activate_session(
         
         # Deactivate all sessions for this user
         db.execute(
-            text("UPDATE chat_sessions SET is_active = 0 WHERE user_id = :user_id"),
+            text("UPDATE chat_sessions SET is_active = FALSE WHERE user_id = :user_id"),
             {"user_id": current_user.id}
         )
-        
+
         # Activate the specified session
         db.execute(
-            text("UPDATE chat_sessions SET is_active = 1 WHERE id = :session_id"),
+            text("UPDATE chat_sessions SET is_active = TRUE WHERE id = :session_id"),
             {"session_id": session_id}
         )
         
@@ -373,7 +373,7 @@ async def get_active_session(
             text("""
             SELECT id, session_name, first_message_time, created_at
             FROM chat_sessions
-            WHERE user_id = :user_id AND is_active = 1
+            WHERE user_id = :user_id AND is_active = TRUE
             """),
             {"user_id": current_user.id}
         )
@@ -454,8 +454,8 @@ async def get_unread_sessions_count(
         result = db.execute(
             text("""
                 SELECT COUNT(*) as unread_count
-                FROM chat_sessions 
-                WHERE user_id = :user_id AND unread = 1
+                FROM chat_sessions
+                WHERE user_id = :user_id AND unread = TRUE
             """),
             {"user_id": current_user.id}
         )

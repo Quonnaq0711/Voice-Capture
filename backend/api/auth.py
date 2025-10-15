@@ -253,16 +253,22 @@ async def upload_resume(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    # Validate file extension
+    # Validate file extension - Support PDF, DOCX, and TXT formats
     file_extension = os.path.splitext(file.filename)[1].lower()
-    if file_extension not in [".pdf", ".txt"]:
+    ALLOWED_EXTENSIONS = [".pdf", ".docx", ".txt"]
+
+    if file_extension not in ALLOWED_EXTENSIONS:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only PDF and TXT files are allowed"
+            detail=f"Unsupported file format. Allowed formats: {', '.join(ALLOWED_EXTENSIONS)}"
         )
 
     # Create user directory if not exists
-    base_resume_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "resumes")
+    # Use /app/resumes for Docker volume mount, fallback to backend/resumes for local dev
+    if os.path.exists("/app/resumes"):
+        base_resume_dir = "/app/resumes"
+    else:
+        base_resume_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "resumes")
     user_resume_dir = os.path.join(base_resume_dir, str(current_user.id))
     os.makedirs(user_resume_dir, exist_ok=True)
 

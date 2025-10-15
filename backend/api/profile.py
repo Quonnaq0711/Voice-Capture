@@ -15,7 +15,11 @@ from utils.auth import get_current_user, get_password_hash, verify_password
 router = APIRouter(prefix="/profile", tags=["profile"])
 
 # Avatar upload directory
-AVATAR_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "avatars")
+# Use /app/avatars for Docker volume mount, fallback to backend/avatars for local dev
+if os.path.exists("/app/avatars"):
+    AVATAR_DIR = "/app/avatars"
+else:
+    AVATAR_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "avatars")
 os.makedirs(AVATAR_DIR, exist_ok=True)
 
 @router.get("/me", response_model=schemas.UserWithProfile)
@@ -143,7 +147,7 @@ async def upload_avatar(
         return {
             "message": "Avatar uploaded successfully",
             "filename": filename,
-            "url": f"http://localhost:8000{avatar_url}"
+            "url": avatar_url  # Return relative path for frontend to handle
         }
     except Exception as e:
         raise HTTPException(
@@ -180,12 +184,10 @@ async def delete_avatar(current_user: User = Depends(get_current_user), db: Sess
 async def get_avatar_url(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Get current user's avatar URL"""
     profile = db.query(UserProfile).filter(UserProfile.user_id == current_user.id).first()
-    
+
     if profile is not None and profile.avatar_url is not None and profile.avatar_url.strip():
-        # Return user's custom avatar URL
-        full_url = f"http://localhost:8000{profile.avatar_url}"
-        return {"url": full_url}
+        # Return relative path for frontend to handle (works in both dev and prod)
+        return {"url": profile.avatar_url}
     else:
         # Return default avatar URL when user has no custom avatar
-        default_avatar_url = "http://localhost:8000/avatars/default.png"
-        return {"url": default_avatar_url}
+        return {"url": "/avatars/default.png"}

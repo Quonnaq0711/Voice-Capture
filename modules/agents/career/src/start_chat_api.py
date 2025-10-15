@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Startup script for the Career Agent Chat API.
-This script checks that Ollama is running on ollama2-staging:11435 with the required model
+This script checks that Ollama is running on ollama2-staging:11434 with the required model
 and then starts the FastAPI server on localhost:8002.
 """
 
@@ -22,7 +22,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Get Ollama URL from environment variable, same as chat_service.py
-DEFAULT_CAREER_OLLAMA_URL = os.getenv("CAREER_OLLAMA_URL", "https://ollama2-staging:11435")
+DEFAULT_CAREER_OLLAMA_URL = os.getenv("CAREER_OLLAMA_URL", "http://ollama2-staging:11434")
 OLLAMA_TAGS_ENDPOINT = f"{DEFAULT_CAREER_OLLAMA_URL}/api/tags"
 MODEL_NAME = "gemma3:latest"
 API_HOST = "0.0.0.0"
@@ -109,8 +109,8 @@ def main() -> Optional[bool]:
         logger.error("Ollama is not running on %s", DEFAULT_CAREER_OLLAMA_URL)
         logger.error("Please start Ollama first:")
         logger.error("  1. Open a terminal")
-        logger.error("  2. Run: ollama serve --address 0.0.0.0:11435")
-        logger.error("  3. In another terminal, run: ollama run %s --address 0.0.0.0:11435", MODEL_NAME)
+        logger.error("  2. Run: ollama serve --address 0.0.0.0:11434")
+        logger.error("  3. In another terminal, run: ollama run gemma3:latest", MODEL_NAME)
         return False
     logger.info("✓ Ollama is running")
 
