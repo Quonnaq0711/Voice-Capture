@@ -39,10 +39,14 @@ app.include_router(chat_router)
 app.include_router(streaming_router)
 
 # Configure CORS
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"], # Adjust as needed
+    allow_origins=[
+        "http://localhost:1000",  # React development server (dev mode)
+        "http://127.0.0.1:1000",
+        "http://localhost:3000",  # React development server (container mode)
+        "http://127.0.0.1:3000"
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -54,7 +58,7 @@ async def root():
 
 if __name__ == "__main__":
     logger.info("Starting Career Agent API server...")
-    logger.info("Make sure Ollama is running on ollama2-staging:11435")
+    logger.info("Make sure Ollama is running on ollama2-staging:11434")
     logger.info("API will be available at http://localhost:8002")
     logger.info("API documentation at http://localhost:8002/docs")
     

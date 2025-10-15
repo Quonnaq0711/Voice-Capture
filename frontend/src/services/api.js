@@ -240,8 +240,12 @@ export const chat = {
 
   // Optimize query
   optimizeQuery: async (query) => {
-    // The personal assistant API runs on port 8001, so we make a direct call here.
-    const response = await axios.post('http://localhost:8001/api/chat/optimize', 
+    // Use relative path in production (proxied through Nginx), localhost in development
+    const apiUrl = process.env.NODE_ENV === 'production'
+      ? '/api/pa/optimize'
+      : 'http://localhost:8001/api/chat/optimize';
+
+    const response = await axios.post(apiUrl,
       { query: query },
       {
         headers: {

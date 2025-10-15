@@ -134,9 +134,25 @@ const OnboardingWizard = () => {
     setProfileData(prev => ({ ...prev, [field]: value }));
   };
 
-  const handleArrayChange = (field, value) => {
+  // Handle comma-separated input by storing as string during editing
+  const handleArrayInputChange = (field, value) => {
+    // Store the raw string value directly without processing
+    setProfileData(prev => ({ ...prev, [field]: value }));
+  };
+
+  // Convert string to array when input loses focus
+  const handleArrayBlur = (field, value) => {
     const array = value.split(',').map(item => item.trim()).filter(item => item);
     setProfileData(prev => ({ ...prev, [field]: array }));
+  };
+
+  // Helper to get display value for array fields
+  const getArrayDisplayValue = (field) => {
+    const value = profileData[field];
+    if (Array.isArray(value)) {
+      return value.join(', ');
+    }
+    return value || '';
   };
 
   const nextStep = () => {
@@ -266,8 +282,9 @@ const OnboardingWizard = () => {
               <label className="block text-sm font-medium text-gray-700 mb-2">Key Skills (comma separated)</label>
               <input
                 type="text"
-                value={profileData.skills.join(', ')}
-                onChange={(e) => handleArrayChange('skills', e.target.value)}
+                value={getArrayDisplayValue('skills')}
+                onChange={(e) => handleArrayInputChange('skills', e.target.value)}
+                onBlur={(e) => handleArrayBlur('skills', e.target.value)}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                 placeholder="e.g., JavaScript, Project Management, Data Analysis"
               />
@@ -408,8 +425,9 @@ const OnboardingWizard = () => {
               <label className="block text-sm font-medium text-gray-700 mb-2">Exercise Preferences (comma separated)</label>
               <input
                 type="text"
-                value={profileData.exercise_preferences.join(', ')}
-                onChange={(e) => handleArrayChange('exercise_preferences', e.target.value)}
+                value={getArrayDisplayValue('exercise_preferences')}
+                onChange={(e) => handleArrayInputChange('exercise_preferences', e.target.value)}
+                onBlur={(e) => handleArrayBlur('exercise_preferences', e.target.value)}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all"
                 placeholder="e.g., Running, Yoga, Weight training, Swimming"
               />
@@ -494,8 +512,9 @@ const OnboardingWizard = () => {
               <label className="block text-sm font-medium text-gray-700 mb-2">Preferred Destinations (comma separated)</label>
               <input
                 type="text"
-                value={profileData.preferred_destinations.join(', ')}
-                onChange={(e) => handleArrayChange('preferred_destinations', e.target.value)}
+                value={getArrayDisplayValue('preferred_destinations')}
+                onChange={(e) => handleArrayInputChange('preferred_destinations', e.target.value)}
+                onBlur={(e) => handleArrayBlur('preferred_destinations', e.target.value)}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
                 placeholder="e.g., Europe, Asia, Beach destinations, Mountains"
               />
@@ -553,8 +572,9 @@ const OnboardingWizard = () => {
               <label className="block text-sm font-medium text-gray-700 mb-2">Learning Goals (comma separated)</label>
               <input
                 type="text"
-                value={profileData.learning_goals.join(', ')}
-                onChange={(e) => handleArrayChange('learning_goals', e.target.value)}
+                value={getArrayDisplayValue('learning_goals')}
+                onChange={(e) => handleArrayInputChange('learning_goals', e.target.value)}
+                onBlur={(e) => handleArrayBlur('learning_goals', e.target.value)}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
                 placeholder="e.g., Learn new programming language, Improve public speaking, Master data science"
               />
