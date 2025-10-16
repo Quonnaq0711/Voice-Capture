@@ -13,7 +13,7 @@ export const AuthProvider = ({ children }) => {
       if (token) {
         try {
           const profile = await auth.getProfile(token);
-          setUser({ id: profile.id, token, name: profile.username });
+          setUser({ id: profile.id, token, name: profile.first_name });
         } catch (error) {
           // Token might be invalid, clear it
           logout();
@@ -29,16 +29,16 @@ export const AuthProvider = ({ children }) => {
       const data = await auth.login(email, password);
       // After login, fetch user profile
         const profile = await auth.getProfile(data.access_token);
-        setUser({ id: profile.id, token: data.access_token, name: profile.username });
+        setUser({ id: profile.id, token: data.access_token, name: profile.first_name });
       return data;
     } catch (error) {
       throw error;
     }
   };
 
-  const register = async (username, email, password) => {
+  const register = async (first_name, last_name, email, password) => {
     try {
-      const data = await auth.register(username, email, password);
+      const data = await auth.register(first_name, last_name, email, password);
       return data;
     } catch (error) {
       throw error;
@@ -65,7 +65,7 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
-    // Password reset request function - THIS IS WHAT YOU'RE MISSING
+    // Password reset request function 
     const resetPasswordRequest = async (email) => {
         try {
             const response = await auth.resetPasswordRequest(email);

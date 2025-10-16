@@ -15,7 +15,8 @@ class TestProfileAPI:
         
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
-        assert data["username"] == "testuser"
+        assert data["first_name"] == "testuser"
+        assert data["last_name"] == "tester"
         assert data["email"] == "test@example.com"
         assert "profile" in data
     

@@ -314,7 +314,7 @@ const PersonalAssistant = ({ user, isDialogOpen: externalIsDialogOpen, setIsDial
 
   const WelcomeBubble = ({ user }) => (
     <div className="absolute bottom-full mb-2 w-64 bg-white p-4 rounded-lg shadow-lg right-0 transform transition-all duration-300 ease-in-out origin-bottom-right scale-100">
-      <h3 className="text-lg font-bold text-gray-800">Welcome, {user?.username || 'User'}!</h3>
+      <h3 className="text-lg font-bold text-gray-800">Welcome, {user?.first_name || 'User'}!</h3>
       <p className="text-sm text-gray-600 mt-1">Your personal AI assistant for a better life. What can I help you with today?</p>
       <div className="absolute right-4 -bottom-2 w-4 h-4 bg-white transform rotate-45"></div>
     </div>
@@ -404,7 +404,7 @@ const PersonalAssistant = ({ user, isDialogOpen: externalIsDialogOpen, setIsDial
 
     >
       {/* Show welcome bubble on initial load */}
-      {showWelcome && user?.username && !showAgentWelcome && (
+      {showWelcome && user?.first_name && !showAgentWelcome && (
         <WelcomeBubble user={user} />
       )}
       

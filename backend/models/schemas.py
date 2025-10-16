@@ -4,7 +4,9 @@ from datetime import datetime
 from typing import Optional, List
 
 class UserBase(BaseModel):
-    username: str
+    # username: str
+    first_name: str
+    last_name: str
     email: EmailStr
 
 class UserCreate(UserBase):

@@ -2233,7 +2233,7 @@ const Profile = () => {
   
   // User data state
   const [userData, setUserData] = useState({
-    username: '',
+    first_name: '',
     email: ''
   });
   
@@ -2314,7 +2314,7 @@ const Profile = () => {
     try {
       const data = await profileAPI.getCurrentUser();
       setUserData({
-        username: data.username,
+        first_name: data.first_name,
         email: data.email
       });
     } catch (error) {
@@ -2584,7 +2584,7 @@ const Profile = () => {
                         </div>
                       </div>
                       <div>
-                        <h3 className="text-xl font-bold text-gray-900">{userData.username || 'User'}</h3>
+                        <h3 className="text-xl font-bold text-gray-900">{userData.first_name || 'User'}</h3>
                         <p className="text-gray-600">{userData.email}</p>
                         <div className="flex items-center mt-2">
                           <div className="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
@@ -2632,11 +2632,11 @@ const Profile = () => {
                     
                     <div className="space-y-6">
                       <div>
-                        <label className="block text-sm font-semibold text-gray-700 mb-3">Username</label>
+                        <label className="block text-sm font-semibold text-gray-700 mb-3">First Name</label>
                         <div className="relative">
                           <input
                             type="text"
-                            value={userData.username}
+                            value={userData.first_name}
                             disabled
                             className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-700 font-medium focus:outline-none"
                           />
@@ -2645,7 +2645,23 @@ const Profile = () => {
                           </div>
                         </div>
                       </div>
-                      
+                       
+                      <div>
+                        <label className="block text-sm font-semibold text-gray-700 mb-3">Last Name</label>
+                        <div className="relative">
+                          <input
+                            type="text"
+                            value={userData.last_name}
+                            disabled
+                            className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-700 font-medium focus:outline-none"
+                          />
+                          <div className="absolute inset-y-0 right-0 flex items-center pr-4">
+                            <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                          </div>
+                        </div>
+                      </div>
+
+
                       <div>
                         <label className="block text-sm font-semibold text-gray-700 mb-3">Email Address</label>
                         <div className="relative">

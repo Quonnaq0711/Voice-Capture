@@ -92,7 +92,7 @@ const CircularAgents = ({ agents, avatarUrl, user, triggerAnimation = false, onA
           )}
           
         </div>
-        <p className="mt-4 text-lg font-semibold text-gray-800">{user?.username || 'User'}</p>
+        <p className="mt-4 text-lg font-semibold text-gray-800">{user?.first_name || 'User'}</p>
       </div>
 
       {/* Agents in a Circle */}

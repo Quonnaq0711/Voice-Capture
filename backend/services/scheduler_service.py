@@ -104,7 +104,7 @@ class DailyRecommendationScheduler:
                             continue
 
                         # Generate new recommendations
-                        logger.info(f"🔄 Generating recommendations for user {user.id} ({user.username})")
+                        logger.info(f"🔄 Generating recommendations for user {user.id} ({user.first_name})")
 
                         result = await rec_service.generate_daily_recommendations(
                             db=db,
