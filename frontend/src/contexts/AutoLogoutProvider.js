@@ -2,7 +2,7 @@ import React, { useEffect, useCallback } from 'react';
 import { useAuth } from './AuthContext';
 import { useNavigate } from 'react-router-dom';
 
-const INACTIVITY_TIMEOUT = 30 * 60 * 1000; // 30 minutes
+const INACTIVITY_TIMEOUT = 90 * 60 * 1000; // 90 minutes
 
 const AutoLogoutProvider = ({ children }) => {
   const { logout } = useAuth();

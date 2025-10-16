@@ -24,8 +24,8 @@ Base.metadata.create_all(bind=engine)
 
 # Create FastAPI application
 app = FastAPI(
-    title="Sadaora AI Assistant Platform",
-    description="Backend API for Sadaora AI Assistant Platform",
+    title="Idii. AI Assistant Platform",
+    description="Backend API for Idii. AI Assistant Platform",
     version="1.0.0"
 )
 
