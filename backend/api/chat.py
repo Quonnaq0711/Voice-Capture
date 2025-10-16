@@ -2,12 +2,14 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from typing import List
+from datetime import datetime, timezone
 
-from models import schemas
-from models.chat import ChatMessage
-from models.user import User
-from utils.auth import get_current_user
-from db.database import get_db
+from backend.models import schemas
+from backend.models.chat import ChatMessage
+from backend.models.session import ChatSession
+from backend.models.user import User
+from backend.utils.auth import get_current_user
+from backend.db.database import get_db
 
 router = APIRouter()
 
@@ -21,7 +23,7 @@ async def create_chat_message(
     if session_id is None:
         # If no session_id is provided, use the active session
         active_session = db.query(ChatSession).filter(
-            ChatSession.user_id == current_user.id, 
+            ChatSession.user_id == current_user.id,
             ChatSession.is_active == True
         ).first()
         if active_session:
@@ -32,7 +34,7 @@ async def create_chat_message(
             new_session = ChatSession(
                 user_id=current_user.id,
                 session_name=session_name,
-                first_message_time=datetime.utcnow(),
+                first_message_time=datetime.now(timezone.utc),
                 is_active=True,
                 unread=False
             )

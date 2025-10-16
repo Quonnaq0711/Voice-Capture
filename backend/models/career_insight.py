@@ -1,11 +1,15 @@
 """
 Model for storing career insights generated from resume analysis
 """
-from datetime import datetime
+from datetime import datetime, timezone
 import json
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text
 from sqlalchemy.orm import relationship
-from db.database import Base
+from backend.db.database import Base
+
+def utc_now():
+    """Return current UTC time as timezone-aware datetime"""
+    return datetime.now(timezone.utc)
 
 class CareerInsight(Base):
     __tablename__ = "career_insights"
@@ -16,8 +20,8 @@ class CareerInsight(Base):
     professional_data = Column(Text)  # JSON string of professional data
     dashboard_summaries = Column(Text)  # JSON string of LLM-generated summaries for Dashboard
     summaries_generated_at = Column(DateTime, nullable=True)  # When summaries were last generated
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
 
     # Relationships
     user = relationship("User", back_populates="career_insights")
@@ -36,7 +40,7 @@ class CareerInsight(Base):
     def set_dashboard_summaries(self, summaries):
         """Convert dashboard summaries dictionary to JSON string for storage"""
         self.dashboard_summaries = json.dumps(summaries)
-        self.summaries_generated_at = datetime.utcnow()
+        self.summaries_generated_at = utc_now()
 
     def get_dashboard_summaries(self):
         """Convert stored dashboard summaries JSON string to dictionary"""

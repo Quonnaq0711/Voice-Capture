@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -12,6 +12,54 @@ const Login = () => {
   const { login } = useAuth();
   const location = useLocation();
 
+  // Use refs to prevent premature clearing
+  const errorTimerRef = useRef(null);
+  const infoTimerRef = useRef(null);
+
+  // Auto-dismiss error messages after 10 seconds (industry standard + buffer)
+  useEffect(() => {
+    // Clear any existing timer
+    if (errorTimerRef.current) {
+      clearTimeout(errorTimerRef.current);
+    }
+
+    if (error) {
+      // Set new timer with ref to prevent cleanup issues
+      errorTimerRef.current = setTimeout(() => {
+        setError('');
+        errorTimerRef.current = null;
+      }, 10000); // 10 seconds - ensure visibility
+    }
+
+    // Cleanup function
+    return () => {
+      if (errorTimerRef.current) {
+        clearTimeout(errorTimerRef.current);
+      }
+    };
+  }, [error]);
+
+  // Auto-dismiss info messages after 10 seconds
+  useEffect(() => {
+    // Clear any existing timer
+    if (infoTimerRef.current) {
+      clearTimeout(infoTimerRef.current);
+    }
+
+    if (info) {
+      infoTimerRef.current = setTimeout(() => {
+        setInfo('');
+        infoTimerRef.current = null;
+      }, 10000);
+    }
+
+    return () => {
+      if (infoTimerRef.current) {
+        clearTimeout(infoTimerRef.current);
+      }
+    };
+  }, [info]);
+
   useEffect(() => {
     if (location.state?.message) {
       setInfo(location.state.message);
@@ -22,11 +70,17 @@ const Login = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    // Don't clear error immediately - let user read it if they're retrying
+    // Only clear error once we start loading
+    setLoading(true);
+
     try {
-      setError('');
-      setLoading(true);
       await login(email, password);
-      
+
+      // Clear error only on successful login
+      setError('');
+
       // Check if this is a first-time user
       const isFirstTimeUser = localStorage.getItem('isFirstTimeUser');
       if (isFirstTimeUser === 'true') {
@@ -53,13 +107,37 @@ const Login = () => {
         </div>
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
           {info && (
-            <div className="rounded-md bg-blue-50 p-4">
-              <div className="text-sm text-blue-700">{info}</div>
+            <div className="rounded-md bg-blue-50 p-4 relative animate-fade-in">
+              <div className="flex items-start justify-between">
+                <div className="text-sm text-blue-700 flex-1">{info}</div>
+                <button
+                  type="button"
+                  onClick={() => setInfo('')}
+                  className="ml-3 flex-shrink-0 inline-flex text-blue-400 hover:text-blue-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 rounded-md p-1 transition-colors"
+                  aria-label="Dismiss"
+                >
+                  <svg className="h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                  </svg>
+                </button>
+              </div>
             </div>
           )}
           {error && (
-            <div className="rounded-md bg-red-50 p-4">
-              <div className="text-sm text-red-700">{error}</div>
+            <div className="rounded-md bg-red-50 p-4 relative animate-fade-in">
+              <div className="flex items-start justify-between">
+                <div className="text-sm text-red-700 flex-1">{error}</div>
+                <button
+                  type="button"
+                  onClick={() => setError('')}
+                  className="ml-3 flex-shrink-0 inline-flex text-red-400 hover:text-red-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 rounded-md p-1 transition-colors"
+                  aria-label="Dismiss"
+                >
+                  <svg className="h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                  </svg>
+                </button>
+              </div>
             </div>
           )}
           <div className="rounded-md shadow-sm -space-y-px">

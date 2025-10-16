@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -6,12 +6,12 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
-from services.email_validation_service import EmailValidationService
-from services.otp_service import OTPService
-from services.password_reset_service import PasswordResetService
+from backend.services.email_validation_service import EmailValidationService
+from backend.services.otp_service import OTPService
+from backend.services.password_reset_service import PasswordResetService
 
-from db.database import get_db
-from models.user import User
+from backend.db.database import get_db
+from backend.models.user import User
 
 # Configure secret key and algorithm
 SECRET_KEY = "your-secret-key-please-change-in-production"  # Should use environment variables in production
@@ -39,9 +39,9 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     """Create access token"""
     to_encode = data.copy()
     if expires_delta:
-        expire = datetime.utcnow() + expires_delta
+        expire = datetime.now(timezone.utc) + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt

@@ -45,8 +45,23 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
 
-    // If it's a 401 error and not already retried, and not the refresh token endpoint itself
-    if (error.response && error.response.status === 401 && !originalRequest._retry && !originalRequest.url.includes('/auth/token/refresh')) {
+    // Skip token refresh for login and refresh endpoints
+    const isLoginEndpoint = originalRequest.url && originalRequest.url.includes('/auth/token');
+    const isRefreshEndpoint = originalRequest.url && originalRequest.url.includes('/auth/token/refresh');
+    const isSignupEndpoint = originalRequest.url && originalRequest.url.includes('/auth/signup');
+    const isVerificationEndpoint = originalRequest.url && (
+      originalRequest.url.includes('/auth/verify-registration') ||
+      originalRequest.url.includes('/auth/resend-verification-otp') ||
+      originalRequest.url.includes('/auth/reset-password')
+    );
+
+    // Skip interceptor for auth-related endpoints
+    if (isLoginEndpoint || isRefreshEndpoint || isSignupEndpoint || isVerificationEndpoint) {
+      return Promise.reject(error);
+    }
+
+    // If it's a 401 error and not already retried, and not an auth endpoint
+    if (error.response && error.response.status === 401 && !originalRequest._retry) {
       if (isRefreshing) {
         return new Promise(function(resolve, reject) {
           failedQueue.push({resolve, reject});
@@ -108,9 +123,6 @@ export const auth = {
   
   
   verifyRegistrationOTP: async (email, otp) => {
-    console.log('API call with:', { email, otp });
-    console.log('Email type:', typeof email);
-    console.log('OTP type:', typeof otp);
     const response = await api.post('/auth/verify-registration', { email, otp });
     return response.data;
   },
@@ -132,15 +144,15 @@ resendRegistrationOTP: async (email) => {
   // User login
   login: async (email, password) => {
     const formData = new FormData();
-    formData.append('email', email);
+    formData.append('username', email);  // OAuth2 standard uses 'username' field (contains email)
     formData.append('password', password);
-    
+
     const response = await api.post('/auth/token', formData, {
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
       },
     });
-    
+
     if (response.data.access_token) {
       localStorage.setItem('token', response.data.access_token);
     }

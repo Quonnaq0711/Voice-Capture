@@ -1,9 +1,9 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Dict, Any
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, and_
-from models.activity import UserActivity
-from models.user import User
+from backend.models.activity import UserActivity
+from backend.models.user import User
 
 
 class ActivityService:
@@ -85,7 +85,7 @@ class ActivityService:
         query = db.query(UserActivity).filter(UserActivity.user_id == user_id)
 
         # Filter by date range
-        cutoff_date = datetime.utcnow() - timedelta(days=days_back)
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=days_back)
         query = query.filter(UserActivity.created_at >= cutoff_date)
 
         # Apply optional filters
@@ -143,7 +143,7 @@ class ActivityService:
         Returns:
             Dictionary with activity summary statistics
         """
-        cutoff_date = datetime.utcnow() - timedelta(days=days_back)
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=days_back)
 
         activities = db.query(UserActivity).filter(
             and_(
@@ -166,7 +166,7 @@ class ActivityService:
             "activity_sources": source_counts,
             "days_analyzed": days_back,
             "period_start": cutoff_date.isoformat(),
-            "period_end": datetime.utcnow().isoformat()
+            "period_end": datetime.now(timezone.utc).isoformat()
         }
 
     @staticmethod
