@@ -34,7 +34,7 @@ const Register = () => {
     if (!/[A-Z]/.test(pwd)) return "Password must include an uppercase letter.";
     if (!/[a-z]/.test(pwd)) return "Password must include a lowercase letter.";
     if (!/[0-9]/.test(pwd)) return "Password must include a number.";
-    if (!/[!@#$%^&*(),.?\":{}|<>]/.test(pwd)) return "Password must include a special character.";
+    if (!/[!@#$%^&*(),.?":{}|<>]/.test(pwd)) return "Password must include a special character.";
     return "";
   };
 
