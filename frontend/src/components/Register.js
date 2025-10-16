@@ -3,7 +3,8 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
 const Register = () => {
-  const [username, setUsername] = useState('');
+  const [firstname, setFirstname] = useState('');
+  const [lastname, setLastname] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -22,7 +23,7 @@ const Register = () => {
     try {
       setError('');
       setLoading(true);
-      await register(username, email, password);
+      await register(firstname, lastname, email, password);
       
       //Set start date for 90 day passwrod reset
       localStorage.setItem('registrationDate', new Date().toISOString());
@@ -59,19 +60,36 @@ const Register = () => {
           )}
           <div className="rounded-md shadow-sm -space-y-px">
             <div>
-              <label htmlFor="username" className="sr-only">
-                Username
+              <label htmlFor="firstname" className="sr-only">
+                First Name
               </label>
               <input
-                id="username"
-                name="username"
+                id="firstname"
+                name="firstname"
                 type="text"
-                autoComplete="username"
+                autoComplete="firstname"
                 required
                 className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-primary-500 focus:border-primary-500 focus:z-10 sm:text-sm"
-                placeholder="Username"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
+                placeholder="First Name"
+                value={firstname}
+                onChange={(e) => setFirstname(e.target.value)}
+              />
+            </div>
+            <div className="rounded-md shadow-sm -space-y-px">
+            <div>
+              <label htmlFor="firstname" className="sr-only">
+                Last Name
+              </label>
+              <input
+                id="lastname"
+                name="lastname"
+                type="text"
+                autoComplete="lastname"
+                required
+                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-primary-500 focus:border-primary-500 focus:z-10 sm:text-sm"
+                placeholder="Last Name"
+                value={lastname}
+                onChange={(e) => setLastname(e.target.value)}
               />
             </div>
             <div>
@@ -122,19 +140,20 @@ const Register = () => {
                 onChange={(e) => setConfirmPassword(e.target.value)}
               />
             </div>
-          </div>
+            </div>
 
           <div>
             <button
               type="submit"
               disabled={loading}
               className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
-            >
+              >
               {loading ? 'Registering...' : 'Sign Up'}
             </button>
           </div>
           <div className="mt-4 text-center text-sm text-gray-600">
             Already have an account? <Link to="/login" className="font-medium text-primary-600 hover:text-primary-500">Sign in</Link>
+          </div>
           </div>
         </form>
       </div>

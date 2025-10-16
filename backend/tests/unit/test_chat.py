@@ -236,7 +236,8 @@ class TestChatAPI:
         from utils.auth import get_password_hash
         
         other_user = User(
-            username="otheruser",
+            first_name="otheruser",
+            last_name="tester",
             email="other@example.com",
             hashed_password=get_password_hash("password123"),
             is_active=True,
@@ -335,7 +336,8 @@ class TestChatAPI:
         from utils.auth import get_password_hash
         
         other_user = User(
-            username="otheruser",
+            first_name="otheruser",
+            last_name="tester",
             email="other@example.com",
             hashed_password=get_password_hash("password123"),
             is_active=True,

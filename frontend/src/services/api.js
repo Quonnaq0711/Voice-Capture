@@ -101,8 +101,8 @@ export const auth = {
   },
 
   // User registration
-  register: async (username, email, password) => {
-    const response = await api.post('/auth/signup', { username, email, password });
+  register: async (first_name, last_name, email, password) => {
+    const response = await api.post('/auth/signup', { first_name, last_name, email, password });
     return response.data;
   },
   
@@ -132,7 +132,7 @@ resendRegistrationOTP: async (email) => {
   // User login
   login: async (email, password) => {
     const formData = new FormData();
-    formData.append('username', email);
+    formData.append('email', email);
     formData.append('password', password);
     
     const response = await api.post('/auth/token', formData, {

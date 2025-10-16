@@ -832,7 +832,7 @@ const CareerAgent = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const [userData, setUserData] = useState({ username: '', email: '' });
+  const [userData, setUserData] = useState({ first_name: '', email: '' });
   const [avatarUrl, setAvatarUrl] = useState(null);
   const [isAssistantDialogOpen, setIsAssistantDialogOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('insights');
@@ -1200,7 +1200,7 @@ const CareerAgent = () => {
     try {
       const data = await profileAPI.getCurrentUser();
       setUserData({
-        username: data.username,
+        name: data.first_name,
         email: data.email
       });
     } catch (error) {

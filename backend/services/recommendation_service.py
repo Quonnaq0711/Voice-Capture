@@ -189,7 +189,7 @@ class RecommendationService:
             # Get user profile
             user = db.query(User).filter(User.id == user_id).first()
             if user:
-                context["username"] = user.username
+                context["first_name"] = user.first_name
 
             # Get user profile data
             profile = db.query(UserProfile).filter(UserProfile.user_id == user_id).first()

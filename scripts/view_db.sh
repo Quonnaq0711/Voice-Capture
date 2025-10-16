@@ -35,7 +35,7 @@ case "$1" in
         check_container
         echo "👥 User List:"
         docker exec $CONTAINER psql -U $DB_USER $DB_NAME -c "
-        SELECT id, username, email, is_active, created_at
+        SELECT id, first_name, email, is_active, created_at
         FROM users
         ORDER BY created_at DESC;"
         ;;
@@ -47,7 +47,7 @@ case "$1" in
         SELECT
             cs.id,
             cs.user_id,
-            u.username,
+            u.first_name,
             cs.session_name,
             (SELECT COUNT(*) FROM chat_messages WHERE session_id = cs.id) as msgs,
             cs.created_at
@@ -79,7 +79,7 @@ case "$1" in
         SELECT
             r.id,
             r.user_id,
-            u.username,
+            u.first_name,
             r.filename,
             r.upload_date,
             pg_size_pretty(LENGTH(r.file_content)) as file_size
@@ -95,7 +95,7 @@ case "$1" in
         SELECT
             ci.id,
             ci.user_id,
-            u.username,
+            u.first_name,
             LEFT(ci.insight_text, 100) as insight,
             ci.created_at
         FROM career_insights ci
@@ -110,7 +110,7 @@ case "$1" in
         SELECT
             ua.id,
             ua.user_id,
-            u.username,
+            u.first_name,
             ua.activity_type,
             ua.created_at
         FROM user_activities ua
@@ -126,7 +126,7 @@ case "$1" in
         SELECT
             dr.id,
             dr.user_id,
-            u.username,
+            u.first_name,
             LEFT(dr.recommendation_text, 60) || '...' as recommendation_preview,
             dr.created_at
         FROM daily_recommendations dr
@@ -253,7 +253,7 @@ case "$1" in
         echo "👥 Recent Users (Top 5):"
         echo "--------------------------------------------------"
         docker exec $CONTAINER psql -U $DB_USER $DB_NAME -c "
-        SELECT id, username, email, created_at, is_active
+        SELECT id, first_name, email, created_at, is_active
         FROM users
         ORDER BY created_at DESC
         LIMIT 5;"

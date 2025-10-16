@@ -16,7 +16,7 @@ const Dashboard = () => {
   const { logout, user } = useAuth();
   const navigate = useNavigate();
   const [avatarUrl, setAvatarUrl] = useState(null);
-  const [userData, setUserData] = useState({ username: '', email: '' });
+  const [userData, setUserData] = useState({ first_name: '', email: '' });
   const [triggerAnimation, setTriggerAnimation] = useState(false);
   const [isAssistantDialogOpen, setIsAssistantDialogOpen] = useState(false);
   const [personalizedInsights, setPersonalizedInsights] = useState([]);
@@ -47,14 +47,14 @@ const Dashboard = () => {
 
   // Trigger animation when user data is loaded
   useEffect(() => {
-    if (userData.username && user) {
+    if (userData.first_name && user) {
       // Delay animation slightly to ensure component is fully rendered
       const timer = setTimeout(() => {
         setTriggerAnimation(true);
       }, 500);
       return () => clearTimeout(timer);
     }
-  }, [userData.username, user]);
+  }, [userData.first_name, user]);
 
   // Re-fetch activities when showAllActivities changes
   useEffect(() => {
@@ -93,7 +93,7 @@ const Dashboard = () => {
     try {
       const data = await profileAPI.getCurrentUser();
       setUserData({
-        username: data.username,
+        name: data.first_name,
         email: data.email
       });
     } catch (error) {
@@ -1387,7 +1387,7 @@ const Dashboard = () => {
                 </div>
                 <div className="hidden sm:block text-left">
                   <p className="text-sm font-medium text-gray-900">
-                    {userData.username || user?.username || 'User'}
+                    {userData.first_name || user?.first_name || 'User'}
                   </p>
                   <p className="text-xs text-gray-500 truncate max-w-32">
                     {userData.email || user?.email || ''}

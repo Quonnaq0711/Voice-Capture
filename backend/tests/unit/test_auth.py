@@ -15,7 +15,8 @@ class TestAuthAPI:
     def test_signup_success(self, client, db_session):
         """Test successful user registration"""
         user_data = {
-            "username": "newuser",
+            "first_name": "newuser",
+            "last_name": "tester",
             "email": "newuser@example.com",
             "password": "securepassword123"
         }
@@ -24,7 +25,8 @@ class TestAuthAPI:
         
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
-        assert data["username"] == "newuser"
+        assert data["first_name"] == "newuser"
+        assert data["last_name"] == "tester"
         assert data["email"] == "newuser@example.com"
         assert data["is_active"] is True
         assert "id" in data
@@ -37,7 +39,8 @@ class TestAuthAPI:
     def test_signup_duplicate_email(self, client, test_user):
         """Test registration with duplicate email"""
         user_data = {
-            "username": "differentuser",
+            "first_name": "newuser",
+            "last_name": "tester",
             "email": "test@example.com",  # Same as test_user
             "password": "securepassword123"
         }
@@ -48,24 +51,25 @@ class TestAuthAPI:
         data = response.json()
         assert data["detail"] == "Email already registered"
     
-    def test_signup_duplicate_username(self, client, test_user):
-        """Test registration with duplicate username"""
-        user_data = {
-            "username": "testuser",  # Same as test_user
-            "email": "different@example.com",
-            "password": "securepassword123"
-        }
+    # def test_signup_duplicate_username(self, client, test_user):
+    #     """Test registration with duplicate username"""
+    #     user_data = {
+    #         "username": "testuser",  # Same as test_user
+    #         "email": "different@example.com",
+    #         "password": "securepassword123"
+    #     }
         
-        response = client.post("/api/v1/auth/signup", json=user_data)
+        # response = client.post("/api/v1/auth/signup", json=user_data)
         
-        assert response.status_code == status.HTTP_400_BAD_REQUEST
-        data = response.json()
-        assert data["detail"] == "Username already taken"
+        # assert response.status_code == status.HTTP_400_BAD_REQUEST
+        # data = response.json()
+        # assert data["detail"] == "Username already taken"
     
     def test_signup_invalid_email(self, client):
         """Test registration with invalid email format"""
         user_data = {
-            "username": "newuser",
+            "first_name": "newuser",
+            "last_name": "tester",
             "email": "invalid-email",
             "password": "securepassword123"
         }
@@ -77,7 +81,7 @@ class TestAuthAPI:
     def test_login_success(self, client, test_user):
         """Test successful login"""
         login_data = {
-            "username": "test@example.com",  # OAuth2PasswordRequestForm uses username field for email
+            "email": "test@example.com",  # OAuth2PasswordRequestForm uses email
             "password": "testpassword123"
         }
         
@@ -93,7 +97,7 @@ class TestAuthAPI:
     def test_login_invalid_email(self, client):
         """Test login with invalid email"""
         login_data = {
-            "username": "nonexistent@example.com",
+            "email": "nonexistent@example.com",
             "password": "anypassword"
         }
         
@@ -106,7 +110,7 @@ class TestAuthAPI:
     def test_login_invalid_password(self, client, test_user):
         """Test login with invalid password"""
         login_data = {
-            "username": "test@example.com",
+            "email": "test@example.com",
             "password": "wrongpassword"
         }
         
@@ -265,7 +269,8 @@ class TestAuthAPI:
         """Test deleting resume that belongs to another user"""
         # Create another user
         other_user = User(
-            username="otheruser",
+            first_name="otheruser",
+            last_name="tester",
             email="other@example.com",
             hashed_password=get_password_hash("password123"),
             is_active=True,
