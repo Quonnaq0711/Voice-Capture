@@ -25,7 +25,6 @@ const Dashboard = () => {
   const [isImgError, setImgError] = useState(false);
   const [sidebarExpanded, setSidebarExpanded] = useState(false);
   const [activeTab, setActiveTab] = useState('welcome');
-  const [showSubTabs, setShowSubTabs] = useState(false);
   const [recentActivities, setRecentActivities] = useState([]);
   const [activitySummary, setActivitySummary] = useState(null);
   const [loadingActivities, setLoadingActivities] = useState(false);
@@ -93,7 +92,7 @@ const Dashboard = () => {
     try {
       const data = await profileAPI.getCurrentUser();
       setUserData({
-        name: data.first_name,
+        first_name: data.first_name,  // Fixed: use first_name not name
         email: data.email
       });
     } catch (error) {
@@ -458,23 +457,6 @@ const Dashboard = () => {
     if (!sidebarExpanded) {
       setSidebarExpanded(true);
     }
-    // Always show sub-tabs when clicking any tab
-    setShowSubTabs(true);
-  };
-
-  // Handler for Dashboard Sections toggle
-  const handleDashboardSectionsToggle = () => {
-    if (activeTab === 'welcome' && showSubTabs) {
-      // If already on welcome page and sub-tabs are shown, just toggle sub-tabs
-      setShowSubTabs(!showSubTabs);
-    } else {
-      // Otherwise, go to welcome page and show sub-tabs
-      setActiveTab('welcome');
-      setShowSubTabs(true);
-    }
-    if (!sidebarExpanded) {
-      setSidebarExpanded(true);
-    }
   };
 
   // Agent modules available in the dashboard
@@ -551,8 +533,15 @@ const Dashboard = () => {
     },
   ];
 
-  // Tab configuration
+  // Tab configuration - All main tabs at same level
   const tabs = [
+    {
+      id: 'welcome',
+      name: 'Dashboard',
+      icon: HomeIcon,
+      color: 'text-gray-700',
+      bgColor: 'bg-gray-50'
+    },
     {
       id: 'insights',
       name: 'AI Insights',
@@ -1295,6 +1284,22 @@ const Dashboard = () => {
               <BriefcaseIcon className="h-5 w-5" />
               <span>Career Agent</span>
             </button>
+
+            <button
+              onClick={() => navigate('/agents/travel')}
+              className="w-full bg-gradient-to-r from-indigo-500 to-purple-500 text-white px-6 py-4 rounded-lg font-medium hover:from-indigo-600 hover:to-purple-600 transition-all duration-200 flex items-center space-x-3"
+            >
+              <GlobeAltIcon className="h-5 w-5" />
+              <span>Travel Agent</span>
+            </button>
+
+            <button
+              onClick={() => navigate('/agents/body')}
+              className="w-full bg-gradient-to-r from-purple-500 to-pink-500 text-white px-6 py-4 rounded-lg font-medium hover:from-purple-600 hover:to-pink-600 transition-all duration-200 flex items-center space-x-3"
+            >
+              <SparklesIcon className="h-5 w-5" />
+              <span>Body Agent</span>
+            </button>
           </div>
         </div>
 
@@ -1440,19 +1445,6 @@ const Dashboard = () => {
               {!sidebarExpanded ? (
                 /* Collapsed Sidebar - Show only icons */
                 <div className="space-y-2 mt-4">
-                  {/* Dashboard Sections Icon */}
-                  <button
-                    onClick={handleDashboardSectionsToggle}
-                    className={`w-8 h-8 rounded-md flex items-center justify-center transition-all duration-200 group ${
-                      activeTab === 'welcome'
-                        ? 'bg-blue-50 text-blue-600 border border-blue-200'
-                        : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
-                    }`}
-                    title="Dashboard"
-                  >
-                    <HomeIcon className="h-4 w-4" />
-                  </button>
-                  {/* Sub-tabs Icons */}
                   {tabs.map((tab) => {
                     const IconComponent = tab.icon;
                     const isDisabled = tab.disabled;
@@ -1478,61 +1470,38 @@ const Dashboard = () => {
                   })}
                 </div>
               ) : (
-                /* Expanded Sidebar - Show hierarchical structure */
+                /* Expanded Sidebar - All tabs at same level */
                 <div className="space-y-1 mt-4">
-                  {/* Main Dashboard Sections Button */}
-                  <button
-                    onClick={handleDashboardSectionsToggle}
-                    className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg transition-all duration-200 text-sm ${
-                      activeTab === 'welcome'
-                        ? 'bg-blue-50 text-blue-700 border border-blue-200'
-                        : 'text-gray-700 hover:bg-gray-100'
-                    }`}
-                  >
-                    <HomeIcon className="h-4 w-4 flex-shrink-0" />
-                    <span className="font-medium text-left flex-1">Dashboard</span>
-                    {showSubTabs ? (
-                      <ChevronUpIcon className="h-3 w-3 text-gray-400" />
-                    ) : (
-                      <ChevronDownIcon className="h-3 w-3 text-gray-400" />
-                    )}
-                  </button>
+                  {tabs.map((tab) => {
+                    const IconComponent = tab.icon;
+                    const isDisabled = tab.disabled;
 
-                  {/* Sub-tabs */}
-                  {showSubTabs && (
-                    <div className="ml-3 space-y-1 border-l border-gray-200 pl-3">
-                      {tabs.map((tab) => {
-                        const IconComponent = tab.icon;
-                        const isDisabled = tab.disabled;
-
-                        return (
-                          <button
-                            key={tab.id}
-                            onClick={() => handleTabChange(tab.id)}
-                            disabled={isDisabled}
-                            className={`w-full flex items-center space-x-3 px-3 py-2 rounded-md transition-all duration-200 text-sm ${
-                              isDisabled
-                                ? 'text-gray-400 cursor-not-allowed opacity-60'
-                                : activeTab === tab.id
-                                ? 'bg-blue-50 text-blue-700 border border-blue-200'
-                                : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                            }`}
-                          >
-                            <IconComponent className="h-4 w-4 flex-shrink-0" />
-                            <span className="font-medium text-left flex-1">{tab.name}</span>
-                            {isDisabled && (
-                              <span className="ml-auto text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded">
-                                Coming Soon
-                              </span>
-                            )}
-                            {!isDisabled && activeTab === tab.id && (
-                              <div className="w-1.5 h-1.5 bg-blue-600 rounded-full"></div>
-                            )}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
+                    return (
+                      <button
+                        key={tab.id}
+                        onClick={() => handleTabChange(tab.id)}
+                        disabled={isDisabled}
+                        className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg transition-all duration-200 text-sm ${
+                          isDisabled
+                            ? 'text-gray-400 cursor-not-allowed opacity-60'
+                            : activeTab === tab.id
+                            ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                            : 'text-gray-700 hover:bg-gray-100'
+                        }`}
+                      >
+                        <IconComponent className="h-4 w-4 flex-shrink-0" />
+                        <span className="font-medium text-left flex-1">{tab.name}</span>
+                        {isDisabled && (
+                          <span className="ml-auto text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded">
+                            Coming Soon
+                          </span>
+                        )}
+                        {!isDisabled && activeTab === tab.id && (
+                          <div className="w-1.5 h-1.5 bg-blue-600 rounded-full"></div>
+                        )}
+                      </button>
+                    );
+                  })}
                 </div>
               )}
             </div>

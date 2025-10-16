@@ -2375,20 +2375,51 @@ const Profile = () => {
   const handleAvatarUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    
+
+    // Validate file type
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+      setError('Please upload a valid image file (JPG, PNG, GIF, or WebP)');
+      e.target.value = ''; // Reset file input
+      return;
+    }
+
+    // Validate file size (5MB limit)
+    if (file.size > 5 * 1024 * 1024) {
+      setError('Image size must be less than 5MB');
+      e.target.value = ''; // Reset file input
+      return;
+    }
+
     setImgError(false);
     setLoading(true);
     setError('');
     setMessage('');
-    
+
     try {
       const data = await profileAPI.uploadAvatar(file);
-      setAvatarUrl(data.url);
+
+      // Add cache-busting timestamp to force browser to reload the image
+      const timestamp = new Date().getTime();
+      let url = data.url;
+
+      // In development mode, prepend backend URL to relative avatar paths
+      if (process.env.NODE_ENV !== 'production' && url && url.startsWith('/')) {
+        const backendUrl = process.env.REACT_APP_BACKEND_URL || 'http://localhost:5000';
+        url = backendUrl + url;
+      }
+
+      // Add cache-busting parameter
+      const separator = url.includes('?') ? '&' : '?';
+      url = `${url}${separator}t=${timestamp}`;
+
+      setAvatarUrl(url);
       setMessage('Avatar updated successfully');
     } catch (error) {
       setError(error.response?.data?.detail || 'Failed to upload avatar');
     } finally {
       setLoading(false);
+      e.target.value = ''; // Reset file input for next upload
     }
   };
 
@@ -2537,15 +2568,12 @@ const Profile = () => {
                 Personal Profile
               </button>
               <button
-                onClick={() => setActiveTab('analytics')}
-                className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
-                  activeTab === 'analytics'
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
+                disabled
+                className="py-4 px-1 border-b-2 font-medium text-sm transition-colors border-transparent text-gray-300 cursor-not-allowed relative group"
               >
-                <ChartBarIcon className="h-5 w-5 inline mr-2" />
-                Usage Analytics
+                <ChartBarIcon className="h-5 w-5 inline mr-2 opacity-50" />
+                <span className="opacity-50">Usage Analytics</span>
+                <span className="ml-2 text-xs bg-gray-200 text-gray-500 px-2 py-1 rounded">Coming Soon</span>
               </button>
             </nav>
           </div>
@@ -2592,17 +2620,20 @@ const Profile = () => {
                         </div>
                       </div>
                     </div>
-                    <div className="flex flex-col space-y-3">
+                    <div className="flex flex-col space-y-2">
                       <label className="cursor-pointer bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-3 rounded-xl hover:from-blue-700 hover:to-purple-700 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5">
                         <PhotoIcon className="h-5 w-5 inline mr-2" />
                         Upload Avatar
                         <input
                           type="file"
-                          accept="image/*"
+                          accept="image/jpeg,image/jpg,image/png,image/gif,image/webp"
                           onChange={handleAvatarUpload}
                           className="hidden"
                         />
                       </label>
+                      <p className="text-xs text-gray-500 text-center px-2">
+                        JPG, PNG, GIF, or WebP up to 5MB
+                      </p>
                       {avatarUrl &&  (
                         <button
                           onClick={handleAvatarDelete}

@@ -6,11 +6,11 @@ import uuid
 from PIL import Image
 import io
 
-from db.database import get_db
-from models.user import User
-from models.profile import UserProfile
-from models import schemas
-from utils.auth import get_current_user, get_password_hash, verify_password
+from backend.db.database import get_db
+from backend.models.user import User
+from backend.models.profile import UserProfile
+from backend.models import schemas
+from backend.utils.auth import get_current_user, get_password_hash, verify_password
 
 router = APIRouter(prefix="/profile", tags=["profile"])
 

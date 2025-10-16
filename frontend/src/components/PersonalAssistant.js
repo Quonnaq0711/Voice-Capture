@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import ChatDialog from './ChatDialog';
 
@@ -10,7 +10,16 @@ const PersonalAssistant = ({ user, isDialogOpen: externalIsDialogOpen, setIsDial
   // Use external state if provided, otherwise use internal state
   const isDialogOpen = externalIsDialogOpen !== undefined ? externalIsDialogOpen : internalIsDialogOpen;
   const setIsDialogOpen = externalSetIsDialogOpen || setInternalIsDialogOpen;
+
+  // Always show welcome message on mount
   const [showWelcome, setShowWelcome] = useState(true);
+
+  // Reset showWelcome to true whenever user changes (login/logout)
+  useEffect(() => {
+    if (user?.first_name) {
+      setShowWelcome(true);
+    }
+  }, [user?.id]); // Trigger when user ID changes (login/logout)
 
   // Calculate safe initial position (120px is the approximate size of the assistant avatar)
   const getInitialPosition = useCallback(() => {
@@ -56,18 +65,11 @@ const PersonalAssistant = ({ user, isDialogOpen: externalIsDialogOpen, setIsDial
     return () => window.removeEventListener('resize', handleResize);
   }, []);
   
-  // Available agents configuration
+  // Available agents configuration - Only show active agents
   const agents = [
     { name: 'Career Agent', path: '/agents/career', displayName: 'Career' },
-    { name: 'Money Agent', path: '/agents/money', displayName: 'Money' },
-    { name: 'Mind Agent', path: '/agents/mind', displayName: 'Mind' },
     { name: 'Travel Agent', path: '/agents/travel', displayName: 'Travel' },
-    { name: 'Body Agent', path: '/agents/body', displayName: 'Body' },
-    { name: 'Family Life Agent', path: '/agents/family-life', displayName: 'Family Life' },
-    { name: 'Hobby Agent', path: '/agents/hobby', displayName: 'Hobby' },
-    { name: 'Knowledge Agent', path: '/agents/knowledge', displayName: 'Knowledge' },
-    { name: 'Personal Development Agent', path: '/agents/personal-dev', displayName: 'Personal Dev' },
-    { name: 'Spiritual Agent', path: '/agents/spiritual', displayName: 'Spiritual' }
+    { name: 'Body Agent', path: '/agents/body', displayName: 'Body' }
   ];
   
   // Function to reset position to bottom right corner
@@ -108,13 +110,22 @@ const PersonalAssistant = ({ user, isDialogOpen: externalIsDialogOpen, setIsDial
     }
   }, [initialMousePos, hasDialogBeenOpened, setIsDialogOpen]);
 
+  // Auto-hide welcome message after 10 seconds
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setShowWelcome(false);
-    }, 10000); // Hide welcome message after 10 seconds
+    console.log('[PersonalAssistant] Welcome state:', { showWelcome, userName: user?.first_name, showAgentWelcome });
+    if (showWelcome && user?.first_name) {
+      console.log('[PersonalAssistant] Starting 10s timer for welcome message');
+      const timer = setTimeout(() => {
+        console.log('[PersonalAssistant] 10s elapsed, hiding welcome');
+        setShowWelcome(false);
+      }, 10000); // Hide welcome message after 10 seconds
 
-    return () => clearTimeout(timer);
-  }, []);
+      return () => {
+        console.log('[PersonalAssistant] Cleaning up welcome timer');
+        clearTimeout(timer);
+      };
+    }
+  }, [showWelcome, user?.first_name, showAgentWelcome]);
   
   // Function to cancel ongoing navigation
   const cancelNavigation = useCallback(() => {
@@ -312,9 +323,18 @@ const PersonalAssistant = ({ user, isDialogOpen: externalIsDialogOpen, setIsDial
     };
   }, [isDragging, handleMouseUp]);
 
-  const WelcomeBubble = ({ user }) => (
+  const WelcomeBubble = ({ user, onClose }) => (
     <div className="absolute bottom-full mb-2 w-64 bg-white p-4 rounded-lg shadow-lg right-0 transform transition-all duration-300 ease-in-out origin-bottom-right scale-100">
-      <h3 className="text-lg font-bold text-gray-800">Welcome, {user?.first_name || 'User'}!</h3>
+      <button
+        onClick={onClose}
+        className="absolute top-2 right-2 text-gray-400 hover:text-gray-600 transition-colors"
+        aria-label="Close welcome message"
+      >
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+      <h3 className="text-lg font-bold text-gray-800 pr-6">Welcome, {user?.first_name || 'User'}!</h3>
       <p className="text-sm text-gray-600 mt-1">Your personal AI assistant for a better life. What can I help you with today?</p>
       <div className="absolute right-4 -bottom-2 w-4 h-4 bg-white transform rotate-45"></div>
     </div>
@@ -323,13 +343,22 @@ const PersonalAssistant = ({ user, isDialogOpen: externalIsDialogOpen, setIsDial
 
   
   // Agent welcome bubble component
-  const AgentWelcomeBubble = () => {
+  const AgentWelcomeBubble = ({ onClose }) => {
     const currentAgent = getCurrentAgent();
     if (!currentAgent) return null;
-    
+
     return (
       <div className="absolute bottom-full mb-2 w-64 bg-green-500 text-white p-4 rounded-lg shadow-lg right-0 transform transition-all duration-300 ease-in-out origin-bottom-right scale-100">
-        <h3 className="text-lg font-bold">Welcome to {currentAgent.displayName}!</h3>
+        <button
+          onClick={onClose}
+          className="absolute top-2 right-2 text-white hover:text-gray-200 transition-colors"
+          aria-label="Close welcome message"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+        <h3 className="text-lg font-bold pr-6">Welcome to {currentAgent.displayName}!</h3>
         <p className="text-sm mt-1">Your {currentAgent.displayName} agent is ready to assist you.</p>
         <div className="absolute right-4 -bottom-2 w-4 h-4 bg-green-500 transform rotate-45"></div>
       </div>
@@ -405,12 +434,12 @@ const PersonalAssistant = ({ user, isDialogOpen: externalIsDialogOpen, setIsDial
     >
       {/* Show welcome bubble on initial load */}
       {showWelcome && user?.first_name && !showAgentWelcome && (
-        <WelcomeBubble user={user} />
+        <WelcomeBubble user={user} onClose={() => setShowWelcome(false)} />
       )}
-      
+
       {/* Show agent welcome bubble after navigation */}
       {showAgentWelcome && (
-        <AgentWelcomeBubble />
+        <AgentWelcomeBubble onClose={() => setShowAgentWelcome(false)} />
       )}
       
       <AssistantAvatar />

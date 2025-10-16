@@ -7,10 +7,10 @@ from datetime import datetime, timezone, timedelta
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from sqlalchemy.orm import Session
-from models.user import User
-from models.daily_recommendation import DailyRecommendation
-from services.recommendation_service import RecommendationService
-from db.database import SessionLocal
+from backend.models.user import User
+from backend.models.daily_recommendation import DailyRecommendation
+from backend.services.recommendation_service import RecommendationService
+from backend.db.database import SessionLocal
 
 # Configure logging
 logger = logging.getLogger(__name__)

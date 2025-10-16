@@ -4,6 +4,10 @@
 --
 -- This script creates all database tables with proper constraints
 -- Run this before the first deployment to staging/production
+--
+-- IMPORTANT: This script uses TIMESTAMP WITH TIME ZONE for all
+-- datetime fields to ensure proper timezone handling across
+-- different server locations and client browsers.
 -- ============================================================
 
 -- Enable required extensions
@@ -24,15 +28,15 @@ CREATE TABLE IF NOT EXISTS users (
     -- OTP/HOTP Authentication fields
     hotp_counter INTEGER DEFAULT 0 NOT NULL,
     hotp_secret VARCHAR(255),
-    otp_requested_at TIMESTAMP,
-    otp_locked_until TIMESTAMP,
+    otp_requested_at TIMESTAMP WITH TIME ZONE,
+    otp_locked_until TIMESTAMP WITH TIME ZONE,
     otp_failed_attempts INTEGER DEFAULT 0 NOT NULL,
     otp_purpose VARCHAR(50),  -- 'registration' or 'password_reset'
 
-    -- Timestamps
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    last_login TIMESTAMP
+    -- Timestamps (using TIMESTAMP WITH TIME ZONE for proper timezone handling)
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    last_login TIMESTAMP WITH TIME ZONE
 );
 
 CREATE INDEX IF NOT EXISTS idx_users_first_name ON users(first_name);
@@ -128,9 +132,9 @@ CREATE TABLE IF NOT EXISTS user_profiles (
     -- Avatar field
     avatar_url VARCHAR(500),
 
-    -- Timestamps
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+    -- Timestamps (using TIMESTAMP WITH TIME ZONE for proper timezone handling)
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_user_profiles_user_id ON user_profiles(user_id);
@@ -147,9 +151,9 @@ CREATE TABLE IF NOT EXISTS resumes (
     file_type VARCHAR(50) NOT NULL,  -- File extension (pdf or txt)
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
 
-    -- Timestamps
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+    -- Timestamps (using TIMESTAMP WITH TIME ZONE for proper timezone handling)
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_resumes_user_id ON resumes(user_id);
@@ -167,11 +171,11 @@ CREATE TABLE IF NOT EXISTS career_insights (
     -- JSON data fields
     professional_data TEXT,  -- JSON string of professional data
     dashboard_summaries TEXT,  -- JSON string of LLM-generated summaries for Dashboard
-    summaries_generated_at TIMESTAMP,  -- When summaries were last generated
+    summaries_generated_at TIMESTAMP WITH TIME ZONE,  -- When summaries were last generated
 
-    -- Timestamps
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+    -- Timestamps (using TIMESTAMP WITH TIME ZONE for proper timezone handling)
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_career_insights_user_id ON career_insights(user_id);
@@ -185,13 +189,13 @@ CREATE TABLE IF NOT EXISTS chat_sessions (
     id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     session_name VARCHAR(255) NOT NULL,
-    first_message_time TIMESTAMP NOT NULL,
+    first_message_time TIMESTAMP WITH TIME ZONE NOT NULL,
     is_active BOOLEAN DEFAULT FALSE NOT NULL,
     unread BOOLEAN DEFAULT FALSE NOT NULL,
 
-    -- Timestamps
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+    -- Timestamps (using TIMESTAMP WITH TIME ZONE for proper timezone handling)
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_chat_sessions_user_id ON chat_sessions(user_id);
@@ -209,9 +213,9 @@ CREATE TABLE IF NOT EXISTS chat_messages (
     sender VARCHAR(50) NOT NULL,  -- 'user' or 'assistant'
     agent_type VARCHAR(50) DEFAULT 'dashboard',  -- 'dashboard', 'career', etc.
 
-    -- Timestamps
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+    -- Timestamps (using TIMESTAMP WITH TIME ZONE for proper timezone handling)
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_chat_messages_user_id ON chat_messages(user_id);
@@ -239,9 +243,9 @@ CREATE TABLE IF NOT EXISTS user_activities (
     session_id INTEGER REFERENCES chat_sessions(id) ON DELETE SET NULL,
     message_id INTEGER REFERENCES chat_messages(id) ON DELETE SET NULL,
 
-    -- Timestamps
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+    -- Timestamps (using TIMESTAMP WITH TIME ZONE for proper timezone handling)
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_user_activities_user_id ON user_activities(user_id);
@@ -256,16 +260,16 @@ CREATE INDEX IF NOT EXISTS idx_user_activities_created_at ON user_activities(cre
 CREATE TABLE IF NOT EXISTS daily_recommendations (
     id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    date TIMESTAMP NOT NULL,  -- Date for which recommendations are generated
+    date TIMESTAMP WITH TIME ZONE NOT NULL,  -- Date for which recommendations are generated
     recommendations JSONB NOT NULL,  -- Array of 3 recommendation objects
 
     -- Context data used for generation
     context_data JSONB,  -- Profile and resume analysis data used
     generation_status VARCHAR(50) DEFAULT 'generated' NOT NULL,  -- generated, error, pending
 
-    -- Timestamps
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+    -- Timestamps (using TIMESTAMP WITH TIME ZONE for proper timezone handling)
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_daily_recommendations_user_id ON daily_recommendations(user_id);
@@ -322,7 +326,7 @@ CREATE TRIGGER update_daily_recommendations_updated_at BEFORE UPDATE ON daily_re
 -- SUMMARY
 -- ============================================================
 -- Tables created:
--- 1. users (8 records capacity: authentication core)
+-- 1. users (authentication core with OTP support)
 -- 2. user_profiles (extended user info for all agents)
 -- 3. resumes (file uploads and metadata)
 -- 4. career_insights (resume analysis results)
@@ -331,5 +335,10 @@ CREATE TRIGGER update_daily_recommendations_updated_at BEFORE UPDATE ON daily_re
 -- 7. user_activities (activity tracking)
 -- 8. daily_recommendations (AI daily insights)
 --
--- Total: 8 tables with indexes, foreign keys, and auto-update triggers
+-- Total: 8 tables with:
+--   - TIMESTAMP WITH TIME ZONE for all datetime fields (proper timezone handling)
+--   - Indexes for optimal query performance
+--   - Foreign keys with CASCADE constraints
+--   - Auto-update triggers for updated_at columns
+--   - JSONB fields for flexible data storage
 -- ============================================================
