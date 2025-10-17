@@ -472,6 +472,23 @@ const fetchAvatar = async () => {
     // Note: Chat activity is now tracked when messages are actually sent in ChatDialog
   };
 
+  // Handler for opening agent design modal from ChatDialog
+  const handleOpenAgentModal = (agentName) => {
+    if (agentName === 'Travel Agent') {
+      setSelectedAgent({
+        title: 'Travel Agent (Preview)',
+        imageSrc: '/design/Travel Agent 2.0.png'
+      });
+      setAgentModalOpen(true);
+    } else if (agentName === 'Body Agent') {
+      setSelectedAgent({
+        title: 'Body Agent (Preview)',
+        imageSrc: '/design/Body Agent.png'
+      });
+      setAgentModalOpen(true);
+    }
+  };
+
   // Handler for view all activities toggle
   const handleViewAllActivities = () => {
     setShowAllActivities(!showAllActivities);
@@ -1347,7 +1364,7 @@ const fetchAvatar = async () => {
             <button
               onClick={() => {
                 setSelectedAgent({
-                  title: 'Travel Agent',
+                  title: 'Travel Agent (Preview)',
                   imageSrc: '/design/Travel Agent 2.0.png'
                 });
                 setAgentModalOpen(true);
@@ -1361,7 +1378,7 @@ const fetchAvatar = async () => {
             <button
               onClick={() => {
                 setSelectedAgent({
-                  title: 'Body Agent',
+                  title: 'Body Agent (Preview)',
                   imageSrc: '/design/Body Agent.png'
                 });
                 setAgentModalOpen(true);
@@ -1764,10 +1781,11 @@ const fetchAvatar = async () => {
 
         {/* Personal Assistant Section */}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-          <PersonalAssistant 
-            user={userData} 
+          <PersonalAssistant
+            user={userData}
             isDialogOpen={isAssistantDialogOpen}
             setIsDialogOpen={setIsAssistantDialogOpen}
+            onOpenAgentModal={handleOpenAgentModal}
           />
         </div>
 

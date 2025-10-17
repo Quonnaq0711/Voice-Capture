@@ -7,7 +7,7 @@ import { chat, sessions, profile as profileAPI, activities as activitiesAPI } fr
 import { sendMessage as defaultSendMessage, sendMessageStream as defaultSendMessageStream, checkHealth, clearMemory, generateSessionId, handleApiError, removeMessagesAfterIndex, updateMessageAtIndex } from '../services/chatApi';
 import MessageRenderer from './MessageRenderer';
 
-const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnreadCountChange }) => {
+const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnreadCountChange, onOpenAgentModal }) => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -277,6 +277,17 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
 
   // Handle agent selection in chat
   const handleAgentSelection = (agentName) => {
+    // Check if this is Travel Agent or Body Agent - show modal instead of navigating
+    if (agentName === 'Travel Agent' || agentName === 'Body Agent') {
+      // Call the Dashboard's modal handler if available
+      if (onOpenAgentModal) {
+        onOpenAgentModal(agentName);
+      }
+      setShowAgentDropdown(false);
+      return;
+    }
+
+    // For other agents, proceed with normal navigation
     // Immediately update selectedAgent to reflect the selection
     if (agentName === 'None') {
       setSelectedAgent('');
@@ -287,7 +298,7 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
       // Mark that user has manually selected an agent
       setUserSelectedAgent(true);
     }
-    
+
     // Use the global navigation function from PersonalAssistant
     if (window.handleAgentNavigation) {
       window.handleAgentNavigation(agentName, addSystemMessage);
@@ -307,7 +318,7 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
         }
       }
     }
-    
+
     setShowAgentDropdown(false);
   };
 
