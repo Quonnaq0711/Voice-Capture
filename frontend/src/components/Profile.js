@@ -2332,19 +2332,26 @@ const Profile = () => {
   };
 
   const fetchAvatar = async () => {
-    try {
-      const data = await profileAPI.getAvatarUrl();
-      // In development mode, prepend backend URL to relative avatar paths
-      let url = data.url;
-      if (process.env.NODE_ENV !== 'production' && url && url.startsWith('/')) {
-        const backendUrl = process.env.REACT_APP_BACKEND_URL || 'http://localhost:5000';
-        url = backendUrl + url;
-      }
-      setAvatarUrl(url);
-    } catch (error) {
-      // Avatar not found, ignore error
+  try {
+    const data = await profileAPI.getAvatarUrl();
+    // In development mode, prepend backend URL to relative avatar paths
+    let url = data.url;
+    if (process.env.NODE_ENV !== 'production' && url && url.startsWith('/')) {
+      const backendUrl = process.env.REACT_APP_BACKEND_URL || 'http://localhost:5000';
+      url = backendUrl + url;
     }
-  };
+    
+    // Add timestamp to force cache refresh
+    const timestamp = new Date().getTime();
+    const urlWithTimestamp = url.includes('?') 
+      ? `${url}&t=${timestamp}` 
+      : `${url}?t=${timestamp}`;
+    
+    setAvatarUrl(urlWithTimestamp);
+  } catch (error) {
+    console.error('Error fetching avatar:', error);
+  }
+};
 
   const handlePasswordChange = async (e) => {
     e.preventDefault();
@@ -2372,25 +2379,31 @@ const Profile = () => {
     }
   };
 
-  const handleAvatarUpload = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+  const handleAvatarUpload = async (file) => {
+  try {
+    const response = await profileAPI.uploadAvatar(file);
     
-    setImgError(false);
-    setLoading(true);
-    setError('');
-    setMessage('');
-    
-    try {
-      const data = await profileAPI.uploadAvatar(file);
-      setAvatarUrl(data.url);
-      setMessage('Avatar updated successfully');
-    } catch (error) {
-      setError(error.response?.data?.detail || 'Failed to upload avatar');
-    } finally {
-      setLoading(false);
+    // Handle the URL from backend response
+    let url = response.url;
+    if (process.env.NODE_ENV !== 'production' && url && url.startsWith('/')) {
+      const backendUrl = process.env.REACT_APP_BACKEND_URL || 'http://localhost:5000';
+      url = backendUrl + url;
     }
-  };
+    
+    // The backend already includes a timestamp, but if not, add one
+    if (!url.includes('?t=')) {
+      const timestamp = new Date().getTime();
+      url = `${url}?t=${timestamp}`;
+    }
+    
+    setAvatarUrl(url);
+    
+    // Optionally show success message
+    console.log('Avatar uploaded successfully');
+  } catch (error) {
+    console.error('Error uploading avatar:', error);
+  }
+};
 
   const handleAvatarDelete = async () => {
     setLoading(true);
@@ -2578,7 +2591,7 @@ const Profile = () => {
                           <div className="h-24 w-24 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center border-4 border-white shadow-lg ring-4 ring-blue-100">
                             <UserCircleIcon className="h-14 w-14 text-white" />
                           </div>
-                        )}
+                         )}
                         <div className="absolute -bottom-1 -right-1 w-8 h-8 bg-green-500 rounded-full border-4 border-white flex items-center justify-center">
                           <div className="w-3 h-3 bg-white rounded-full"></div>
                         </div>
@@ -2602,6 +2615,7 @@ const Profile = () => {
                           onChange={handleAvatarUpload}
                           className="hidden"
                         />
+                         <span classname="text-xxs text-black">Only png, jpeg, png images allowed at this time</span>
                       </label>
                       {avatarUrl &&  (
                         <button

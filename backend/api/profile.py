@@ -133,8 +133,11 @@ async def upload_avatar(
                 except:
                     pass
         
-        # Update avatar URL in database
+        # Update avatar URL in database with timestamp for cache busting
+        timestamp = int(time.time())
         avatar_url = f"/avatars/{current_user.id}/{filename}"
+        avatar_url_with_cache = f"{avatar_url}?t={timestamp}"
+        
         profile = db.query(UserProfile).filter(UserProfile.user_id == current_user.id).first()
         if not profile:
             profile = UserProfile(user_id=current_user.id, avatar_url=avatar_url)
@@ -147,7 +150,7 @@ async def upload_avatar(
         return {
             "message": "Avatar uploaded successfully",
             "filename": filename,
-            "url": avatar_url  # Return relative path for frontend to handle
+            "url": avatar_url_with_cache  # Include timestamp for cache busting
         }
     except Exception as e:
         raise HTTPException(
