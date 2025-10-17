@@ -8,6 +8,7 @@ module.exports = {
       animation: {
         float: 'float 3s ease-in-out infinite',
         pulse: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+        'fade-in': 'fadeIn 0.3s ease-in-out',
       },
       keyframes: {
         float: {
@@ -17,6 +18,10 @@ module.exports = {
         pulse: {
           '0%, 100%': { opacity: 1 },
           '50%': { opacity: 0.5 },
+        },
+        fadeIn: {
+          '0%': { opacity: 0, transform: 'translateY(-10px)' },
+          '100%': { opacity: 1, transform: 'translateY(0)' },
         },
       },
       colors: {

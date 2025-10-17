@@ -1,8 +1,12 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import Column, Integer, Nullable, String, DateTime, Boolean, true
 from sqlalchemy.orm import relationship
-from db.database import Base
-from models.career_insight import CareerInsight
+from backend.db.database import Base
+from backend.models.career_insight import CareerInsight
+
+def utc_now():
+    """Return current UTC time as timezone-aware datetime"""
+    return datetime.now(timezone.utc)
 
 class User(Base):
     __tablename__ = "users"
@@ -21,9 +25,9 @@ class User(Base):
     otp_locked_until = Column(DateTime, nullable=True)
     otp_failed_attempts = Column(Integer, default=0)
     otp_purpose = Column(String, nullable=True) # registration or password_reset
-    
-    created_at = Column(DateTime, default=datetime.now)
-    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
     last_login = Column(DateTime, nullable=True)  # Track last login for active user detection
 
     # Relationships

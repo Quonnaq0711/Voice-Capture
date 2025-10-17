@@ -1,8 +1,12 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
-from db.database import Base
-from models.career_insight import CareerInsight
+from backend.db.database import Base
+from backend.models.career_insight import CareerInsight
+
+def utc_now():
+    """Return current UTC time as timezone-aware datetime"""
+    return datetime.now(timezone.utc)
 
 class Resume(Base):
     __tablename__ = "resumes"
@@ -13,8 +17,8 @@ class Resume(Base):
     file_path = Column(String)  # Full path to the resume file
     file_type = Column(String)  # File extension (pdf or txt)
     user_id = Column(Integer, ForeignKey("users.id"))
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
 
     # Relationships
     user = relationship("User", back_populates="resumes")
