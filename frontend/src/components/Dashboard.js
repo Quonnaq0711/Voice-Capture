@@ -51,6 +51,7 @@ const Dashboard = () => {
   const [isInsightsMenuOpen, setIsInsightsMenuOpen] = useState(false);
   const [insightsTab, setInsightsTab] = useState('identity');
   const [analysisProgress] = useState({ isAnalyzing: false });
+  const [showSubTabs, setShowSubTabs] = useState(true);
   const [sectionStatus] = useState({
     professionalIdentity: 'completed',
     workExperience: 'completed',

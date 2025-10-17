@@ -4591,7 +4591,7 @@ const careerInsights = {
                 }`}
                 title="Dashboard"
               >
-                <HomeIcon className="h-5 w-5" />
+                <Home className="h-5 w-5" />
               </button>
 
               {/* Tab Icons */}
