@@ -2287,7 +2287,6 @@ const careerInsights = {
   ];
 
   const tabs = [
-    { id: 'insights', name: 'Career Insights', icon: Lightbulb, disabled: false },
     { id: 'planning', name: 'Career Planning', icon: Map, disabled: true },
     { id: 'job-search', name: 'Job Search', icon: Briefcase, disabled: true },
     { id: 'resume-builder', name: 'Resume Builder', icon: FileText, disabled: true },
@@ -4554,9 +4553,7 @@ const careerInsights = {
           ) : (
             <ChevronRight className="h-3 w-3" />
           )}
-        </button>
-
-
+        </button> 
 
         <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
           {!sidebarExpanded ? (
@@ -4787,7 +4784,7 @@ const careerInsights = {
         <div className="bg-white shadow-sm border-b border-gray-200">
           {/* Simplified Top Navigation */}
           <div className="flex items-center justify-between px-8 py-4">
-            {/* <div className="flex items-center">
+             <div className="flex items-center">
               {/* Elegantly Positioned Back to Dashboard Button */}
               <button
                 onClick={handleBackToDashboard}
@@ -4854,6 +4851,7 @@ const careerInsights = {
           onDialogClose={fetchUnreadCount}
           onUnreadCountChange={fetchUnreadCount}
         />
+      </div>
       </div>
     </div>
   );
