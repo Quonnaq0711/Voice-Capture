@@ -1,7 +1,10 @@
-from fastapi import HTTPException, logger
+from fastapi import HTTPException
 from backend.services.email_service import EmailService
 from backend.services.otp_service import OTPPurpose, OTPService
 from sqlalchemy.orm import Session
+import logging
+
+logger = logging.getLogger(__name__)
 
 class EmailValidationService:
     def __init__(self, otp_service: OTPService, email_service: EmailService):
@@ -21,19 +24,20 @@ class EmailValidationService:
            user = self.otp_service.user_by_email(db, email)
            if not user:
               raise HTTPException(status_code=400, detail="User not found")
-        
+
            user.is_active = True
            db.commit()
 
            return {"message": "Email verification completed successfully. Please log in to your account."}
-    
+
         except HTTPException:
             raise  # Re-raise HTTP exceptions
         except Exception as e:
-            logger.error(f"Error in verify_email_validation: {type(e).__name__}: {str(e)}", exc_info=True)
+            import traceback
+            logger.error(f"Error in verify_email_validation: {type(e).__name__}: {str(e)}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
             db.rollback()
             raise HTTPException(
-                
                 status_code=500,
-                detail="An error occurred during email verification"
-        )
+                detail=f"An error occurred during email verification: {str(e)}"
+            )
