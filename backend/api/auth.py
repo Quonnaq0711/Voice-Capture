@@ -82,10 +82,7 @@ async def confirm_registration_otp(
     db: Session = Depends(get_db),
     email_validation_service: EmailValidationService = Depends(get_email_validation_service)
 ):
-    print(f"Received request: {request}")
-
-    # Verify the registration OTP and activate the user account.
-
+    # Verify the registration OTP and activate the user account
     try:
         result = await email_validation_service.verify_email_validation(
             db,
@@ -98,12 +95,10 @@ async def confirm_registration_otp(
         raise e
     except Exception as e:
         # Handle any unexpected errors
-        import traceback
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.error(f"Error in confirm_registration_otp: {type(e).__name__}: {str(e)}")
-        logger.error(f"Traceback: {traceback.format_exc()}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"An error occurred during verification: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An error occurred during verification"
+        )
 
 # Resend verification OTP for users who didn't receive it or it expired.
 import logging
