@@ -70,7 +70,6 @@ import {
   PanelLeftClose,
   PanelLeftOpen
 } from 'lucide-react';
-import { selectAllAppliedNumericalValuesIncludingErrorValues } from 'recharts/types/state/selectors/axisSelectors';
 
 // Toast notification component
 const Toast = ({ message, type, onClose }) => {
