@@ -13,6 +13,7 @@ import VerifyPasswordOTP from './components/VerifyPasswordOTP';
 import VerifyRegistration from './components/VerifyRegistration';
 import CareerAgent from './components/CareerAgent';
 import TravelAgent from './components/TravelAgent';
+import BodyAgent from './components/BodyAgent';
 import memoryMonitor from './utils/memoryMonitor';
 
 // Placeholder components for agent routes
@@ -83,7 +84,7 @@ function App() {
           <Route path="/agents/money" element={<PrivateRoute><AgentPage agentName="Money" /></PrivateRoute>} />
           <Route path="/agents/mind" element={<PrivateRoute><AgentPage agentName="Mind" /></PrivateRoute>} />
           <Route path="/agents/travel" element={<PrivateRoute><TravelAgent /></PrivateRoute>} />
-          <Route path="/agents/body" element={<PrivateRoute><AgentPage agentName="Body" /></PrivateRoute>} />
+          <Route path="/agents/body" element={<PrivateRoute><BodyAgent /></PrivateRoute>} />
           <Route path="/agents/family-life" element={<PrivateRoute><AgentPage agentName="Family Life" /></PrivateRoute>} />
           <Route path="/agents/hobby" element={<PrivateRoute><AgentPage agentName="Hobby" /></PrivateRoute>} />
           <Route path="/agents/knowledge" element={<PrivateRoute><AgentPage agentName="Knowledge" /></PrivateRoute>} />
