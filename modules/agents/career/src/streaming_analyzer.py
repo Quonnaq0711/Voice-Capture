@@ -14,8 +14,8 @@ import httpx
 
 from workflow_engine import ResumeAnalysisWorkflow, WorkflowProgress
 from parallel_workflow_engine import ParallelResumeAnalysisWorkflow, ParallelConfig, ParallelStrategy
-from resume_analyzer import ResumeAnalyzer
-from chat_service import get_chat_service, ChatService
+from resume_analyzer_factory import get_resume_analyzer
+from base_resume_analyzer import BaseResumeAnalyzer
 from error_handler import RetryConfig, ErrorSeverity
 
 # Configure logging
@@ -24,27 +24,20 @@ logger = logging.getLogger(__name__)
 
 class StreamingResumeAnalyzer:
     """Streaming resume analyzer with real-time progress updates."""
-    
-    def __init__(self, chat_service: Optional[ChatService] = None,
-                 notification_service_url: Optional[str] = None,
+
+    def __init__(self,
+                 notification_service_url: str = "http://localhost:8001",
                  retry_config: Optional[RetryConfig] = None,
                  parallel_config: Optional[ParallelConfig] = None,
                  enable_parallel: bool = False):
         """Initialize the streaming analyzer.
 
         Args:
-            chat_service: Optional ChatService instance
             notification_service_url: URL of the personal assistant notification service
             retry_config: Configuration for error handling and retries
             parallel_config: Configuration for parallel processing
             enable_parallel: Whether to use parallel processing
         """
-        self.chat_service = chat_service or ChatService()
-
-        # Get notification service URL from environment variable or use default
-        if notification_service_url is None:
-            notification_service_url = os.getenv("PA_NOTIFICATION_SERVICE_URL", "http://localhost:8001")
-        
         # Configure retry settings for analysis (optimized for local LLM)
         if retry_config is None:
             retry_config = RetryConfig(
@@ -66,25 +59,31 @@ class StreamingResumeAnalyzer:
                 timeout_per_section=300.0  # 5 minutes for local LLM processing
             )
         
+        # Initialize resume analyzer using factory pattern FIRST
+        # This automatically selects Ollama or vLLM based on LLM_PROVIDER
+        self.resume_analyzer = get_resume_analyzer()
+
         # Choose workflow engine based on parallel setting
+        # Pass resume_analyzer to workflow (not chat_service) for schema support
         if enable_parallel:
             self.workflow = ParallelResumeAnalysisWorkflow(
-                self.chat_service, retry_config, parallel_config
+                self.resume_analyzer, retry_config, parallel_config
             )
             logger.info(f"Initialized with parallel workflow: {parallel_config.strategy.value}")
         else:
-            self.workflow = ResumeAnalysisWorkflow(self.chat_service, retry_config)
+            self.workflow = ResumeAnalysisWorkflow(self.resume_analyzer, retry_config)
             logger.info("Initialized with sequential workflow")
-        
-        self.resume_analyzer = ResumeAnalyzer(self.chat_service)
         self.notification_service_url = notification_service_url
         self.retry_config = retry_config
         self.parallel_config = parallel_config
         self.enable_parallel = enable_parallel
         
     async def _send_notification(self, user_id: int, notification_type: str, **kwargs):
-        """Send notification to the personal assistant notification service.
-        
+        """Send notification to the personal assistant notification service via HTTP.
+
+        In microservices architecture, services communicate via HTTP APIs.
+        This method sends notifications to Personal Assistant's notification endpoints.
+
         Args:
             user_id: Target user ID
             notification_type: Type of notification (progress, complete, error)
@@ -92,6 +91,7 @@ class StreamingResumeAnalyzer:
         """
         try:
             async with httpx.AsyncClient() as client:
+                # Prepare notification URL and data based on type
                 if notification_type == "progress":
                     url = f"{self.notification_service_url}/api/notifications/career-progress"
                     data = {
@@ -120,49 +120,17 @@ class StreamingResumeAnalyzer:
                 else:
                     logger.warning(f"Unknown notification type: {notification_type}")
                     return
-                
-                # Send notification via direct service call instead of HTTP
-                # This is more efficient for internal communication
-                try:
-                    from personal_assistant.notification_service import notification_service
-                    
-                    if notification_type == "progress":
-                        await notification_service.send_career_analysis_progress(
-                            user_id=user_id,
-                            session_id=kwargs.get("session_id"),
-                            current_section=kwargs.get("current_section"),
-                            progress=kwargs.get("progress"),
-                            total_sections=kwargs.get("total_sections"),
-                            status=kwargs.get("status", "analyzing")
-                        )
-                    elif notification_type == "complete":
-                        await notification_service.send_career_analysis_complete(
-                            user_id=user_id,
-                            session_id=kwargs.get("session_id"),
-                            sections_completed=kwargs.get("sections_completed")
-                        )
-                    elif notification_type == "error":
-                        await notification_service.send_career_analysis_error(
-                            user_id=user_id,
-                            session_id=kwargs.get("session_id"),
-                            error_message=kwargs.get("error_message"),
-                            current_section=kwargs.get("current_section")
-                        )
-                    
-                    logger.info(f"Notification sent: {notification_type} for user {user_id}")
-                    
-                except ImportError:
-                    # Fallback to HTTP if direct import fails
-                    logger.warning("Direct notification service import failed, using HTTP fallback")
-                    response = await client.post(url, json=data, timeout=5.0)
-                    if response.status_code == 200:
-                        logger.info(f"Notification sent via HTTP: {notification_type} for user {user_id}")
-                    else:
-                        logger.error(f"Failed to send notification via HTTP: {response.status_code}")
-                        
+
+                # Send notification via HTTP API (microservices communication)
+                response = await client.post(url, json=data, timeout=5.0)
+                if response.status_code == 200:
+                    logger.debug(f"Notification sent: {notification_type} for user {user_id}")
+                else:
+                    logger.error(f"Failed to send notification: HTTP {response.status_code}")
+
         except Exception as e:
             logger.error(f"Failed to send notification: {e}")
-            # Don't raise the exception to avoid breaking the analysis flow
+            # Don't raise - notifications are non-critical, analysis should continue
         
     async def analyze_resume_streaming(self, user_id: int, resume_id: Optional[int] = None) -> AsyncGenerator[Dict[str, Any], None]:
         """Analyze resume with streaming progress updates.
@@ -186,7 +154,7 @@ class StreamingResumeAnalyzer:
                 session_id=session_id,
                 current_section="initialization",
                 progress=0,
-                total_sections=8,
+                total_sections=len(self.workflow.sections),  # Dynamic count
                 status="starting"
             )
             
@@ -270,7 +238,7 @@ class StreamingResumeAnalyzer:
             
             # Process sections using selected workflow engine
             section_count = 0
-            total_sections = 8  # Based on workflow sections
+            total_sections = len(self.workflow.sections)  # Dynamic count from workflow
             
             async for result in analysis_method(resume_content, current_year):
                 # Add timestamp to all results
@@ -322,8 +290,20 @@ class StreamingResumeAnalyzer:
                 if result.get("type") == "section_complete":
                     section_data = result.get("data", {})
                     section_name = result.get("section", "unknown")
-                    all_results[section_name] = section_data
+
+                    # CRITICAL FIX: Use update() instead of direct assignment
+                    # section_data contains both section analysis AND summary:
+                    # {"professionalIdentity": {...}, "professionalIdentity_summary": "..."}
+                    # We need to merge these into all_results, not nest them
+                    all_results.update(section_data)
                     section_count += 1
+
+                    # Log to verify summary is preserved
+                    summary_key = f"{section_name}_summary"
+                    if summary_key in section_data:
+                        logger.info(f"✓ [STREAMING] Summary preserved for {section_name}: {section_data[summary_key][:50]}...")
+                    else:
+                        logger.warning(f"✗ [STREAMING] No summary found in section_data for {section_name}")
                     
                     # Send section completion notification
                     await self._send_notification(
@@ -536,7 +516,7 @@ class StreamingResumeAnalyzer:
         # Recreate workflow with new config if it's a parallel workflow
         if hasattr(self.workflow, 'parallel_config'):
             self.workflow = ParallelResumeAnalysisWorkflow(
-                self.chat_service, self.retry_config, parallel_config
+                self.resume_analyzer, self.retry_config, parallel_config
             )
             logger.info(f"Updated parallel config: strategy={parallel_config.strategy.value}, max_concurrent={parallel_config.max_concurrent_sections}")
     
@@ -554,9 +534,9 @@ class StreamingResumeAnalyzer:
             self.parallel_config = parallel_config
         elif not self.parallel_config:
             self.parallel_config = ParallelConfig()
-        
+
         self.workflow = ParallelResumeAnalysisWorkflow(
-            self.chat_service, self.retry_config, self.parallel_config
+            self.resume_analyzer, self.retry_config, self.parallel_config
         )
         self.enable_parallel = True
         logger.info(f"Switched to parallel processing: {self.parallel_config.strategy.value}")
@@ -566,8 +546,8 @@ class StreamingResumeAnalyzer:
         if not self.enable_parallel:
             logger.info("Already using sequential processing")
             return
-        
-        self.workflow = ResumeAnalysisWorkflow(self.chat_service, self.retry_config)
+
+        self.workflow = ResumeAnalysisWorkflow(self.resume_analyzer, self.retry_config)
         self.enable_parallel = False
         logger.info("Switched to sequential processing")
     

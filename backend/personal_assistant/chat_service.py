@@ -23,6 +23,7 @@ from backend.models.profile import UserProfile
 from backend.models.daily_recommendation import DailyRecommendation
 from backend.personal_assistant.prompts import FOLLOW_UP_PROMPT, OPTIMIZE_QUERY_PROMPT
 from backend.utils.db_session import get_db_session
+from backend.personal_assistant.base_chat_service import BaseChatService
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -31,7 +32,7 @@ logger = logging.getLogger(__name__)
 # Get Ollama URL from environment variable, fallback to localhost for local development
 DEFAULT_DASHBOARD_OLLAMA_URL = os.getenv("DASHBOARD_OLLAMA_URL", "http://ollama-staging:11434")
 
-class ChatService:
+class ChatService(BaseChatService):
     """
     Chat service that integrates with local Ollama LLM using Langchain.
     Provides conversational AI capabilities with memory management.
@@ -95,7 +96,7 @@ class ChatService:
         try:
             if self.executor:
                 logger.info("Shutting down ThreadPoolExecutor...")
-                self.executor.shutdown(wait=True, cancel_futures=False)
+                self.executor.shutdown(wait=True, cancel_futures=True)
                 logger.info("ThreadPoolExecutor shut down successfully")
         except Exception as e:
             logger.error(f"Error during ChatService shutdown: {str(e)}", exc_info=True)
@@ -264,9 +265,17 @@ class ChatService:
                 try:
                     done, pending = await asyncio.wait(
                         [task, wait_task],
-                        return_when=asyncio.FIRST_COMPLETED
+                        return_when=asyncio.FIRST_COMPLETED,
+                        timeout=120.0  # 2 minute timeout for response generation
                     )
-                    
+
+                    # Handle timeout
+                    if not done:
+                        logger.warning("[Ollama] Response generation timed out after 120 seconds")
+                        for pending_task in [task, wait_task]:
+                            pending_task.cancel()
+                        raise asyncio.TimeoutError("Response generation timed out after 120 seconds")
+
                     # Cancel any pending tasks to avoid "Task was destroyed but it is pending" errors
                     for pending_task in pending:
                         pending_task.cancel()
@@ -936,9 +945,17 @@ class ChatService:
                 try:
                     done, pending = await asyncio.wait(
                         [task, wait_task],
-                        return_when=asyncio.FIRST_COMPLETED
+                        return_when=asyncio.FIRST_COMPLETED,
+                        timeout=120.0  # 2 minute timeout for follow-up generation
                     )
-                    
+
+                    # Handle timeout
+                    if not done:
+                        logger.warning("[Ollama] Follow-up generation timed out after 120 seconds")
+                        for pending_task in [task, wait_task]:
+                            pending_task.cancel()
+                        raise asyncio.TimeoutError("Follow-up generation timed out after 120 seconds")
+
                     # Cancel any pending tasks
                     for pending_task in pending:
                         pending_task.cancel()
@@ -1023,9 +1040,17 @@ class ChatService:
                 try:
                     done, pending = await asyncio.wait(
                         [task, wait_task],
-                        return_when=asyncio.FIRST_COMPLETED
+                        return_when=asyncio.FIRST_COMPLETED,
+                        timeout=120.0  # 2 minute timeout for query optimization
                     )
-                    
+
+                    # Handle timeout
+                    if not done:
+                        logger.warning("[Ollama] Query optimization timed out after 120 seconds")
+                        for pending_task in [task, wait_task]:
+                            pending_task.cancel()
+                        raise asyncio.TimeoutError("Query optimization timed out after 120 seconds")
+
                     # Cancel any pending tasks
                     for pending_task in pending:
                         pending_task.cancel()
@@ -1157,72 +1182,6 @@ class ChatService:
             logger.error(f"Error in sync follow-up generation: {str(e)}")
             raise
     
-    def _parse_follow_up_questions(self, questions_text: str) -> List[str]:
-        """
-        Parse the generated follow-up questions text into a list of questions.
-        
-        Args:
-            questions_text: Raw text containing the generated questions
-            
-        Returns:
-            List of parsed follow-up questions
-        """
-        try:
-            questions = []
-            lines = questions_text.strip().split('\n')
-            
-            for line in lines:
-                line = line.strip()
-                # Look for numbered questions (1., 2., 3. or 1), 2), 3))
-                if line and (line.startswith(('1.', '2.', '3.', '1)', '2)', '3)')) or 
-                           any(line.startswith(f'{i}.') or line.startswith(f'{i})') for i in range(1, 4))):
-                    # Remove the number and clean up the question
-                    question = line
-                    # Remove leading numbers and punctuation
-                    for prefix in ['1.', '2.', '3.', '1)', '2)', '3)']:
-                        if question.startswith(prefix):
-                            question = question[len(prefix):].strip()
-                            break
-                    
-                    if question and len(question) > 5:  # Ensure it's a meaningful question
-                        questions.append(question)
-            
-            # If we couldn't parse exactly 3 questions, try a different approach
-            if len(questions) != 3:
-                # Split by common delimiters and try to extract questions
-                all_text = questions_text.replace('\n', ' ').strip()
-                # Look for question patterns
-                import re
-                question_patterns = re.findall(r'[1-3][.)][^1-3]*(?=[1-3][.)]|$)', all_text)
-                
-                if question_patterns:
-                    questions = []
-                    for pattern in question_patterns[:3]:  # Take only first 3
-                        # Clean up the question
-                        question = re.sub(r'^[1-3][.)]\s*', '', pattern).strip()
-                        if question and len(question) > 5:
-                            questions.append(question)
-            
-            # Ensure we have exactly 3 questions, pad with defaults if needed
-            while len(questions) < 3:
-                default_questions = [
-                    "Can you explain this in more detail?",
-                    "What should I do next?",
-                    "Are there other options to consider?"
-                ]
-                questions.append(default_questions[len(questions)])
-            
-            # Limit to exactly 3 questions
-            return questions[:3]
-            
-        except Exception as e:
-            logger.error(f"Error parsing follow-up questions: {str(e)}")
-            # Return default questions if parsing fails
-            return [
-                "Can you provide more details about this?",
-                "What are the next steps I should take?",
-                "Are there any alternatives I should consider?"
-            ]
     
     async def health_check(self) -> Dict[str, str]:
         """

@@ -287,7 +287,8 @@ const Dashboard = () => {
       'ArrowTrendingUpIcon': ArrowTrendingUpIcon,
       'ClockIcon': ClockIcon,
       'HeartIcon': HeartIcon,
-      'CheckCircleIcon': CheckCircleIcon
+      'CheckCircleIcon': CheckCircleIcon,
+      'AcademicCapIcon': AcademicCapIcon
     };
     return iconMap[iconName] || BriefcaseIcon; // Default to BriefcaseIcon
   };
@@ -753,6 +754,9 @@ const Dashboard = () => {
                             break;
                           case 'work_experience':
                             navigate(`${baseCareerUrl}?tab=work`);
+                            break;
+                          case 'education_background':
+                            navigate(`${baseCareerUrl}?tab=education`);
                             break;
                           case 'skills_analysis':
                             navigate(`${baseCareerUrl}?tab=skills`);

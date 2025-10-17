@@ -1,47 +1,59 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { 
-  CheckCircleIcon, 
-  ExclamationCircleIcon, 
+import {
+  CheckCircleIcon,
+  ExclamationCircleIcon,
   InformationCircleIcon,
   XMarkIcon,
   BellIcon
 } from '@heroicons/react/24/outline';
 import { BellIcon as BellIconSolid } from '@heroicons/react/24/solid';
 
-const NotificationPanel = ({ notifications = [], onDismiss, maxVisible = 5 }) => {
+const NotificationPanel = ({ notifications = [], onDismiss }) => {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [toastNotifications, setToastNotifications] = useState([]);
 
-  // Track which notification IDs we've already shown as toast using useRef
-  // This prevents re-triggering useEffect when we update the Set
-  const shownToastIdsRef = useRef(new Set());
+  // Use ref to track processed notification IDs (avoids dependency issues)
+  const processedNotificationIdsRef = useRef(new Set());
 
   // Handle new notifications as toast
   // Check all notifications, not just the last one, because notifications
   // with fixed IDs may be updated in-place (middle of array)
   useEffect(() => {
-    if (notifications.length > 0) {
-      // Check all notifications to catch updates to existing ones
-      notifications.forEach((notification) => {
-        // Only show toast if we haven't shown this notification ID before
-        if (!shownToastIdsRef.current.has(notification.id)) {
-          shownToastIdsRef.current.add(notification.id);
-          setToastNotifications(prev => [...prev, { ...notification, showToast: true }]);
+    if (notifications.length === 0) return;
+
+    // Find all new notifications that haven't been shown as toasts yet
+    const newNotifications = notifications.filter(n => !processedNotificationIdsRef.current.has(n.id));
+
+    if (newNotifications.length > 0) {
+      // Process each new notification
+      newNotifications.forEach((notification) => {
+        // Add to toast list
+        setToastNotifications(prev => {
+          const existingToast = prev.find(t => t.id === notification.id);
+          if (existingToast) {
+            return prev;
+          }
+
+          const newToast = { ...notification, showToast: true };
 
           // Auto-dismiss toast after 5 seconds (except for error notifications)
           if (notification.type !== 'error') {
-            const notificationId = notification.id;
             setTimeout(() => {
-              setToastNotifications(prev =>
-                prev.map(t => t.id === notificationId ? { ...t, showToast: false } : t)
+              setToastNotifications(toasts =>
+                toasts.map(t => t.id === notification.id ? { ...t, showToast: false } : t)
               );
               // Remove from toast list after animation
               setTimeout(() => {
-                setToastNotifications(prev => prev.filter(t => t.id !== notificationId));
+                setToastNotifications(toasts => toasts.filter(t => t.id !== notification.id));
               }, 300);
             }, 5000);
           }
-        }
+
+          return [...prev, newToast];
+        });
+
+        // Mark as processed immediately (ref doesn't trigger re-render)
+        processedNotificationIdsRef.current.add(notification.id);
       });
     }
   }, [notifications]);

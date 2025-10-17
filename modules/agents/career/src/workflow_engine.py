@@ -64,14 +64,14 @@ class WorkflowProgress:
 class ResumeAnalysisWorkflow:
     """LangGraph-based workflow engine for resume analysis."""
     
-    def __init__(self, chat_service, retry_config: Optional[RetryConfig] = None):
+    def __init__(self, resume_analyzer, retry_config: Optional[RetryConfig] = None):
         """Initialize the workflow engine.
-        
+
         Args:
-            chat_service: ChatService instance for LLM interactions
+            resume_analyzer: BaseResumeAnalyzer instance for resume analysis with schema support
             retry_config: Configuration for error handling and retries
         """
-        self.chat_service = chat_service
+        self.resume_analyzer = resume_analyzer
         self.retry_config = retry_config
         self.sections = self._initialize_sections()
         self.progress_callback: Optional[Callable] = None
@@ -90,7 +90,12 @@ class ResumeAnalysisWorkflow:
             AnalysisSection(
                 name="professionalIdentity",
                 display_name="Professional Identity",
-                description="Analyzing professional title, summary, and key highlights"
+                description="Analyzing professional title, summary, key highlights, and market position"
+            ),
+            AnalysisSection(
+                name="educationBackground",
+                display_name="Education Background",
+                description="Extracting educational qualifications, degrees, and certifications"
             ),
             AnalysisSection(
                 name="workExperience",
@@ -106,12 +111,7 @@ class ResumeAnalysisWorkflow:
                 name="skillsAnalysis",
                 display_name="Skills Analysis",
                 description="Evaluating technical and soft skills"
-            ),
-            AnalysisSection(
-                name="marketPosition",
-                display_name="Market Position",
-                description="Assessing competitiveness and industry standing"
-            ) 
+            )
         ] 
     
     def _build_workflow(self) -> StateGraph:
@@ -404,10 +404,10 @@ class ResumeAnalysisWorkflow:
     
     def _check_next_section(self, state: WorkflowState) -> str:
         """Check if there are more sections to process.
-        
+
         Args:
             state: Current workflow state
-            
+
         Returns:
             Next edge to follow
         """
@@ -415,7 +415,39 @@ class ResumeAnalysisWorkflow:
             return "complete"
         else:
             return "next_section"
-    
+
+    def _extract_section_with_summary(self, section_data: Dict[str, Any], section_name: str) -> Dict[str, Any]:
+        """Extract section data and summary field from LLM response.
+
+        This helper method eliminates code duplication by extracting the logic
+        for handling both section data and summary fields in one place.
+
+        Args:
+            section_data: Raw JSON data from LLM response
+            section_name: Name of the section being analyzed
+
+        Returns:
+            Dictionary containing both section data and summary field
+        """
+        # Check if the section_data already contains the section name as a key
+        # If so, extract the nested data but KEEP the summary field
+        if section_name in section_data:
+            # Extract the main section data
+            result = {section_name: section_data[section_name]}
+
+            # IMPORTANT: Also extract the summary field if it exists
+            summary_key = f"{section_name}_summary"
+            if summary_key in section_data:
+                result[summary_key] = section_data[summary_key]
+                logger.debug(f"Summary extracted for {section_name}")
+            else:
+                logger.warning(f"Summary missing for {section_name}")
+        else:
+            # Section data is already in the correct format
+            result = {section_name: section_data}
+
+        return result
+
     async def _analyze_section(self, section: AnalysisSection, resume_content: str, current_year: str) -> Dict[str, Any]:
         """Analyze a specific section of the resume with error handling and retries.
         
@@ -429,20 +461,23 @@ class ResumeAnalysisWorkflow:
         """
         async def _perform_analysis():
             from prompts import get_section_analysis_prompt
-            
+
             # Get section-specific prompt
             prompt = get_section_analysis_prompt(section.name, resume_content, current_year)
-            
+
             # Add debug output for section start
             print(f"\n=== Starting Analysis: {section.display_name} ({section.name}) ===")
             logger.info(f"Starting analysis for section: {section.name} - {section.display_name}")
-            
-            # Generate response using chat service with timeout
-            response = await asyncio.wait_for(
-                self.chat_service.generate_response(prompt, f"section_{section.name}"),
+
+            # CRITICAL FIX: Use resume_analyzer which has JSON Schema support
+            # This ensures vLLM generates both full analysis AND summary fields
+            messages = [{"role": "user", "content": prompt}]
+
+            # Call resume_analyzer's _generate_llm_response which uses schema
+            response_text = await asyncio.wait_for(
+                self.resume_analyzer._generate_llm_response(messages, f"section_{section.name}"),
                 timeout=300.0  # 5 minutes timeout for local LLM
             )
-            response_text = response.get("response", "")
             
             # Extract JSON from response with improved parsing
             json_start = response_text.find('{')
@@ -452,41 +487,37 @@ class ResumeAnalysisWorkflow:
                 json_str = response_text[json_start:json_end+1]
                 try:
                     section_data = json.loads(json_str)
-                    
+
                     # Validate that we have meaningful data
                     if not section_data or not isinstance(section_data, dict):
                         raise ValueError("Empty or invalid section data received")
-                    
-                    # Check if the section_data already contains the section name as a key
-                    # If so, extract the nested data to avoid double-wrapping
-                    if section.name in section_data:
-                        result = {section.name: section_data[section.name]}
-                    else:
-                        result = {section.name: section_data}
-                    
+
+                    # Use helper method to extract section data and summary
+                    result = self._extract_section_with_summary(section_data, section.name)
+
                     # Add debug output for section completion
                     print(f"✓ {section.display_name} Analysis Completed")
                     print(f"Result Summary: {len(str(section_data))} characters")
+                    if f"{section.name}_summary" in result:
+                        print(f"✓ Summary included: {result[f'{section.name}_summary'][:50]}...")
                     logger.info(f"Completed analysis for section: {section.name}")
-                    
+
                     return result
                 except json.JSONDecodeError as e:
                     # Try to clean up the JSON string
                     cleaned_json = self._clean_json_string(json_str)
                     section_data = json.loads(cleaned_json)
-                    
-                    # Check if the section_data already contains the section name as a key
-                    # If so, extract the nested data to avoid double-wrapping
-                    if section.name in section_data:
-                        result = {section.name: section_data[section.name]}
-                    else:
-                        result = {section.name: section_data}
-                    
+
+                    # Use helper method to extract section data and summary
+                    result = self._extract_section_with_summary(section_data, section.name)
+
                     # Add debug output for section completion
                     print(f"✓ {section.display_name} Analysis Completed (JSON Fixed)")
                     print(f"Result Summary: {len(str(section_data))} characters")
+                    if f"{section.name}_summary" in result:
+                        print(f"✓ Summary included: {result[f'{section.name}_summary'][:50]}...")
                     logger.info(f"Completed analysis for section: {section.name} (JSON cleaned)")
-                    
+
                     return result
             else:
                 raise ValueError("No JSON object found in LLM response")
@@ -499,24 +530,33 @@ class ResumeAnalysisWorkflow:
     
     def _clean_json_string(self, json_str: str) -> str:
         """Clean and fix common JSON formatting issues.
-        
+
+        Note: This method only performs safe JSON cleanup operations.
+        With vLLM's Guided Generation, JSON is usually already valid.
+        This is a fallback for edge cases where schema enforcement failed.
+
         Args:
             json_str: Raw JSON string from LLM response
-            
+
         Returns:
             Cleaned JSON string
         """
         # Remove common formatting issues
         json_str = json_str.strip()
-        
-        # Fix trailing commas
+
+        # Fix trailing commas (safe operation)
         import re
         json_str = re.sub(r',\s*}', '}', json_str)
         json_str = re.sub(r',\s*]', ']', json_str)
-        
-        # Fix unescaped quotes in strings
-        json_str = re.sub(r'"([^"]*?)"([^":,}\]]*?)"', r'"\1\\"\2"', json_str)
-        
+
+        # REMOVED: Unsafe regex that could break valid JSON
+        # The following regex was removed because it incorrectly modified valid JSON:
+        # json_str = re.sub(r'"([^"]*?)"([^":,}\]]*?)"', r'"\1\\"\2"', json_str)
+        # Example: '{"key":"value"}' would become '{"key":\"value"}' (broken!)
+        #
+        # With vLLM Guided Generation, unescaped quotes should not occur.
+        # If they do, it's better to let json.loads() fail and trigger retry.
+
         return json_str
     
     async def analyze_resume_sequential(self, resume_content: str, current_year: str) -> AsyncGenerator[Dict[str, Any], None]:

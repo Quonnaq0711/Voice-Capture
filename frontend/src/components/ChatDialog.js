@@ -466,33 +466,38 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
     // Event handler for section start
     const handleSectionStart = async (event) => {
       const { section, display_name, description, progress } = event.detail;
+      console.log('ChatDialog: Section started:', { section, display_name, description, progress });
 
       // Set loading state when section starts
       setIsLoading(true);
       setIsCancelling(false);
-      
-      const sectionName = display_name || section.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
-      await addProgressMessage(
-        `🔄 Starting ${sectionName} analysis...`,
-        'section_start'
-      );
+
+      // Note: Toast notifications are handled by CareerAgent component
+      // No need to add chat messages here
     };
 
-    // Event handler for section completion - REMOVED
-    // Section completion notifications are now handled by the notification toast system
-    // No need to show them in the chat dialog anymore
-    const handleSectionComplete = async () => {
-      // Intentionally empty - notifications are handled by NotificationPanel
+    // Event handler for section completion
+    const handleSectionComplete = async (event) => {
+      const { section, data, error } = event.detail;
+      console.log('ChatDialog: Section completed:', { section, hasData: !!data, error });
+
+      // Note: Toast notifications are handled by CareerAgent component
+      // No need to add chat messages here
     };
 
     // Event handler for analysis completion - REMOVED
     // Analysis completion notifications are now handled by the notification toast system
     // No need to show them in the chat dialog anymore
     const handleAnalysisComplete = async (event) => {
+      const { success, error } = event.detail;
+      console.log('ChatDialog: Analysis workflow completed:', { success, error });
+
       // Clear loading state when analysis completes
       setIsLoading(false);
       setIsCancelling(false);
-      // Intentionally not adding messages - notifications are handled by NotificationPanel
+
+      // Note: Toast notifications are handled by CareerAgent component
+      // No need to add chat messages here
     };
     
     // Add event listeners to the document (global events)
@@ -673,6 +678,8 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
   // Check API health
   const checkApiHealth = async () => {
     try {
+      console.log('[ChatDialog] checkApiHealth called, location:', location.pathname);
+
       // Determine which API to check based on current location
       let apiUrl = null;
 
@@ -702,10 +709,15 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
         }
       }
 
+      console.log('[ChatDialog] Checking health for apiUrl:', apiUrl);
+
       // For dashboard and other pages, use default (personal assistant)
       const health = await checkHealth(apiUrl);
+      console.log('[ChatDialog] Health check result:', health);
       setApiStatus(health.status === 'healthy' ? 'healthy' : 'unhealthy');
+      console.log('[ChatDialog] API status set to:', health.status === 'healthy' ? 'healthy' : 'unhealthy');
     } catch (error) {
+      console.error('[ChatDialog] Health check failed:', error);
       setApiStatus('unhealthy');
     }
   };

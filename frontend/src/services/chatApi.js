@@ -3,16 +3,12 @@
  * Handles all HTTP requests to the chat backend running on localhost:8001
  */
 
-// Use relative paths for API calls (proxied through Nginx)
-// In production: /api/pa/ -> http://idii-PA-staging:8001/api/chat/
-// In development: Use environment variables or fallback to dev ports
-const CHAT_API_BASE_URL = process.env.NODE_ENV === 'production'
-  ? '/api/pa'  // Proxied through Nginx in production
-  : (process.env.REACT_APP_PA_URL ? `${process.env.REACT_APP_PA_URL}/api/chat` : 'http://localhost:6001/api/chat');  // Dev mode: port 6001
-
-const CAREER_API_BASE_URL = process.env.NODE_ENV === 'production'
-  ? '/api/career'  // Proxied through Nginx in production
-  : (process.env.REACT_APP_CAREER_URL ? `${process.env.REACT_APP_CAREER_URL}/api/chat` : 'http://localhost:6002/api/chat');  // Dev mode: port 6002
+// Use relative paths for API calls (proxied through setupProxy.js in dev, Nginx in prod)
+// This ensures all requests go through the proxy, avoiding CORS issues
+// In production: /api/pa/ -> http://idii-PA-staging:8001/api/chat/ (via Nginx)
+// In development: /api/pa/ -> http://localhost:6001/api/chat/ (via setupProxy.js)
+const CHAT_API_BASE_URL = '/api/pa';
+const CAREER_API_BASE_URL = '/api/career';
 
 /**
  * Helper function to build absolute URL from relative or absolute path
@@ -76,6 +72,9 @@ export const sendMessage = async (message, sessionId = null, signal = null, apiU
 export const checkHealth = async (apiUrl = null) => {
   try {
     const healthUrl = apiUrl ? `${apiUrl}/health` : `${CHAT_API_BASE_URL}/health`;
+    console.log('[chatApi] checkHealth called with healthUrl:', healthUrl);
+    console.log('[chatApi] CHAT_API_BASE_URL:', CHAT_API_BASE_URL);
+
     const response = await fetch(healthUrl, {
       method: 'GET',
       headers: {
@@ -83,14 +82,17 @@ export const checkHealth = async (apiUrl = null) => {
       }
     });
 
+    console.log('[chatApi] Fetch response received:', response.status, response.ok);
+
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
 
     const data = await response.json();
+    console.log('[chatApi] Health check data:', data);
     return data;
   } catch (error) {
-    console.error('Error checking chat API health:', error);
+    console.error('[chatApi] Error checking chat API health:', error);
     throw error;
   }
 };

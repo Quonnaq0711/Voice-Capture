@@ -12,7 +12,8 @@ import logging
 import asyncio
 import json
 from sse_starlette.sse import EventSourceResponse
-from backend.personal_assistant.chat_service import get_chat_service, ChatService
+from backend.personal_assistant.chat_service_factory import get_chat_service
+from backend.personal_assistant.base_chat_service import BaseChatService
 from backend.db.database import get_db
 from backend.utils.auth import get_current_user_from_query
 from backend.models.user import User
@@ -108,7 +109,7 @@ class OptimizeQueryResponse(BaseModel):
 async def send_message(
     chat_request: ChatRequest,
     request: Request,
-    chat_service: ChatService = Depends(get_chat_service),
+    chat_service: BaseChatService = Depends(get_chat_service),
     db: Session = Depends(get_db)
 ):
     """
@@ -185,7 +186,7 @@ async def send_message(
 
 @router.get("/health", response_model=HealthResponse)
 async def health_check(
-    chat_service: ChatService = Depends(get_chat_service)
+    chat_service: BaseChatService = Depends(get_chat_service)
 ):
     """
     Check the health status of the chat service.
@@ -232,7 +233,7 @@ async def health_check(
 
 @router.get("/health/deep", response_model=HealthResponse)
 async def deep_health_check(
-    chat_service: ChatService = Depends(get_chat_service)
+    chat_service: BaseChatService = Depends(get_chat_service)
 ):
     """
     Perform a deep health check of the chat service.
@@ -260,7 +261,7 @@ async def deep_health_check(
 @router.delete("/memory")
 async def clear_conversation_memory(
     session_id: Optional[str] = None,
-    chat_service: ChatService = Depends(get_chat_service)
+    chat_service: BaseChatService = Depends(get_chat_service)
 ):
     """
     Clear the conversation memory for a specific session.
@@ -300,7 +301,7 @@ async def clear_conversation_memory(
 @router.get("/history", response_model=ConversationHistoryResponse)
 async def get_conversation_history(
     session_id: Optional[str] = None,
-    chat_service: ChatService = Depends(get_chat_service)
+    chat_service: BaseChatService = Depends(get_chat_service)
 ):
     """
     Get the current conversation history for a specific session.
@@ -341,7 +342,7 @@ async def get_conversation_history(
 async def remove_messages_after_index(
     message_index: int,
     session_id: Optional[str] = None,
-    chat_service: ChatService = Depends(get_chat_service)
+    chat_service: BaseChatService = Depends(get_chat_service)
 ):
     """
     Remove all messages after a specific index in the conversation history.
@@ -387,7 +388,7 @@ async def update_message_at_index(
     message_index: int,
     new_content: str = Query(..., description="New content for the message"),
     session_id: Optional[str] = Query(None, description="Session ID"),
-    chat_service: ChatService = Depends(get_chat_service)
+    chat_service: BaseChatService = Depends(get_chat_service)
 ):
     """
     Update a specific message in the conversation history.
@@ -456,7 +457,7 @@ async def get_available_models():
 async def optimize_query(
     optimize_request: OptimizeQueryRequest,
     request: Request,
-    chat_service: ChatService = Depends(get_chat_service)
+    chat_service: BaseChatService = Depends(get_chat_service)
 ):
     """
     Optimize a user query to make it clearer and more structured.
@@ -534,8 +535,9 @@ async def optimize_query(
 async def send_message_stream(
     message: str = Query(..., description="Message to send to the AI"),
     session_id: Optional[str] = Query(None, description="Session ID"),
+    user_id: Optional[int] = Query(None, description="User ID for profile context"),
     current_user: User = Depends(get_current_user_from_query),
-    chat_service: ChatService = Depends(get_chat_service),
+    chat_service: BaseChatService = Depends(get_chat_service),
     db: Session = Depends(get_db)
 ):
     """
@@ -614,18 +616,19 @@ async def send_message_stream(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error in streaming endpoint: {str(e)}")
-        
+        error_message = str(e)  # Capture error message in local variable
+        logger.error(f"Error in streaming endpoint: {error_message}")
+
         async def error_generator():
             error_chunk = {
                 "type": "error",
-                "content": f"Error: {str(e)}"
+                "content": f"Error: {error_message}"
             }
             yield {
                 "event": "message",
                 "data": json.dumps(error_chunk)
             }
-        
+
         return EventSourceResponse(
             error_generator(),
             headers={

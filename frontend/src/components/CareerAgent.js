@@ -495,6 +495,7 @@ const DocumentManager = ({ analysisProgress, setAnalysisProgress, setSectionStat
 
       setSectionStatus({
         professionalIdentity: 'pending',
+        educationBackground: 'pending',
         workExperience: 'pending',
         skillsAnalysis: 'pending',
         marketPosition: 'pending',
@@ -505,10 +506,18 @@ const DocumentManager = ({ analysisProgress, setAnalysisProgress, setSectionStat
 
       // Clear existing professional data to prepare for new analysis
       setProfessionalData({
-        professionalIdentity: { title: '', summary: '', keyHighlights: [], currentRole: '', currentIndustry: '', currentCompany: '', location: '' },
+        professionalIdentity: {
+          title: '',
+          summary: '',
+          keyHighlights: [],
+          currentRole: '',
+          currentIndustry: '',
+          currentCompany: '',
+          location: '',
+          marketPosition: { competitiveness: 0, skillRelevance: 0, industryDemand: 0, careerPotential: 0 }
+        },
         workExperience: { totalYears: 0, timelineStart: null, timelineEnd: null, analytics: { workingYears: { years: '', period: '' }, heldRoles: { count: '', longest: '' }, heldTitles: { count: '', shortest: '' }, companies: { count: '', longest: '' }, insights: { gaps: '', shortestTenure: '', companyChanges: '', careerProgression: '' } } },
         skillsAnalysis: { hardSkills: [], softSkills: [], coreStrengths: [], developmentAreas: [] },
-        marketPosition: { competitiveness: 0, skillRelevance: 0, industryDemand: 0, careerPotential: 0 },
         careerTrajectory: [],
         strengthsWeaknesses: { strengths: [], weaknesses: [] },
         salaryAnalysis: { currentSalary: null, historicalTrends: [], marketComparison: null, predictedGrowth: null, salaryFactors: [], recommendations: [] }
@@ -547,34 +556,31 @@ const DocumentManager = ({ analysisProgress, setAnalysisProgress, setSectionStat
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
-      let buffer = ''; // Buffer to accumulate incomplete data
+      let buffer = ''; // Buffer to accumulate incomplete lines
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
 
-        // Append new chunk to buffer
-        buffer += decoder.decode(value, { stream: true });
+        // Decode and append to buffer
+        const chunk = decoder.decode(value, { stream: true });
+        buffer += chunk;
 
-        // Split by double newline to get complete SSE messages
-        const messages = buffer.split('\n\n');
+        // Split by newlines, but keep the last incomplete line in buffer
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || ''; // Keep last incomplete line
 
-        // Keep the last (possibly incomplete) message in the buffer
-        buffer = messages.pop() || '';
+        for (const line of lines) {
+          if (line.trim() && line.startsWith('data: ')) {
+            try {
+              const jsonString = line.slice(6).trim();
+              if (!jsonString) continue; // Skip empty data lines
 
-        for (const message of messages) {
-          const lines = message.split('\n');
-          for (const line of lines) {
-            if (line.trim() && line.startsWith('data: ')) {
-              try {
-                const jsonStr = line.slice(6).trim();
-                if (!jsonStr) continue; // Skip empty data
-
-                const data = JSON.parse(jsonStr);
-                console.log('Received streaming data:', data);
-
-                // Handle different types of streaming responses
-                if (data.type === 'section_progress') {
+              const data = JSON.parse(jsonString);
+              console.log('Received streaming data:', data);
+              
+              // Handle different types of streaming responses
+              if (data.type === 'section_progress') {
                 // Update state directly for immediate UI feedback
                 setAnalysisProgress(prev => ({
                   ...prev,
@@ -600,62 +606,65 @@ const DocumentManager = ({ analysisProgress, setAnalysisProgress, setSectionStat
                   details: `Processing section ${data.progress ? Math.ceil(data.progress / (100 / (data.total_sections || 7))) : 1} of ${data.total_sections || 7}`
                 });
                 
-                // Also dispatch event for compatibility
-                const progressEvent = new CustomEvent('analysisProgress', {
-                  detail: {
-                    section: data.section,
-                    status: 'analyzing',
-                    progress: data.progress,
-                    totalSections: data.total_sections || 7
-                  }
-                });
-                document.querySelector('[data-agent-type="career"]')?.dispatchEvent(progressEvent);
-                } else if (data.type === 'section_complete') {
-                  console.log('Section completed:', data.section, data.data);
-
-                  // Update state directly for immediate UI feedback
-                  if (data.data) {
-                    // Update professional data with the new section data
-                    const sectionData = data.data[data.section] || data.data;
-                    setProfessionalData(prev => {
-                      const newData = {
-                        ...prev,
-                        [data.section]: sectionData
-                      };
-                      console.log(`Updated professional data for section ${data.section}:`, newData);
-                      return newData;
-                    });
-                  }
-
-                  // Update section status
-                  setSectionStatus(prev => {
-                    const newStatus = { ...prev, [data.section]: 'completed' };
-                    console.log('Updated section status:', newStatus);
-                    return newStatus;
+                // Also dispatch event for compatibility (browser only)
+                if (typeof document !== 'undefined' && typeof document.querySelector === 'function') {
+                  const progressEvent = new CustomEvent('analysisProgress', {
+                    detail: {
+                      section: data.section,
+                      status: 'analyzing',
+                      progress: data.progress,
+                      totalSections: data.total_sections || 7
+                    }
                   });
-
-                  // Update analysis progress
-                  setAnalysisProgress(prev => {
-                    const newCompletedSections = [...prev.completedSections, data.section];
-                    const newProgress = Math.round((newCompletedSections.length / prev.totalSections) * 100);
-                    return {
+                  document.querySelector('[data-agent-type="career"]')?.dispatchEvent(progressEvent);
+                }
+              } else if (data.type === 'section_complete') {
+                console.log('Section completed:', data.section, data.data);
+                
+                // Update state directly for immediate UI feedback
+                if (data.data) {
+                  // Update professional data with the new section data
+                  const sectionData = data.data[data.section] || data.data;
+                  setProfessionalData(prev => {
+                    const newData = {
                       ...prev,
-                      completedSections: newCompletedSections,
-                      progress: newProgress,
-                      currentSection: null
+                      [data.section]: sectionData
                     };
+                    console.log(`Updated professional data for section ${data.section}:`, newData);
+                    return newData;
                   });
+                }
+                
+                // Update section status
+                setSectionStatus(prev => {
+                  const newStatus = { ...prev, [data.section]: 'completed' };
+                  console.log('Updated section status:', newStatus);
+                  return newStatus;
+                });
+                
+                // Update analysis progress
+                setAnalysisProgress(prev => {
+                  const newCompletedSections = [...prev.completedSections, data.section];
+                  const newProgress = Math.round((newCompletedSections.length / prev.totalSections) * 100);
+                  return {
+                    ...prev,
+                    completedSections: newCompletedSections,
+                    progress: newProgress,
+                    currentSection: null
+                  };
+                });
 
-                  // Add section completion notification
-                  const sectionName = data.section.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
-                  addNotification({
-                    type: 'complete',
-                    title: `✅ ${sectionName} Complete`,
-                    message: `${sectionName} analysis completed successfully! New insights are now available in your career profile.`,
-                    timestamp: Date.now()
-                  });
+                // Add section completion notification
+                const sectionName = data.section.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
+                addNotification({
+                  type: 'complete',
+                  title: `✅ ${sectionName} Complete`,
+                  message: `${sectionName} analysis completed successfully! New insights are now available in your career profile.`,
+                  timestamp: Date.now()
+                });
 
-                  // Also dispatch event for compatibility
+                // Also dispatch event for compatibility (browser only)
+                if (typeof document !== 'undefined' && typeof document.querySelector === 'function') {
                   const completeEvent = new CustomEvent('sectionComplete', {
                     detail: {
                       section: data.section,
@@ -664,45 +673,40 @@ const DocumentManager = ({ analysisProgress, setAnalysisProgress, setSectionStat
                     }
                   });
                   document.querySelector('[data-agent-type="career"]')?.dispatchEvent(completeEvent);
-                } else if (data.type === 'analysis_complete') {
-                  console.log('Analysis completed:', data);
-
-                  // Update state directly for immediate UI feedback
-                  setAnalysisProgress(prev => ({
+                }
+              } else if (data.type === 'analysis_complete') {
+                console.log('Analysis completed:', data);
+                
+                // Update state directly for immediate UI feedback
+                setAnalysisProgress(prev => ({
+                  ...prev,
+                  isAnalyzing: false,
+                  currentSection: null,
+                  progress: data.success ? 100 : prev.progress,
+                  error: data.error || null
+                }));
+                
+                // If backend returns complete data, merge it with existing professionalData
+                if (data.professional_data) {
+                  const finalData = data.professional_data;
+                  setProfessionalData(prev => ({
                     ...prev,
-                    isAnalyzing: false,
-                    currentSection: null,
-                    progress: data.success ? 100 : prev.progress,
-                    error: data.error || null
+                    ...finalData
                   }));
-
-                  // If backend returns complete data, merge it with existing professionalData
-                  if (data.professional_data) {
-                    const finalData = data.professional_data;
-                    setProfessionalData(prev => ({
-                      ...prev,
-                      ...finalData
-                    }));
-                  }
-
-                  // Add completion notification
-                  if (data.success) {
-                    addNotification({
-                      type: 'complete',
-                      title: 'Analysis Complete!',
-                      message: 'Your comprehensive career analysis is now ready',
-                      details: 'All sections have been analyzed. Explore your insights to discover new opportunities.'
-                    });
-                  } else if (data.error) {
-                    addNotification({
-                      type: 'error',
-                      title: 'Analysis Failed',
-                      message: 'There was an error completing your career analysis',
-                      details: data.error
-                    });
-                  }
-
-                  // Also dispatch event for compatibility
+                }
+                
+                // Add completion notification
+                if (data.success) {
+                  addNotification({
+                    type: 'complete',
+                    title: '✅ Resume Analysis Complete',
+                    message: 'Resume analysis completed successfully! All insights are now available in your career profile.',
+                    timestamp: Date.now()
+                  });
+                }
+                
+                // Also dispatch event for compatibility (browser only)
+                if (typeof document !== 'undefined' && typeof document.querySelector === 'function') {
                   const analysisCompleteEvent = new CustomEvent('analysisComplete', {
                     detail: {
                       success: data.success,
@@ -711,11 +715,11 @@ const DocumentManager = ({ analysisProgress, setAnalysisProgress, setSectionStat
                     }
                   });
                   document.querySelector('[data-agent-type="career"]')?.dispatchEvent(analysisCompleteEvent);
-                  break;
                 }
-              } catch (parseError) {
-                console.error('Error parsing streaming data:', parseError);
+                break;
               }
+            } catch (parseError) {
+              console.error('Error parsing streaming data:', parseError);
             }
           }
         }
@@ -922,7 +926,20 @@ const CareerAgent = () => {
       currentRole: '',
       currentIndustry: '',
       currentCompany: '',
-      location: ''
+      location: '',
+      marketPosition: {
+        competitiveness: 0,
+        skillRelevance: 0,
+        industryDemand: 0,
+        careerPotential: 0
+      }
+    },
+    educationBackground: {
+      highestDegree: '',
+      totalYearsOfEducation: 0,
+      educationTimeline: [],
+      certifications: [],
+      academicAchievements: []
     },
     workExperience: {
       totalYears: 0,
@@ -960,12 +977,6 @@ const CareerAgent = () => {
       softSkills: [],
       coreStrengths: [],
       developmentAreas: []
-    },
-    marketPosition: {
-      competitiveness: 0,
-      skillRelevance: 0,
-      industryDemand: 0,
-      careerPotential: 0
     },
     careerTrajectory: [],
     strengthsWeaknesses: {
@@ -1021,7 +1032,7 @@ const CareerAgent = () => {
 
     if (tabParam) {
       // Map tab parameter to valid insightsTab values
-      const validTabs = ['identity', 'work', 'skills', 'market', 'salary'];
+      const validTabs = ['identity', 'education', 'work', 'skills', 'market', 'salary'];
       if (validTabs.includes(tabParam)) {
         setActiveTab('insights'); // Switch to insights tab
         setInsightsTab(tabParam); // Set the specific insights tab
@@ -1236,24 +1247,24 @@ const CareerAgent = () => {
       }
     };
     
-    // Add event listeners to the component element
-    const element = document.querySelector('[data-agent-type="career"]');
-    if (element) {
-      element.addEventListener('careerInsightsReceived', handleCareerInsightsReceived);
-      element.addEventListener('analysisProgress', handleAnalysisProgress);
-      element.addEventListener('sectionComplete', handleSectionComplete);
-      element.addEventListener('analysisComplete', handleAnalysisComplete);
-    }
-    
-    // Clean up event listeners on component unmount
-    return () => {
+    // Add event listeners to the component element (browser only)
+    if (typeof document !== 'undefined' && typeof document.querySelector === 'function') {
+      const element = document.querySelector('[data-agent-type="career"]');
       if (element) {
-        element.removeEventListener('careerInsightsReceived', handleCareerInsightsReceived);
-        element.removeEventListener('analysisProgress', handleAnalysisProgress);
-        element.removeEventListener('sectionComplete', handleSectionComplete);
-        element.removeEventListener('analysisComplete', handleAnalysisComplete);
+        element.addEventListener('careerInsightsReceived', handleCareerInsightsReceived);
+        element.addEventListener('analysisProgress', handleAnalysisProgress);
+        element.addEventListener('sectionComplete', handleSectionComplete);
+        element.addEventListener('analysisComplete', handleAnalysisComplete);
+
+        // Clean up event listeners on component unmount
+        return () => {
+          element.removeEventListener('careerInsightsReceived', handleCareerInsightsReceived);
+          element.removeEventListener('analysisProgress', handleAnalysisProgress);
+          element.removeEventListener('sectionComplete', handleSectionComplete);
+          element.removeEventListener('analysisComplete', handleAnalysisComplete);
+        };
       }
-    };
+    }
   }, []);
 
   // Load stored career insights when user is available
@@ -1400,14 +1411,15 @@ const CareerAgent = () => {
 
   // Notification management functions
   const addNotification = (notification) => {
-    // Generate unique ID using timestamp + random number
+    // Generate unique ID using timestamp + random number to avoid collisions
     const uniqueId = notification.id || `notification-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
     const newNotification = {
       id: uniqueId,
       timestamp: Date.now(),
       ...notification
     };
-    
+
     // Only check for duplicates if a custom ID is provided
     // This allows section completion notifications to accumulate while preventing specific duplicates
     setNotifications(prev => {
@@ -1492,6 +1504,7 @@ const CareerAgent = () => {
 
       setSectionStatus({
         professionalIdentity: 'pending',
+        educationBackground: 'pending',
         workExperience: 'pending',
         skillsAnalysis: 'pending',
         marketPosition: 'pending',
@@ -1502,10 +1515,18 @@ const CareerAgent = () => {
 
       // Clear existing professional data to prepare for new analysis
       setProfessionalData({
-        professionalIdentity: { title: '', summary: '', keyHighlights: [], currentRole: '', currentIndustry: '', currentCompany: '', location: '' },
+        professionalIdentity: {
+          title: '',
+          summary: '',
+          keyHighlights: [],
+          currentRole: '',
+          currentIndustry: '',
+          currentCompany: '',
+          location: '',
+          marketPosition: { competitiveness: 0, skillRelevance: 0, industryDemand: 0, careerPotential: 0 }
+        },
         workExperience: { totalYears: 0, timelineStart: null, timelineEnd: null, analytics: { workingYears: { years: '', period: '' }, heldRoles: { count: '', longest: '' }, heldTitles: { count: '', shortest: '' }, companies: { count: '', longest: '' }, insights: { gaps: '', shortestTenure: '', companySize: '', averageRoleDuration: '' } }, companies: [], industries: [] },
         skillsAnalysis: { hardSkills: [], softSkills: [], coreStrengths: [], developmentAreas: [] },
-        marketPosition: { competitiveness: 0, skillRelevance: 0, industryDemand: 0, careerPotential: 0 },
         careerTrajectory: [],
         strengthsWeaknesses: { strengths: [], weaknesses: [] },
         salaryAnalysis: { currentSalary: null, historicalTrends: [], marketComparison: null, predictedGrowth: null, salaryFactors: [], recommendations: [] }
@@ -1538,67 +1559,66 @@ const CareerAgent = () => {
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
-      let buffer = ''; // Buffer to accumulate incomplete data
+      let buffer = ''; // Buffer to accumulate incomplete lines
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
 
-        // Append new chunk to buffer
-        buffer += decoder.decode(value, { stream: true });
+        // Decode and append to buffer
+        const chunk = decoder.decode(value, { stream: true });
+        buffer += chunk;
 
-        // Split by double newline to get complete SSE messages
-        const messages = buffer.split('\n\n');
+        // Split by newlines, but keep the last incomplete line in buffer
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || ''; // Keep last incomplete line
 
-        // Keep the last (possibly incomplete) message in the buffer
-        buffer = messages.pop() || '';
+        for (const line of lines) {
+          if (line.trim() && line.startsWith('data: ')) {
+            try {
+              const jsonString = line.slice(6).trim();
+              if (!jsonString) continue; // Skip empty data lines
 
-        for (const message of messages) {
-          const lines = message.split('\n');
-          for (const line of lines) {
-            if (line.trim() && line.startsWith('data: ')) {
-              try {
-                const jsonStr = line.slice(6).trim();
-                if (!jsonStr) continue; // Skip empty data
+              const data = JSON.parse(jsonString);
 
-                const data = JSON.parse(jsonStr);
+              // Handle different types of streaming responses
+              if (data.type === 'error') {
+                // Handle error from streaming response
+                console.error('Streaming analysis error:', data.message);
+                setAnalysisProgress(prev => ({
+                  ...prev,
+                  isAnalyzing: false,
+                  error: data.message
+                }));
 
-                // Handle different types of streaming responses
-                if (data.type === 'error') {
-                  // Handle error from streaming response
-                  console.error('Streaming analysis error:', data.message);
-                  setAnalysisProgress(prev => ({
-                    ...prev,
-                    isAnalyzing: false,
-                    error: data.message
-                  }));
-
-                  addNotification({
-                    type: 'error',
-                    title: 'Analysis Error',
-                    message: data.message || 'An error occurred during analysis',
-                    details: data.error_details ? JSON.stringify(data.error_details) : ''
-                  });
-                  break; // Stop processing further chunks
-                } else if (data.type === 'status') {
-                  // Handle status updates
-                  console.log('Analysis status:', data.message, 'Progress:', data.progress);
-                  setAnalysisProgress(prev => ({
-                    ...prev,
-                    progress: data.progress || prev.progress,
-                    currentSection: data.message
-                  }));
-                } else if (data.type === 'section_progress') {
-                // Dispatch section progress event
-                const progressEvent = new CustomEvent('analysisProgress', {
-                  detail: {
-                    section: data.section,
-                    status: 'analyzing',
-                    progress: data.progress,
-                    totalSections: data.total_sections || 7
-                  }
+                addNotification({
+                  type: 'error',
+                  title: 'Analysis Error',
+                  message: data.message || 'An error occurred during analysis',
+                  details: data.error_details ? JSON.stringify(data.error_details) : ''
                 });
-                document.querySelector('[data-agent-type="career"]')?.dispatchEvent(progressEvent);
+                break; // Stop processing further chunks
+              } else if (data.type === 'status') {
+                // Handle status updates
+                console.log('Analysis status:', data.message, 'Progress:', data.progress);
+                setAnalysisProgress(prev => ({
+                  ...prev,
+                  progress: data.progress || prev.progress,
+                  currentSection: data.message
+                }));
+              } else if (data.type === 'section_progress') {
+                // Dispatch section progress event (browser only)
+                if (typeof document !== 'undefined' && typeof document.querySelector === 'function') {
+                  const progressEvent = new CustomEvent('analysisProgress', {
+                    detail: {
+                      section: data.section,
+                      status: 'analyzing',
+                      progress: data.progress,
+                      totalSections: data.total_sections || 7
+                    }
+                  });
+                  document.querySelector('[data-agent-type="career"]')?.dispatchEvent(progressEvent);
+                }
               } else if (data.type === 'section_complete') {
                 console.log('Section completed:', data.section, data.data);
                 
@@ -1623,30 +1643,33 @@ const CareerAgent = () => {
                   return newStatus;
                 });
                 
-                // Dispatch section completion event
-                const completeEvent = new CustomEvent('sectionComplete', {
-                  detail: {
-                    section: data.section,
-                    data: data.data,
-                    error: data.error
-                  }
-                });
-                document.querySelector('[data-agent-type="career"]')?.dispatchEvent(completeEvent);
+                // Dispatch section completion event (browser only)
+                if (typeof document !== 'undefined' && typeof document.querySelector === 'function') {
+                  const completeEvent = new CustomEvent('sectionComplete', {
+                    detail: {
+                      section: data.section,
+                      data: data.data,
+                      error: data.error
+                    }
+                  });
+                  document.querySelector('[data-agent-type="career"]')?.dispatchEvent(completeEvent);
+                }
               } else if (data.type === 'analysis_complete') {
-                // Dispatch analysis completion event
-                const analysisCompleteEvent = new CustomEvent('analysisComplete', {
-                  detail: {
-                    success: data.success,
-                    error: data.error,
-                    professional_data: data.professional_data
-                  }
-                });
-                document.querySelector('[data-agent-type="career"]')?.dispatchEvent(analysisCompleteEvent);
+                // Dispatch analysis completion event (browser only)
+                if (typeof document !== 'undefined' && typeof document.querySelector === 'function') {
+                  const analysisCompleteEvent = new CustomEvent('analysisComplete', {
+                    detail: {
+                      success: data.success,
+                      error: data.error,
+                      professional_data: data.professional_data
+                    }
+                  });
+                  document.querySelector('[data-agent-type="career"]')?.dispatchEvent(analysisCompleteEvent);
+                }
                 break;
               }
-              } catch (parseError) {
-                console.error('Error parsing streaming data:', parseError);
-              }
+            } catch (parseError) {
+              console.error('Error parsing streaming data:', parseError);
             }
           }
         }
@@ -1770,7 +1793,13 @@ const careerInsights = {
         'Earned multiple promotions over the years',
         'At or near the Director level in current company',
         'Demonstrates leadership and executive-oriented mindset'
-      ]
+      ],
+      marketPosition: {
+        competitiveness: 85,
+        skillRelevance: 92,
+        industryDemand: 78,
+        careerPotential: 88
+      }
     },
     skillsAnalysis: {
       coreStrengths: [
@@ -1795,12 +1824,6 @@ const careerInsights = {
         'Leadership experience through project management',
         'Cross-functional collaboration skills'
       ]
-    },
-    marketPosition: {
-      competitiveness: 85,
-      skillRelevance: 92,
-      industryDemand: 78,
-      careerPotential: 88
     },
     workLifeBalance: {
       balanceScore: 7.2,
@@ -3280,9 +3303,194 @@ const careerInsights = {
                   </div>
                 </div>
               )}
+
+              {/* Market Position Assessment Card */}
+              {professionalData.professionalIdentity?.marketPosition && (
+                <div className="bg-white rounded-xl shadow-sm p-6 mt-6">
+                  <div className="flex items-center space-x-3 mb-6">
+                    <ScaleIcon className="h-6 w-6 text-indigo-600" />
+                    <h3 className="text-xl font-semibold text-gray-900">Market Position Assessment</h3>
+                  </div>
+
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    {/* Competitiveness */}
+                    <div className="text-center p-4 bg-gradient-to-br from-green-50 to-blue-50 rounded-lg border border-green-100 hover:shadow-md transition-shadow">
+                      <div className="w-16 h-16 mx-auto mb-2 bg-gradient-to-r from-green-400 to-blue-500 rounded-full flex items-center justify-center shadow-md">
+                        <span className="text-xl font-bold text-white">{professionalData.professionalIdentity.marketPosition.competitiveness}%</span>
+                      </div>
+                      <h4 className="font-semibold text-gray-900 text-sm mb-1">Competitiveness</h4>
+                      <p className="text-xs text-gray-600">
+                        {professionalData.professionalIdentity.marketPosition.competitiveness >= 80 ? 'Above average' :
+                         professionalData.professionalIdentity.marketPosition.competitiveness >= 60 ? 'Average' : 'Below average'}
+                      </p>
+                    </div>
+
+                    {/* Skill Relevance */}
+                    <div className="text-center p-4 bg-gradient-to-br from-purple-50 to-pink-50 rounded-lg border border-purple-100 hover:shadow-md transition-shadow">
+                      <div className="w-16 h-16 mx-auto mb-2 bg-gradient-to-r from-purple-400 to-pink-500 rounded-full flex items-center justify-center shadow-md">
+                        <span className="text-xl font-bold text-white">{professionalData.professionalIdentity.marketPosition.skillRelevance}%</span>
+                      </div>
+                      <h4 className="font-semibold text-gray-900 text-sm mb-1">Skill Relevance</h4>
+                      <p className="text-xs text-gray-600">
+                        {professionalData.professionalIdentity.marketPosition.skillRelevance >= 90 ? 'Highly relevant' :
+                         professionalData.professionalIdentity.marketPosition.skillRelevance >= 70 ? 'Relevant' : 'Needs update'}
+                      </p>
+                    </div>
+
+                    {/* Industry Demand */}
+                    <div className="text-center p-4 bg-gradient-to-br from-yellow-50 to-orange-50 rounded-lg border border-yellow-100 hover:shadow-md transition-shadow">
+                      <div className="w-16 h-16 mx-auto mb-2 bg-gradient-to-r from-yellow-400 to-orange-500 rounded-full flex items-center justify-center shadow-md">
+                        <span className="text-xl font-bold text-white">{professionalData.professionalIdentity.marketPosition.industryDemand}%</span>
+                      </div>
+                      <h4 className="font-semibold text-gray-900 text-sm mb-1">Industry Demand</h4>
+                      <p className="text-xs text-gray-600">
+                        {professionalData.professionalIdentity.marketPosition.industryDemand >= 75 ? 'High demand' :
+                         professionalData.professionalIdentity.marketPosition.industryDemand >= 50 ? 'Moderate' : 'Low demand'}
+                      </p>
+                    </div>
+
+                    {/* Career Potential */}
+                    <div className="text-center p-4 bg-gradient-to-br from-teal-50 to-cyan-50 rounded-lg border border-teal-100 hover:shadow-md transition-shadow">
+                      <div className="w-16 h-16 mx-auto mb-2 bg-gradient-to-r from-teal-400 to-cyan-500 rounded-full flex items-center justify-center shadow-md">
+                        <span className="text-xl font-bold text-white">{professionalData.professionalIdentity.marketPosition.careerPotential}%</span>
+                      </div>
+                      <h4 className="font-semibold text-gray-900 text-sm mb-1">Career Potential</h4>
+                      <p className="text-xs text-gray-600">
+                        {professionalData.professionalIdentity.marketPosition.careerPotential >= 85 ? 'Strong growth' :
+                         professionalData.professionalIdentity.marketPosition.careerPotential >= 65 ? 'Moderate' : 'Limited'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             )}
+
+            {/* Education Background Section */}
+            {insightsTab === 'education' && (
+              <div className="space-y-6">
+                {/* Education Overview Card */}
+                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-6 border border-indigo-200">
+                  <div className="flex items-center space-x-3 mb-4">
+                    <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg">
+                      <AcademicCapIcon className="h-6 w-6 text-white" />
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-bold text-gray-900">
+                        {professionalData.educationBackground?.highestDegree || 'Education Background'}
+                      </h3>
+                      <p className="text-sm text-gray-600">
+                        {professionalData.educationBackground?.totalYearsOfEducation > 0
+                          ? `${professionalData.educationBackground.totalYearsOfEducation} years of higher education`
+                          : 'Educational history and qualifications'
+                        }
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Education Timeline */}
+                {professionalData.educationBackground?.educationTimeline?.length > 0 ? (
+                  <div className="bg-white rounded-xl shadow-sm p-6">
+                    <h4 className="text-lg font-semibold text-gray-900 mb-6 flex items-center">
+                      <CalendarIcon className="h-5 w-5 mr-2 text-indigo-600" />
+                      Educational Journey
+                    </h4>
+
+                    <div className="space-y-4">
+                      {professionalData.educationBackground.educationTimeline.map((edu, index) => (
+                        <div key={index} className={`${edu.bgColor || 'bg-blue-50'} rounded-lg p-4 border-l-4 border-indigo-500 hover:shadow-md transition-shadow duration-200`}>
+                          <div className="flex justify-between items-start">
+                            <div className="flex-1">
+                              <h5 className="font-bold text-gray-900 text-lg">{edu.institution}</h5>
+                              <p className="text-indigo-600 font-semibold mt-1">{edu.degree} in {edu.major}</p>
+                              <p className="text-sm text-gray-600 mt-1">
+                                {edu.startYear} - {edu.endYear}
+                                {edu.gpa && edu.gpa !== 'Not specified' && ` • GPA: ${edu.gpa}`}
+                                {edu.honors && edu.honors !== 'None' && ` • ${edu.honors}`}
+                              </p>
+
+                              {edu.relevantCoursework && edu.relevantCoursework.length > 0 && (
+                                <div className="mt-3">
+                                  <p className="text-xs font-semibold text-gray-700 mb-2">Relevant Coursework:</p>
+                                  <div className="flex flex-wrap gap-2">
+                                    {edu.relevantCoursework.map((course, i) => (
+                                      <span key={i} className="px-2 py-1 bg-white rounded text-xs text-gray-700 border border-gray-200 hover:border-indigo-300 transition-colors">
+                                        {course}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="bg-white rounded-xl shadow-sm p-8 text-center">
+                    <AcademicCapIcon className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+                    <h4 className="text-lg font-medium text-gray-700 mb-2">Education Timeline</h4>
+                    <p className="text-gray-500">
+                      {analysisProgress.isAnalyzing && (analysisProgress.currentSection === 'educationBackground' || sectionStatus.educationBackground === 'analyzing')
+                        ? 'Extracting educational qualifications...'
+                        : 'Upload your resume to begin education analysis'}
+                    </p>
+                  </div>
+                )}
+
+                {/* Professional Certifications */}
+                {professionalData.educationBackground?.certifications?.length > 0 && (
+                  <div className="bg-white rounded-xl shadow-sm p-6">
+                    <h4 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                      <TrophyIcon className="h-5 w-5 mr-2 text-yellow-600" />
+                      Professional Certifications
+                    </h4>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {professionalData.educationBackground.certifications.map((cert, index) => (
+                        <div key={index} className="bg-gradient-to-br from-yellow-50 to-orange-50 rounded-lg p-4 border border-yellow-200 hover:shadow-md transition-shadow duration-200">
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <h5 className="font-bold text-gray-900">{cert.name}</h5>
+                              <p className="text-sm text-gray-600 mt-1">{cert.issuer}</p>
+                              <p className="text-xs text-gray-500 mt-1">{cert.year}</p>
+                            </div>
+                            <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                              cert.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'
+                            }`}>
+                              {cert.status}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Academic Achievements */}
+                {professionalData.educationBackground?.academicAchievements?.length > 0 && (
+                  <div className="bg-white rounded-xl shadow-sm p-6">
+                    <h4 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                      <StarIcon className="h-5 w-5 mr-2 text-purple-600" />
+                      Academic Achievements
+                    </h4>
+
+                    <ul className="space-y-2">
+                      {professionalData.educationBackground.academicAchievements.map((achievement, index) => (
+                        <li key={index} className="flex items-start hover:bg-gray-50 p-2 rounded transition-colors">
+                          <CheckCircleIcon className="h-5 w-5 text-green-500 mr-2 flex-shrink-0 mt-0.5" />
+                          <span className="text-gray-700">{achievement}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Industry Experience & Work History Section */}
             {insightsTab === 'work' && (
             <div className="space-y-8">
@@ -4282,44 +4490,6 @@ const careerInsights = {
               </div>
             </div>
             )}
-              {insightsTab === 'market' && (/* Market Position & Competitiveness */
-            <div className="bg-white rounded-2xl shadow-lg p-8">
-              <div className="flex items-center space-x-3 mb-6">
-                <ScaleIcon className="h-6 w-6 text-indigo-600" />
-                <h3 className="text-xl font-semibold text-gray-900">Market Position & Competitiveness</h3>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <div className="text-center">
-                  <div className="w-20 h-20 mx-auto mb-3 bg-gradient-to-r from-green-400 to-blue-500 rounded-full flex items-center justify-center">
-                    <span className="text-2xl font-bold text-white">{professionalData.marketPosition?.competitiveness || 'N/A'}%</span>
-                  </div>
-                  <h4 className="font-semibold text-gray-900 mb-1">Market Competitiveness</h4>
-                  <p className="text-sm text-gray-600">{(professionalData.marketPosition?.competitiveness || 0) >= 80 ? 'Above industry average' : (professionalData.marketPosition?.competitiveness || 0) >= 60 ? 'Industry average' : 'Below industry average'}</p>
-                </div>
-                <div className="text-center">
-                  <div className="w-20 h-20 mx-auto mb-3 bg-gradient-to-r from-purple-400 to-pink-500 rounded-full flex items-center justify-center">
-                    <span className="text-2xl font-bold text-white">{professionalData.marketPosition?.skillRelevance || 'N/A'}%</span>
-                  </div>
-                  <h4 className="font-semibold text-gray-900 mb-1">Skill Relevance</h4>
-                  <p className="text-sm text-gray-600">{(professionalData.marketPosition?.skillRelevance || 0) >= 90 ? 'Highly relevant skills' : (professionalData.marketPosition?.skillRelevance || 0) >= 70 ? 'Relevant skills' : 'Skills need updating'}</p>
-                </div>
-                <div className="text-center">
-                  <div className="w-20 h-20 mx-auto mb-3 bg-gradient-to-r from-yellow-400 to-orange-500 rounded-full flex items-center justify-center">
-                    <span className="text-2xl font-bold text-white">{professionalData.marketPosition?.industryDemand || 'N/A'}%</span>
-                  </div>
-                  <h4 className="font-semibold text-gray-900 mb-1">Industry Demand</h4>
-                  <p className="text-sm text-gray-600">{(professionalData.marketPosition?.industryDemand || 0) >= 75 ? 'High demand sector' : (professionalData.marketPosition?.industryDemand || 0) >= 50 ? 'Moderate demand' : 'Low demand sector'}</p>
-                </div>
-                <div className="text-center">
-                  <div className="w-20 h-20 mx-auto mb-3 bg-gradient-to-r from-teal-400 to-cyan-500 rounded-full flex items-center justify-center">
-                    <span className="text-2xl font-bold text-white">{professionalData.marketPosition?.careerPotential || 'N/A'}%</span>
-                  </div>
-                  <h4 className="font-semibold text-gray-900 mb-1">Career Potential</h4>
-                  <p className="text-sm text-gray-600">{(professionalData.marketPosition?.careerPotential || 0) >= 85 ? 'Strong growth potential' : (professionalData.marketPosition?.careerPotential || 0) >= 65 ? 'Moderate growth potential' : 'Limited growth potential'}</p>
-                </div>
-              </div>
-            </div>
-            )}
           </div>
         );
 
@@ -4590,11 +4760,11 @@ const careerInsights = {
                   </button>
                   {isInsightsMenuOpen && activeTab === 'insights' && (
                     <div className="pl-6 pt-4 space-y-1">
-                      {[{ id: 'identity', label: 'Professional Identity', section: 'professionalIdentity' }, 
-                        { id: 'work', label: 'Work Experience Analysis', section: 'workExperience' }, 
-                        { id: 'salary', label: 'Salary Analysis', section: 'salaryAnalysis' }, 
-                        { id: 'skills', label: 'Skills Analysis', section: 'skillsAnalysis' }, 
-                        { id: 'market', label: 'Market Position Analysis', section: 'marketPosition' }].map((item) => (
+                      {[{ id: 'identity', label: 'Professional Identity', section: 'professionalIdentity' },
+                        { id: 'education', label: 'Education Background', section: 'educationBackground' },
+                        { id: 'work', label: 'Work Experience Analysis', section: 'workExperience' },
+                        { id: 'salary', label: 'Salary Analysis', section: 'salaryAnalysis' },
+                        { id: 'skills', label: 'Skills Analysis', section: 'skillsAnalysis' }].map((item) => (
                         <button
                           key={item.id}
                           onClick={() => setInsightsTab(item.id)}

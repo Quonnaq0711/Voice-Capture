@@ -34,6 +34,24 @@ def _generate_basic_fallback_summaries(professional_data: Dict[str, Any]) -> Dic
         years = work_exp.get('totalYears', 0)
         summaries['work_experience'] = f"{years} years of progressive experience with proven track record"
 
+    # Education Background fallback
+    if professional_data.get('educationBackground'):
+        education = professional_data['educationBackground']
+        highest_degree = education.get('highestDegree', {})
+        if highest_degree:
+            # Handle both string and dict formats for highestDegree
+            if isinstance(highest_degree, str):
+                summaries['education_background'] = highest_degree
+            elif isinstance(highest_degree, dict):
+                degree_level = highest_degree.get('level', 'Degree')
+                field = highest_degree.get('field', 'field of study')
+                summaries['education_background'] = f"{degree_level} in {field}"
+            else:
+                summaries['education_background'] = "Educational background available"
+        else:
+            degrees_count = len(education.get('degrees', []))
+            summaries['education_background'] = f"{degrees_count} degree{'s' if degrees_count > 1 else ''} with strong academic foundation"
+
     # Skills Analysis fallback
     if professional_data.get('skillsAnalysis'):
         skills = professional_data['skillsAnalysis']
@@ -121,6 +139,54 @@ async def get_career_insights_summary(
                 }
             })
 
+        # Education Background Insight (moved before Work Experience)
+        if professional_data.get('educationBackground'):
+            education = professional_data['educationBackground']
+            degrees = education.get('degrees', [])
+            highest_degree = education.get('highestDegree', {})
+
+            # Get dashboard summary or create fallback description
+            description = dashboard_summaries.get('education_background')
+
+            if not description:
+                # Create fallback description based on available data
+                if highest_degree:
+                    # Handle both string and dict formats for highestDegree
+                    if isinstance(highest_degree, str):
+                        description = highest_degree
+                    elif isinstance(highest_degree, dict):
+                        degree_level = highest_degree.get('level', 'Degree')
+                        field = highest_degree.get('field', 'field of study')
+                        institution = highest_degree.get('institution', '')
+                        if institution:
+                            description = f"{degree_level} in {field} from {institution}"
+                        else:
+                            description = f"{degree_level} in {field}"
+                    else:
+                        description = "Educational background available"
+                elif degrees:
+                    degree_count = len(degrees)
+                    description = f"{degree_count} degree{'s' if degree_count > 1 else ''} with strong academic foundation"
+                else:
+                    description = "Educational background and academic achievements available"
+
+            insights.append({
+                "id": "education_background",
+                "title": "Education Background",
+                "description": description,
+                "type": "career",
+                "priority": "medium",
+                "icon": "AcademicCapIcon",
+                "color": "bg-indigo-500",
+                "action": "View Education Details",
+                "details": {
+                    "degrees": degrees,
+                    "highestDegree": highest_degree,
+                    "certifications": education.get('certifications', []),
+                    "relevance": education.get('relevance', {})
+                }
+            })
+
         # Work Experience Analysis Insight
         if professional_data.get('workExperience'):
             work_exp = professional_data['workExperience']
@@ -146,7 +212,7 @@ async def get_career_insights_summary(
                 }
             })
 
-        # Salary Analysis Insight (moved to 3rd position to match Career Agent sidebar)
+        # Salary Analysis Insight
         if professional_data.get('salaryAnalysis'):
             salary = professional_data['salaryAnalysis']
 
@@ -248,6 +314,7 @@ async def get_career_insights_summary(
         }
 
     except Exception as e:
+        logger.error(f"Error in get_career_insights_summary: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error retrieving career insights: {str(e)}"
