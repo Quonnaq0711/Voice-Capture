@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { profile as profileAPI, activities as activitiesAPI, careerInsights as careerInsightsAPI, dailyRecommendations as dailyRecommendationsAPI } from '../services/api';
 import PersonalAssistant from './PersonalAssistant';
 import CircularAgents from './CircularAgents';
+import AgentDesignModal from './AgentDesignModal';
 
 // Import Heroicons
 import { BriefcaseIcon, CurrencyDollarIcon, HeartIcon, GlobeAltIcon, UserCircleIcon, SparklesIcon, HomeIcon, BookOpenIcon, AcademicCapIcon, FireIcon, SunIcon, ChatBubbleLeftRightIcon, CommandLineIcon, LightBulbIcon, ArrowTrendingUpIcon, ClockIcon, StarIcon, ChevronLeftIcon, ChevronRightIcon, ChevronDownIcon, ChevronUpIcon, CpuChipIcon, CheckCircleIcon, UserGroupIcon } from '@heroicons/react/24/outline';
@@ -59,6 +60,8 @@ const Dashboard = () => {
     skillsAnalysis: 'pending',
     marketPosition: 'pending'
   });
+  const [agentModalOpen, setAgentModalOpen] = useState(false);
+  const [selectedAgent, setSelectedAgent] = useState(null);
 
 
   // Fetch user data and avatar on component mount
@@ -1342,7 +1345,13 @@ const fetchAvatar = async () => {
             </button>
 
             <button
-              onClick={() => navigate('/agents/travel')}
+              onClick={() => {
+                setSelectedAgent({
+                  title: 'Travel Agent',
+                  imageSrc: '/design/Travel Agent 2.0.png'
+                });
+                setAgentModalOpen(true);
+              }}
               className="w-full bg-gradient-to-r from-indigo-500 to-purple-500 text-white px-6 py-4 rounded-lg font-medium hover:from-indigo-600 hover:to-purple-600 transition-all duration-200 flex items-center space-x-3"
             >
               <GlobeAltIcon className="h-5 w-5" />
@@ -1350,7 +1359,13 @@ const fetchAvatar = async () => {
             </button>
 
             <button
-              onClick={() => navigate('/agents/body')}
+              onClick={() => {
+                setSelectedAgent({
+                  title: 'Body Agent',
+                  imageSrc: '/design/Body Agent.png'
+                });
+                setAgentModalOpen(true);
+              }}
               className="w-full bg-gradient-to-r from-purple-500 to-pink-500 text-white px-6 py-4 rounded-lg font-medium hover:from-purple-600 hover:to-pink-600 transition-all duration-200 flex items-center space-x-3"
             >
               <SparklesIcon className="h-5 w-5" />
@@ -1852,6 +1867,17 @@ const fetchAvatar = async () => {
           </div>
         </footer>
       </main>
+
+      {/* Agent Design Modal */}
+      <AgentDesignModal
+        isOpen={agentModalOpen}
+        onClose={() => {
+          setAgentModalOpen(false);
+          setSelectedAgent(null);
+        }}
+        imageSrc={selectedAgent?.imageSrc}
+        title={selectedAgent?.title}
+      />
     </div>
   );
 };
