@@ -52,7 +52,7 @@ const Dashboard = () => {
   const [insightsTab, setInsightsTab] = useState('identity');
    const [showInsightsSubTabs, setShowInsightsSubTabs] = useState(false);
   const [analysisProgress] = useState({ isAnalyzing: false });
-  const [showDashboardSubTabs, setShowDasboardSubTabs] = useState(true);
+  const [showDashboardSubTabs, setShowDashboardSubTabs] = useState(true);
   const [sectionStatus] = useState({
     professionalIdentity: 'completed',
     workExperience: 'completed',
@@ -481,7 +481,7 @@ const fetchAvatar = async () => {
   };
   
     const handleDashboardToggle = () => {
-    setShowDasboardSubTabs(!showDashboardSubTabs);
+    setShowDashboardSubTabs(!showDashboardSubTabs);
     if (activeTab !== 'welcome') {
       setActiveTab('welcome');
     }
