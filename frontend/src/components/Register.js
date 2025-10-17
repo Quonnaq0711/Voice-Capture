@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { useAuth } from "../contexts/AuthContext"; 
+import { useAuth } from "../contexts/AuthContext";
 
 const Register = () => {
   const [firstname, setFirstname] = useState("");
@@ -16,6 +16,53 @@ const Register = () => {
 
   const navigate = useNavigate();
   const { register } = useAuth();
+
+  // Use refs to prevent premature clearing
+  const errorTimerRef = useRef(null);
+  const passwordErrorTimerRef = useRef(null);
+
+  // Auto-dismiss error messages after 10 seconds (industry standard + buffer)
+  useEffect(() => {
+    // Clear any existing timer
+    if (errorTimerRef.current) {
+      clearTimeout(errorTimerRef.current);
+    }
+
+    if (error) {
+      // Set new timer with ref to prevent cleanup issues
+      errorTimerRef.current = setTimeout(() => {
+        setError('');
+        errorTimerRef.current = null;
+      }, 10000); // 10 seconds - ensure visibility
+    }
+
+    return () => {
+      if (errorTimerRef.current) {
+        clearTimeout(errorTimerRef.current);
+      }
+    };
+  }, [error]);
+
+  // Auto-dismiss password error messages after 10 seconds
+  useEffect(() => {
+    // Clear any existing timer
+    if (passwordErrorTimerRef.current) {
+      clearTimeout(passwordErrorTimerRef.current);
+    }
+
+    if (passwordError) {
+      passwordErrorTimerRef.current = setTimeout(() => {
+        setPasswordError('');
+        passwordErrorTimerRef.current = null;
+      }, 10000);
+    }
+
+    return () => {
+      if (passwordErrorTimerRef.current) {
+        clearTimeout(passwordErrorTimerRef.current);
+      }
+    };
+  }, [passwordError]);
 
   // Password strength calculation
   const getPasswordStrength = (pwd) => {
@@ -57,12 +104,16 @@ const Register = () => {
       return setPasswordError(pwdError);
     }
 
+    // Don't clear errors immediately - let user read them if retrying
+    // Only start loading state
+    setLoading(true);
+
     try {
+      await register(firstname, lastname, email, password);
+
+      // Clear errors only on successful registration
       setError("");
       setPasswordError("");
-      setLoading(true);
-
-      await register(firstname, lastname, email, password);
 
       localStorage.setItem("registrationDate", new Date().toISOString());
       localStorage.setItem("isFirstTimeUser", "true");
@@ -92,10 +143,38 @@ const Register = () => {
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
           {/* Error messages */}
           {error && (
-            <div className="rounded-md bg-red-50 p-4 text-sm text-red-700">{error}</div>
+            <div className="rounded-md bg-red-50 p-4 relative animate-fade-in">
+              <div className="flex items-start justify-between">
+                <div className="text-sm text-red-700 flex-1">{error}</div>
+                <button
+                  type="button"
+                  onClick={() => setError('')}
+                  className="ml-3 flex-shrink-0 inline-flex text-red-400 hover:text-red-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 rounded-md p-1 transition-colors"
+                  aria-label="Dismiss"
+                >
+                  <svg className="h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                  </svg>
+                </button>
+              </div>
+            </div>
           )}
           {passwordError && (
-            <div className="rounded-md bg-yellow-50 p-4 text-sm text-yellow-700">{passwordError}</div>
+            <div className="rounded-md bg-yellow-50 p-4 relative animate-fade-in">
+              <div className="flex items-start justify-between">
+                <div className="text-sm text-yellow-700 flex-1">{passwordError}</div>
+                <button
+                  type="button"
+                  onClick={() => setPasswordError('')}
+                  className="ml-3 flex-shrink-0 inline-flex text-yellow-400 hover:text-yellow-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500 rounded-md p-1 transition-colors"
+                  aria-label="Dismiss"
+                >
+                  <svg className="h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                  </svg>
+                </button>
+              </div>
+            </div>
           )}
 
           <div className="space-y-4">

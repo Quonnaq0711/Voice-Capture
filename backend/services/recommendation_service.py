@@ -9,10 +9,10 @@ import asyncio
 from datetime import datetime, timezone
 from typing import Dict, List, Any, Optional
 from sqlalchemy.orm import Session
-from models.daily_recommendation import DailyRecommendation
-from models.user import User
-from models.profile import UserProfile
-from models.career_insight import CareerInsight
+from backend.models.daily_recommendation import DailyRecommendation
+from backend.models.user import User
+from backend.models.profile import UserProfile
+from backend.models.career_insight import CareerInsight
 
 # Configure logging
 logger = logging.getLogger(__name__)

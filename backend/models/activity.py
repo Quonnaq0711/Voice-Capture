@@ -1,10 +1,14 @@
 """
 Model to track all user activities across the platform
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import Column, Integer, String, DateTime, Text, ForeignKey, JSON
 from sqlalchemy.orm import relationship
-from db.database import Base
+from backend.db.database import Base
+
+def utc_now():
+    """Return current UTC time as timezone-aware datetime"""
+    return datetime.now(timezone.utc)
 
 class UserActivity(Base):
     """
@@ -29,8 +33,8 @@ class UserActivity(Base):
     message_id = Column(Integer, ForeignKey("chat_messages.id"), nullable=True)
 
     # Timestamps
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
 
     # Relationships
     user = relationship("User", back_populates="activities")

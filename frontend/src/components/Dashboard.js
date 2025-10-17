@@ -39,7 +39,6 @@ const Dashboard = () => {
   const [isImgError, setImgError] = useState(false);
   const [sidebarExpanded, setSidebarExpanded] = useState(false);
   const [activeTab, setActiveTab] = useState('welcome');
-  const [showSubTabs, setShowSubTabs] = useState(false);
   const [recentActivities, setRecentActivities] = useState([]);
   const [activitySummary, setActivitySummary] = useState(null);
   const [loadingActivities, setLoadingActivities] = useState(false);
@@ -119,7 +118,7 @@ const Dashboard = () => {
     try {
       const data = await profileAPI.getCurrentUser();
       setUserData({
-        name: data.first_name,
+        first_name: data.first_name,  // Fixed: use first_name not name
         email: data.email
       });
     } catch (error) {
@@ -1339,6 +1338,22 @@ const fetchAvatar = async () => {
             >
               <BriefcaseIcon className="h-5 w-5" />
               <span>Career Agent</span>
+            </button>
+
+            <button
+              onClick={() => navigate('/agents/travel')}
+              className="w-full bg-gradient-to-r from-indigo-500 to-purple-500 text-white px-6 py-4 rounded-lg font-medium hover:from-indigo-600 hover:to-purple-600 transition-all duration-200 flex items-center space-x-3"
+            >
+              <GlobeAltIcon className="h-5 w-5" />
+              <span>Travel Agent</span>
+            </button>
+
+            <button
+              onClick={() => navigate('/agents/body')}
+              className="w-full bg-gradient-to-r from-purple-500 to-pink-500 text-white px-6 py-4 rounded-lg font-medium hover:from-purple-600 hover:to-pink-600 transition-all duration-200 flex items-center space-x-3"
+            >
+              <SparklesIcon className="h-5 w-5" />
+              <span>Body Agent</span>
             </button>
           </div>
         </div>

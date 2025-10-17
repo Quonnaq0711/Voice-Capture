@@ -5,7 +5,11 @@ from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Bool
 from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
-from db.database import Base
+from backend.db.database import Base
+
+def utc_now():
+    """Return current UTC time as timezone-aware datetime"""
+    return datetime.now(timezone.utc)
 
 class DailyRecommendation(Base):
     __tablename__ = "daily_recommendations"
@@ -14,8 +18,8 @@ class DailyRecommendation(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     date = Column(DateTime, nullable=False, index=True)  # Date for which recommendations are generated
     recommendations = Column(JSON, nullable=False)  # Array of 3 recommendation objects
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)
 
     # Context data used for generation
     context_data = Column(JSON, nullable=True)  # Profile and resume analysis data used
@@ -44,7 +48,7 @@ class DailyRecommendation(Base):
     def set_recommendations(self, recommendations):
         """Set recommendations list"""
         self.recommendations = recommendations
-        self.updated_at = datetime.now(timezone.utc)
+        self.updated_at = utc_now()
 
     @classmethod
     def get_for_user_and_date(cls, db, user_id: int, target_date: datetime):

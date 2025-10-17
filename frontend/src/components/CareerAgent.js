@@ -1220,7 +1220,7 @@ const CareerAgent = () => {
     try {
       const data = await profileAPI.getCurrentUser();
       setUserData({
-        name: data.first_name,
+        first_name: data.first_name,
         email: data.email
       });
     } catch (error) {

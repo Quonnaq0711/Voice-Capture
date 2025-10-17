@@ -128,18 +128,11 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
      }
   }, [currentSession]);
   
-  // Available agents configuration
+  // Available agents configuration - Only show active agents
   const agents = [
     { name: 'Career Agent', path: '/agents/career', displayName: 'Career' },
-    { name: 'Money Agent', path: '/agents/money', displayName: 'Money' },
-    { name: 'Mind Agent', path: '/agents/mind', displayName: 'Mind' },
     { name: 'Travel Agent', path: '/agents/travel', displayName: 'Travel' },
-    { name: 'Body Agent', path: '/agents/body', displayName: 'Body' },
-    { name: 'Family Life Agent', path: '/agents/family-life', displayName: 'Family Life' },
-    { name: 'Hobby Agent', path: '/agents/hobby', displayName: 'Hobby' },
-    { name: 'Knowledge Agent', path: '/agents/knowledge', displayName: 'Knowledge' },
-    { name: 'Personal Development Agent', path: '/agents/personal-dev', displayName: 'Personal Dev' },
-    { name: 'Spiritual Agent', path: '/agents/spiritual', displayName: 'Spiritual' }
+    { name: 'Body Agent', path: '/agents/body', displayName: 'Body' }
   ];
   
   // Get current agent based on location

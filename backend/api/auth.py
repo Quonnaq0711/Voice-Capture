@@ -7,25 +7,20 @@ from datetime import timedelta, datetime, timezone
 from typing import List
 import aiofiles
 
-from services import password_reset_service
-
-from services.email_service import EmailService
-from services.otp_service import OTPService
-from services.email_validation_service import EmailValidationService
-from services.password_reset_service import PasswordResetService
-from models import schemas
-from models.user import User
-from utils.auth import (
+from backend.services.email_service import EmailService
+from backend.services.otp_service import OTPService
+from backend.services.email_validation_service import EmailValidationService
+from backend.services.password_reset_service import PasswordResetService
+from backend.models import schemas
+from backend.models.user import User
+from backend.utils.auth import (
     get_password_hash,
     verify_password,
     create_access_token,
     get_current_user,
     ACCESS_TOKEN_EXPIRE_MINUTES
 )
-from db.database import get_db
-from services.email_validation_service import EmailValidationService
-
-from services.password_reset_service import PasswordResetService
+from backend.db.database import get_db
 
 router = APIRouter()
 
@@ -152,9 +147,24 @@ async def resend_verification_otp(
 
 @router.post("/token", response_model=schemas.Token)
 async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
-    # Verify user
-    user = db.query(User).filter(User.email == form_data.email).first()
-    if not user or not verify_password(form_data.password, user.hashed_password):
+    # Verify user (OAuth2PasswordRequestForm uses 'username' field, which contains the email)
+    user = db.query(User).filter(User.email == form_data.username).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    # Check if user is active (email verified)
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Please verify your email address before logging in",
+        )
+
+    # Verify password
+    if not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
@@ -247,7 +257,7 @@ async def refresh_token(current_user: User = Depends(get_current_user)):
 # Resume Functions
 
 import uuid
-from models.resume import Resume
+from backend.models.resume import Resume
 
 @router.post("/upload-resume", response_model=schemas.ResumeUploadResponse)
 async def upload_resume(
