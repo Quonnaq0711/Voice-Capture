@@ -4778,60 +4778,62 @@ const careerInsights = {
         </div>
       </div>
 
-      {/* Main Content Area */}
-      <div className="flex-1 flex flex-col">
-        {/* Clean Top Navigation Bar */}
-        <div className="bg-white shadow-sm border-b border-gray-200">
-          {/* Simplified Top Navigation */}
-          <div className="flex items-center justify-between px-8 py-4">
-             <div className="flex items-center">
-              {/* Elegantly Positioned Back to Dashboard Button */}
-              <button
-                onClick={handleBackToDashboard}
-                className="group flex items-center space-x-3 px-5 py-2.5 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gradient-to-r hover:from-gray-50 hover:to-gray-100 rounded-xl transition-all duration-300 border border-gray-200 hover:border-gray-300 shadow-sm hover:shadow-md"
-              >
-                <ArrowLeftIcon className="h-5 w-5 text-gray-400 group-hover:text-gray-600 transition-all duration-300 group-hover:-translate-x-0.5" />
-                <span className="font-semibold tracking-wide">Back to Dashboard</span>
-              </button>
-            </div> 
-            <div className="flex items-center space-x-4">
-              <button
-                onClick={handleAnalyzeResume}
-                className="bg-gradient-to-r from-green-600 to-teal-600 text-white px-6 py-2 rounded-lg font-medium hover:shadow-lg transition-all duration-200 flex items-center space-x-2"
-                disabled={analysisProgress.isAnalyzing}
-              >
-                <DocumentTextIcon className="h-5 w-5" />
-                <span>{analysisProgress.isAnalyzing ? 'Analyzing...' : 'Analyze Recent Resume'}</span>
-              </button>
-              <button
-                onClick={handlePersonalAssistant}
-                className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-2 rounded-lg font-medium hover:shadow-lg transition-all duration-200"
-              >
-                Ask Career Agent
-              </button>
-              
-              {/* Notification Bell - moved from bottom to top navigation */}
-              <NotificationPanel 
-                notifications={notifications}
-                onDismiss={dismissNotification}
-                maxVisible={5}
-              />
-              
-              <div className="w-10 h-10 bg-gray-300 rounded-full flex items-center justify-center">
-                {avatarUrl && !isImgError? (
-                  <img
-                    src={avatarUrl}
-                    alt="User Avatar"
-                    onError={()=> setImgError(true)}
-                    className="h-10 w-10 rounded-full object-cover"
-                  />
-                ) : (
-                  <UserCircleIcon className="h-6 w-6 text-gray-600" />
-                )}
-              </div>
-            </div>
-          </div>
+    {/* Main Content Area */}
+<div className="flex-1 flex flex-col">
+  {/* Clean Top Navigation Bar */}
+  <div className="bg-white shadow-sm border-b border-gray-200">
+    {/* Simplified Top Navigation */}
+    <div className="flex items-center justify-between px-8 py-4">
+      <div className="flex items-center">
+        {/* Elegantly Positioned Back to Dashboard Button */}
+        <button
+          onClick={handleBackToDashboard}
+          className="group flex items-center space-x-3 px-5 py-2.5 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gradient-to-r hover:from-gray-50 hover:to-gray-100 rounded-xl transition-all duration-300 border border-gray-200 hover:border-gray-300 shadow-sm hover:shadow-md"
+        >
+          <ArrowLeftIcon className="h-5 w-5 text-gray-400 group-hover:text-gray-600 transition-all duration-300 group-hover:-translate-x-0.5" />
+          <span className="font-semibold tracking-wide">Back to Dashboard</span>
+        </button>
+      </div>
+      
+      <div className="flex items-center space-x-4">
+        <button
+          onClick={handleAnalyzeResume}
+          className="bg-gradient-to-r from-green-600 to-teal-600 text-white px-6 py-2 rounded-lg font-medium hover:shadow-lg transition-all duration-200 flex items-center space-x-2"
+          disabled={analysisProgress.isAnalyzing}
+        >
+          <DocumentTextIcon className="h-5 w-5" />
+          <span>{analysisProgress.isAnalyzing ? 'Analyzing...' : 'Analyze Recent Resume'}</span>
+        </button>
+        
+        <button
+          onClick={handlePersonalAssistant}
+          className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-2 rounded-lg font-medium hover:shadow-lg transition-all duration-200"
+        >
+          Ask Career Agent
+        </button>
+        
+        {/* Notification Bell - moved from bottom to top navigation */}
+        <NotificationPanel 
+          notifications={notifications}
+          onDismiss={dismissNotification}
+          maxVisible={5}
+        />
+        
+        <div className="w-10 h-10 bg-gray-300 rounded-full flex items-center justify-center">
+          {avatarUrl && !isImgError ? (
+            <img
+              src={avatarUrl}
+              alt="User Avatar"
+              onError={() => setImgError(true)}
+              className="h-10 w-10 rounded-full object-cover"
+            />
+          ) : (
+            <UserCircleIcon className="h-6 w-6 text-gray-600" />
+          )}
         </div>
+      </div>
+    </div>
+  </div>
 
         {/* Progress tracking is now handled in ChatDialog personal assistant */}
         {/* Enhanced Progress Tracker component removed - progress messages now appear in personal assistant chat */}
