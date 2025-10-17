@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import ChatDialog from './ChatDialog';
 
-const PersonalAssistant = ({ user, isDialogOpen: externalIsDialogOpen, setIsDialogOpen: externalSetIsDialogOpen, onDialogClose, onUnreadCountChange }) => {
+const PersonalAssistant = ({ user, isDialogOpen: externalIsDialogOpen, setIsDialogOpen: externalSetIsDialogOpen, onDialogClose, onUnreadCountChange, onOpenAgentModal }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const [internalIsDialogOpen, setInternalIsDialogOpen] = useState(false);
@@ -446,16 +446,17 @@ const PersonalAssistant = ({ user, isDialogOpen: externalIsDialogOpen, setIsDial
       
       {hasDialogBeenOpened && (
         <div style={{ display: isDialogOpen ? 'block' : 'none' }}>
-          <ChatDialog 
+          <ChatDialog
             onClose={() => {
               setIsDialogOpen(false);
               if (onDialogClose) {
                 onDialogClose();
               }
-            }} 
-            assistantPosition={position} 
+            }}
+            assistantPosition={position}
             setAssistantPosition={setPosition}
             onUnreadCountChange={onUnreadCountChange}
+            onOpenAgentModal={onOpenAgentModal}
           />
         </div>
       )}

@@ -103,14 +103,14 @@ class OTPService:
                 db.commit()
                 raise HTTPException(status_code=400, detail=f"You have failed too many times to verify your code. Account locked for {self.lockout_time} minutes.")
             else:
-                db.commit() 
+                db.commit()
                 raise HTTPException(status_code=400, detail=f'Invalid Passcode. You made {user.otp_failed_attempts} attempts out of {self.failed_attempts}.')
-            
-      # Clean up OTP data after successful verification
-        user.otp_failed_attempts = 0  
+
+        # Clean up OTP data after successful verification
+        user.otp_failed_attempts = 0
         user.otp_locked_until = None
         user.otp_requested_at = None
-        user.otp_purpose = None 
+        user.otp_purpose = None
         db.commit()
 
         return True
