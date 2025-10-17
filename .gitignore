@@ -259,3 +259,6 @@ frontend/.env.development.local
 
 # Backup files (should not be committed, use Git for version control)
 *.backup
+
+# AI model files (too large for Git, should be stored in LFS or external storage)
+AI/
