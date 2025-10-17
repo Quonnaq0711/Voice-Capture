@@ -92,6 +92,7 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
   useEffect(() => {
     currentSessionRef.current = currentSession;
   }, [currentSession]);
+  const panelRef = useRef(null);
 
   // Fetch user ID once on mount
   useEffect(() => {
@@ -1941,6 +1942,25 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
     setDialogKey(prev => prev + 1);
   }, [assistantPosition.x, assistantPosition.y]);
 
+  //Close on outside Click
+  useEffect(() => {
+    const handleOutsideClick = (event) => {
+      if (panelRef.current && !panelRef.current.contains(event.target)) {
+        setShowSettings(false);
+      }
+    }
+
+    if (showSettings) {
+      document.addEventListener("mousedown", handleOutsideClick)
+    } else {
+      document.removeEventListener("mousedown", handleOutsideClick)
+    }
+
+    return () => {
+      document.removeEventListener("mousedown", handleOutsideClick)
+    };
+  }, [showSettings]);
+
   const getDialogStyle = () => {
     const assistantX = assistantPosition.x;
     const assistantY = assistantPosition.y;
@@ -2225,7 +2245,15 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
 
       {/* Settings Panel */}
       {showSettings && (
-        <div className="p-4 border-b border-gray-200 bg-gray-50">
+        <div
+          ref={panelRef}
+          className="p-4 border-b border-gray-200 bg-gray-50">
+          <button 
+            onClick={() => setShowSettings(false)}
+            className='absolute top-2 right-2 text-grey-500 hover:text-grey-800'
+          >
+            <close size={18} />
+          </button>
           <h4 className="text-sm font-medium text-gray-700 mb-3">Settings</h4>
           <div className="space-y-3">
             <div>
