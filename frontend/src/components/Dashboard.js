@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { profile as profileAPI, activities as activitiesAPI, careerInsights as careerInsightsAPI, dailyRecommendations as dailyRecommendationsAPI } from '../services/api';
 import PersonalAssistant from './PersonalAssistant';
 import CircularAgents from './CircularAgents';
+import AgentDesignModal from './AgentDesignModal';
 
 // Import Heroicons
 import { BriefcaseIcon, CurrencyDollarIcon, HeartIcon, GlobeAltIcon, UserCircleIcon, SparklesIcon, HomeIcon, BookOpenIcon, AcademicCapIcon, FireIcon, SunIcon, ChatBubbleLeftRightIcon, CommandLineIcon, LightBulbIcon, ArrowTrendingUpIcon, ClockIcon, StarIcon, ChevronLeftIcon, ChevronRightIcon, ChevronDownIcon, ChevronUpIcon, CpuChipIcon, CheckCircleIcon, UserGroupIcon } from '@heroicons/react/24/outline';
@@ -60,6 +61,8 @@ const Dashboard = () => {
     skillsAnalysis: 'pending',
     marketPosition: 'pending'
   });
+  const [agentModalOpen, setAgentModalOpen] = useState(false);
+  const [selectedAgent, setSelectedAgent] = useState(null);
 
 
   // Fetch user data and avatar on component mount
@@ -468,6 +471,23 @@ const fetchAvatar = async () => {
       window.resetAssistantPosition();
     }
     // Note: Chat activity is now tracked when messages are actually sent in ChatDialog
+  };
+
+  // Handler for opening agent design modal from ChatDialog
+  const handleOpenAgentModal = (agentName) => {
+    if (agentName === 'Travel Agent') {
+      setSelectedAgent({
+        title: 'Travel Agent (Preview)',
+        imageSrc: '/design/Travel Agent 2.0.png'
+      });
+      setAgentModalOpen(true);
+    } else if (agentName === 'Body Agent') {
+      setSelectedAgent({
+        title: 'Body Agent (Preview)',
+        imageSrc: '/design/Body Agent.png'
+      });
+      setAgentModalOpen(true);
+    }
   };
 
   // Handler for view all activities toggle
@@ -1346,7 +1366,7 @@ const fetchAvatar = async () => {
             </button>
 
             <button
-              onClick={() => navigate('/agents/travel')}
+              onClick={() => handleOpenAgentModal('Travel Agent')}
               className="w-full bg-gradient-to-r from-indigo-500 to-purple-500 text-white px-6 py-4 rounded-lg font-medium hover:from-indigo-600 hover:to-purple-600 transition-all duration-200 flex items-center space-x-3"
             >
               <GlobeAltIcon className="h-5 w-5" />
@@ -1354,7 +1374,7 @@ const fetchAvatar = async () => {
             </button>
 
             <button
-              onClick={() => navigate('/agents/body')}
+              onClick={() => handleOpenAgentModal('Body Agent')}
               className="w-full bg-gradient-to-r from-purple-500 to-pink-500 text-white px-6 py-4 rounded-lg font-medium hover:from-purple-600 hover:to-pink-600 transition-all duration-200 flex items-center space-x-3"
             >
               <SparklesIcon className="h-5 w-5" />
@@ -1728,12 +1748,23 @@ const fetchAvatar = async () => {
 </div>
         {/* Personal Assistant Section */}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-          <PersonalAssistant 
-            user={userData} 
+          <PersonalAssistant
+            user={userData}
             isDialogOpen={isAssistantDialogOpen}
             setIsDialogOpen={setIsAssistantDialogOpen}
+            onOpenAgentModal={handleOpenAgentModal}
           />
         </div>
+
+        {/* Agent Design Modal */}
+        {selectedAgent && (
+          <AgentDesignModal
+            isOpen={agentModalOpen}
+            onClose={() => setAgentModalOpen(false)}
+            title={selectedAgent.title}
+            imageSrc={selectedAgent.imageSrc}
+          />
+        )}
 
         {/* Call to Action */}
         <div className="bg-gradient-to-r from-blue-600 to-purple-600 py-16">
