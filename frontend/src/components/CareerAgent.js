@@ -390,7 +390,7 @@ const DocumentList = ({ documents, loading, onPreview, onDelete, onAnalyze, form
 };
 
 // Document manager component that combines upload and list
-const DocumentManager = ({ analysisProgress, setAnalysisProgress, setSectionStatus, setProfessionalData, addNotification, setLastAnalyzedDocumentId }) => {
+const DocumentManager = ({ analysisProgress, setAnalysisProgress, setSectionStatus, setProfessionalData, addNotification, setLastAnalyzedDocumentId, onAnalyze }) => {
   const [documents, setDocuments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState(null);
@@ -426,266 +426,6 @@ const DocumentManager = ({ analysisProgress, setAnalysisProgress, setSectionStat
       ? `/resumes/${document.user_id}/${document.filename}`
       : `${process.env.REACT_APP_BACKEND_URL || 'http://localhost:5000'}/resumes/${document.user_id}/${document.filename}`;
     window.open(documentUrl, '_blank');
-  };
-
-  const handleAnalyze = async (document) => {
-    if (analysisProgress.isAnalyzing) {
-      console.log('Analysis already in progress, ignoring request');
-      return;
-    }
-
-    try {
-      // Track resume analysis activity
-      await activitiesAPI.createActivity({
-        activity_type: 'resume_analysis',
-        activity_source: 'career',
-        activity_title: 'Resume Analysis - Document History',
-        activity_description: `Analyzed resume: ${document.original_filename}`,
-        activity_metadata: {
-          resume_filename: document.original_filename,
-          document_id: document.id,
-          source_type: 'document_history'
-        }
-      });
-      // Reset analysis state
-      setAnalysisProgress({
-        isAnalyzing: true,
-        currentSection: null,
-        completedSections: [],
-        totalSections: 7,
-        progress: 0,
-        error: null
-      });
-
-      setSectionStatus({
-        professionalIdentity: 'pending',
-        workExperience: 'pending',
-        skillsAnalysis: 'pending',
-        marketPosition: 'pending',
-        careerTrajectory: 'pending',
-        strengthsWeaknesses: 'pending',
-        salaryAnalysis: 'pending'
-      });
-
-      // Clear existing professional data to prepare for new analysis
-      setProfessionalData({
-        professionalIdentity: { title: '', summary: '', keyHighlights: [], currentRole: '', currentIndustry: '', currentCompany: '', location: '' },
-        workExperience: { totalYears: 0, timelineStart: null, timelineEnd: null, analytics: { workingYears: { years: '', period: '' }, heldRoles: { count: '', longest: '' }, heldTitles: { count: '', shortest: '' }, companies: { count: '', longest: '' }, insights: { gaps: '', shortestTenure: '', companyChanges: '', careerProgression: '' } } },
-        skillsAnalysis: { hardSkills: [], softSkills: [], coreStrengths: [], developmentAreas: [] },
-        marketPosition: { competitiveness: 0, skillRelevance: 0, industryDemand: 0, careerPotential: 0 },
-        careerTrajectory: [],
-        strengthsWeaknesses: { strengths: [], weaknesses: [] },
-        salaryAnalysis: { currentSalary: null, historicalTrends: [], marketComparison: null, predictedGrowth: null, salaryFactors: [], recommendations: [] }
-      });
-
-      // Store the document ID for later retrieval of analysis results
-      setLastAnalyzedDocumentId(document.id);
-      
-      addNotification({
-        type: 'progress',
-        title: 'Resume Analysis Started',
-        message: `Starting comprehensive analysis of ${document.original_filename}`,
-        details: 'This may take a few minutes. You will see real-time updates as each section completes.'
-      });
-      
-      // Call the streaming API with the specific document ID
-      // Use relative path in production (proxied through Nginx), localhost in development
-      const apiUrl = process.env.NODE_ENV === 'production'
-        ? '/api/career/analyze_resume_streaming'
-        : (process.env.REACT_APP_CAREER_URL || 'http://localhost:6002') + '/api/career/analyze_resume_streaming';
-      const response = await fetch(apiUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify({ 
-          user_id: String(document.user_id),
-          resume_id: String(document.id)
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        const chunk = decoder.decode(value);
-        const lines = chunk.split('\n');
-
-        for (const line of lines) {
-          if (line.trim() && line.startsWith('data: ')) {
-            try {
-              const data = JSON.parse(line.slice(6));
-              console.log('Received streaming data:', data);
-              
-              // Handle different types of streaming responses
-              if (data.type === 'section_progress') {
-                // Update state directly for immediate UI feedback
-                setAnalysisProgress(prev => ({
-                  ...prev,
-                  currentSection: data.section,
-                  progress: data.progress || prev.progress,
-                  totalSections: data.total_sections || 7,
-                  isAnalyzing: true
-                }));
-                
-                setSectionStatus(prev => ({
-                  ...prev,
-                  [data.section]: 'analyzing'
-                }));
-                
-                // Add progress notification
-                const sectionName = data.section.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
-                addNotification({
-                  type: 'progress',
-                  title: 'Analysis in Progress',
-                  message: `Analyzing ${sectionName}...`,
-                  current_section: sectionName,
-                  progress: data.progress || 0,
-                  details: `Processing section ${data.progress ? Math.ceil(data.progress / (100 / (data.total_sections || 7))) : 1} of ${data.total_sections || 7}`
-                });
-                
-                // Also dispatch event for compatibility
-                const progressEvent = new CustomEvent('analysisProgress', {
-                  detail: {
-                    section: data.section,
-                    status: 'analyzing',
-                    progress: data.progress,
-                    totalSections: data.total_sections || 7
-                  }
-                });
-                document.querySelector('[data-agent-type="career"]')?.dispatchEvent(progressEvent);
-              } else if (data.type === 'section_complete') {
-                console.log('Section completed:', data.section, data.data);
-                
-                // Update state directly for immediate UI feedback
-                if (data.data) {
-                  // Update professional data with the new section data
-                  const sectionData = data.data[data.section] || data.data;
-                  setProfessionalData(prev => {
-                    const newData = {
-                      ...prev,
-                      [data.section]: sectionData
-                    };
-                    console.log(`Updated professional data for section ${data.section}:`, newData);
-                    return newData;
-                  });
-                }
-                
-                // Update section status
-                setSectionStatus(prev => {
-                  const newStatus = { ...prev, [data.section]: 'completed' };
-                  console.log('Updated section status:', newStatus);
-                  return newStatus;
-                });
-                
-                // Update analysis progress
-                setAnalysisProgress(prev => {
-                  const newCompletedSections = [...prev.completedSections, data.section];
-                  const newProgress = Math.round((newCompletedSections.length / prev.totalSections) * 100);
-                  return {
-                    ...prev,
-                    completedSections: newCompletedSections,
-                    progress: newProgress,
-                    currentSection: null
-                  };
-                });
-
-                // Add section completion notification
-                const sectionName = data.section.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
-                addNotification({
-                  type: 'complete',
-                  title: `✅ ${sectionName} Complete`,
-                  message: `${sectionName} analysis completed successfully! New insights are now available in your career profile.`,
-                  timestamp: Date.now()
-                });
-
-                // Also dispatch event for compatibility
-                const completeEvent = new CustomEvent('sectionComplete', {
-                  detail: {
-                    section: data.section,
-                    data: data.data,
-                    error: data.error
-                  }
-                });
-                document.querySelector('[data-agent-type="career"]')?.dispatchEvent(completeEvent);
-              } else if (data.type === 'analysis_complete') {
-                console.log('Analysis completed:', data);
-                
-                // Update state directly for immediate UI feedback
-                setAnalysisProgress(prev => ({
-                  ...prev,
-                  isAnalyzing: false,
-                  currentSection: null,
-                  progress: data.success ? 100 : prev.progress,
-                  error: data.error || null
-                }));
-                
-                // If backend returns complete data, merge it with existing professionalData
-                if (data.professional_data) {
-                  const finalData = data.professional_data;
-                  setProfessionalData(prev => ({
-                    ...prev,
-                    ...finalData
-                  }));
-                }
-                
-                // Add completion notification
-                if (data.success) {
-                  addNotification({
-                    type: 'complete',
-                    title: 'Analysis Complete!',
-                    message: 'Your comprehensive career analysis is now ready',
-                    details: 'All sections have been analyzed. Explore your insights to discover new opportunities.'
-                  });
-                } else if (data.error) {
-                  addNotification({
-                    type: 'error',
-                    title: 'Analysis Failed',
-                    message: 'There was an error completing your career analysis',
-                    details: data.error
-                  });
-                }
-                
-                // Also dispatch event for compatibility
-                const analysisCompleteEvent = new CustomEvent('analysisComplete', {
-                  detail: {
-                    success: data.success,
-                    error: data.error,
-                    professional_data: data.professional_data
-                  }
-                });
-                document.querySelector('[data-agent-type="career"]')?.dispatchEvent(analysisCompleteEvent);
-                break;
-              }
-            } catch (parseError) {
-              console.error('Error parsing streaming data:', parseError);
-            }
-          }
-        }
-      }
-    } catch (error) {
-      console.error('Error analyzing document:', error);
-      setAnalysisProgress(prev => ({
-        ...prev,
-        isAnalyzing: false,
-        error: `Failed to analyze resume: ${error.message}`
-      }));
-      
-      addNotification({
-        type: 'error',
-        title: 'Analysis Failed',
-        message: `Failed to analyze ${document.original_filename}`,
-        details: error.message || 'An unexpected error occurred during analysis'
-      });
-    }
   };
 
   const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, document: null });
@@ -727,12 +467,12 @@ const DocumentManager = ({ analysisProgress, setAnalysisProgress, setSectionStat
   return (
     <>
       <DocumentUpload onUploadSuccess={handleUploadSuccess} />
-      <DocumentList 
-        documents={documents} 
-        loading={loading} 
+      <DocumentList
+        documents={documents}
+        loading={loading}
         onPreview={handlePreview}
         onDelete={handleDelete}
-        onAnalyze={handleAnalyze}
+        onAnalyze={onAnalyze}
         formatDate={formatDate}
         getFileIcon={getFileIcon}
       />
@@ -1071,9 +811,7 @@ const CareerAgent = () => {
     // Event handler for section completion with data
     const handleSectionComplete = (event) => {
       const { section, data, error } = event.detail;
-      console.log('Section completed:', { section, hasData: !!data, error });
-      console.log('Section data received:', data);
-      
+
       if (error) {
         setAnalysisProgress(prev => ({
           ...prev,
@@ -1091,33 +829,21 @@ const CareerAgent = () => {
           // Update professional data with the new section data
           // Handle nested data structure - if data contains the section name as a key, use that value
           const sectionData = data[section] || data;
-          setProfessionalData(prev => {
-            const newData = {
-              ...prev,
-              [section]: sectionData
-            };
-            console.log('Updated professional data with new analysis:', newData);
-            console.log(`Section ${section} data:`, sectionData);
-            return newData;
-          });
-        } else {
-          console.log('Skipping data update - currently loading stored data');
+          setProfessionalData(prev => ({
+            ...prev,
+            [section]: sectionData
+          }));
         }
 
         // Update section status and progress
-        setSectionStatus(prev => {
-          const newStatus = { ...prev, [section]: 'completed' };
-          console.log('Updated section status:', newStatus);
-          return newStatus;
-        });
+        setSectionStatus(prev => ({
+          ...prev,
+          [section]: 'completed'
+        }));
         setAnalysisProgress(prev => {
           const newCompletedSections = [...prev.completedSections, section];
           const newProgress = Math.round((newCompletedSections.length / prev.totalSections) * 100);
           const isAnalysisComplete = newCompletedSections.length >= prev.totalSections;
-          
-          if (isAnalysisComplete) {
-            console.log('Analysis fully completed - preserving all data and section statuses');
-          }
           
           return {
             ...prev,
@@ -1133,14 +859,8 @@ const CareerAgent = () => {
           setActiveTab('insights');
         }
 
-        // Add completion notification
-        const sectionName = section.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
-        addNotification({
-          type: 'complete',
-          title: `✅ ${sectionName} Complete`,
-          message: `${sectionName} analysis completed successfully! New insights are now available in your career profile.`,
-          timestamp: Date.now()
-        });
+        // Notification is added in the streaming handler (line ~1380)
+        // Don't add notification here to avoid duplicates
       }
     };
 
@@ -1360,8 +1080,10 @@ const CareerAgent = () => {
 
   // Notification management functions
   const addNotification = (notification) => {
+    // Generate unique ID using timestamp + random number
+    const uniqueId = notification.id || `notification-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     const newNotification = {
-      id: notification.id || `notification-${notificationCounter}`,
+      id: uniqueId,
       timestamp: Date.now(),
       ...notification
     };
@@ -1392,7 +1114,8 @@ const CareerAgent = () => {
   };
 
   // Handler for Resume Analysis
-  const handleAnalyzeResume = async () => {
+  // Unified function to handle resume analysis from both "Analyze Recent Resume" button and document list
+  const handleAnalyzeResume = async (resumeDocument = null) => {
     if (!user?.id) {
       addNotification({
         type: 'error',
@@ -1409,33 +1132,46 @@ const CareerAgent = () => {
     }
 
     try {
-      // Get the most recent document to include filename in activity tracking
-      let mostRecentFilename = null;
-      try {
-        const documentList = await auth.getResumes();
-        if (documentList && documentList.length > 0) {
-          // Documents are typically sorted by upload date, get the most recent
-          const mostRecentDoc = documentList[0];
-          mostRecentFilename = mostRecentDoc.original_filename;
+      // Determine which resume to analyze
+      let targetDocument = resumeDocument;
+      let activitySource = 'document_history';
+      let activityTitle = 'Resume Analysis - Document History';
+
+      // If no document provided, get the most recent one
+      if (!targetDocument) {
+        try {
+          const documentList = await auth.getResumes();
+
+          if (documentList && documentList.length > 0) {
+            targetDocument = documentList[0]; // Most recent document
+            activitySource = 'analyze_recent_resume';
+            activityTitle = 'Resume Analysis - Recent Resume';
+          } else {
+            throw new Error('No resume documents found');
+          }
+        } catch (error) {
+          console.error('Could not fetch documents:', error);
+          addNotification({
+            type: 'error',
+            title: 'No Resume Found',
+            message: 'Please upload a resume first',
+            details: error.message
+          });
+          return;
         }
-      } catch (error) {
-        console.warn('Could not fetch documents for activity tracking:', error);
       }
 
       // Track resume analysis activity
-      const activityDescription = mostRecentFilename
-        ? `Analyzed most recent resume: ${mostRecentFilename}`
-        : 'Analyzed most recent resume';
-
       await activitiesAPI.createActivity({
         activity_type: 'resume_analysis',
         activity_source: 'career',
-        activity_title: 'Resume Analysis - Recent Resume',
-        activity_description: activityDescription,
+        activity_title: activityTitle,
+        activity_description: `Analyzed resume: ${targetDocument.original_filename}`,
         activity_metadata: {
-          source_type: 'analyze_recent_resume',
+          source_type: activitySource,
           user_id: user.id,
-          resume_filename: mostRecentFilename
+          resume_filename: targetDocument.original_filename,
+          document_id: targetDocument.id
         }
       });
       // Reset analysis state
@@ -1469,25 +1205,46 @@ const CareerAgent = () => {
         salaryAnalysis: { currentSalary: null, historicalTrends: [], marketComparison: null, predictedGrowth: null, salaryFactors: [], recommendations: [] }
       });
 
+      // Store the document ID for later retrieval of analysis results
+      setLastAnalyzedDocumentId(targetDocument.id);
+
       addNotification({
         type: 'progress',
         title: 'Resume Analysis Started',
-        message: 'Starting comprehensive analysis of your recent resume',
+        message: `Starting comprehensive analysis of ${targetDocument.original_filename}`,
         details: 'This may take a few minutes. You will see real-time updates as each section completes.'
       });
 
+      // Validate that we have the required user ID
+      const userId = targetDocument?.user_id || user.id;
+      const resumeId = targetDocument?.id;
+
+      if (!userId) {
+        throw new Error(`Missing user_id: ${userId}`);
+      }
+
       // Call the backend streaming endpoint
+      // If resumeId exists, use it. Otherwise, backend will analyze the most recent resume.
       // Use relative path in production (proxied through Nginx), localhost in development
       const apiUrl = process.env.NODE_ENV === 'production'
         ? '/api/career/analyze_resume_streaming'
         : (process.env.REACT_APP_CAREER_URL || 'http://localhost:6002') + '/api/career/analyze_resume_streaming';
+
+      // Build request body: only include resume_id if it exists
+      const requestBody = {
+        user_id: String(userId)
+      };
+      if (resumeId) {
+        requestBody.resume_id = String(resumeId);
+      }
+
       const response = await fetch(apiUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}` // Assuming token-based auth
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
         },
-        body: JSON.stringify({ user_id: String(user.id) })
+        body: JSON.stringify(requestBody)
       });
 
       if (!response.ok) {
@@ -1496,13 +1253,19 @@ const CareerAgent = () => {
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
+      let buffer = ''; // Buffer to accumulate incomplete lines across chunks
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
 
-        const chunk = decoder.decode(value);
-        const lines = chunk.split('\n');
+        // Decode chunk and append to buffer
+        const chunk = decoder.decode(value, { stream: true });
+        buffer += chunk;
+
+        // Split by newlines, keeping the last incomplete line in buffer
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || ''; // Keep the last (potentially incomplete) line in buffer
 
         for (const line of lines) {
           if (line.trim() && line.startsWith('data: ')) {
@@ -1544,31 +1307,48 @@ const CareerAgent = () => {
                     totalSections: data.total_sections || 7
                   }
                 });
-                document.querySelector('[data-agent-type="career"]')?.dispatchEvent(progressEvent);
+                try {
+                  const careerElement = document.querySelector('[data-agent-type="career"]');
+                  if (careerElement) {
+                    careerElement.dispatchEvent(progressEvent);
+                  }
+                } catch (eventError) {
+                  console.error('Error dispatching progress event:', eventError);
+                }
               } else if (data.type === 'section_complete') {
-                console.log('Section completed:', data.section, data.data);
-                
                 // Update state directly for immediate UI feedback
                 if (data.data) {
                   // Update professional data with the new section data
                   const sectionData = data.data[data.section] || data.data;
-                  setProfessionalData(prev => {
-                    const newData = {
-                      ...prev,
-                      [data.section]: sectionData
-                    };
-                    console.log(`Updated professional data for section ${data.section}:`, newData);
-                    return newData;
-                  });
+                  setProfessionalData(prev => ({
+                    ...prev,
+                    [data.section]: sectionData
+                  }));
                 }
-                
+
                 // Update section status
-                setSectionStatus(prev => {
-                  const newStatus = { ...prev, [data.section]: 'completed' };
-                  console.log('Updated section status:', newStatus);
-                  return newStatus;
+                setSectionStatus(prev => ({
+                  ...prev,
+                  [data.section]: 'completed'
+                }));
+
+                // Add section completion notification (with unique ID to ensure toast shows)
+                const sectionName = data.section.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
+                // Use timestamp + random to ensure unique ID for each notification
+                // This guarantees that each section completion creates a NEW notification
+                // and triggers a toast, even if sections complete very quickly
+                const notificationId = `section-${data.section}-complete-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+                addNotification({
+                  // Unique ID ensures notification is always added (not updated)
+                  // This prevents race conditions when sections complete rapidly
+                  id: notificationId,
+                  type: 'success',
+                  title: `✅ ${sectionName} Complete`,
+                  message: `${sectionName} analysis completed successfully!`,
+                  details: 'New insights are now available in your career profile.',
+                  timestamp: Date.now()
                 });
-                
+
                 // Dispatch section completion event
                 const completeEvent = new CustomEvent('sectionComplete', {
                   detail: {
@@ -2584,13 +2364,14 @@ const careerInsights = {
                   <p className="text-gray-600">Manage your professional documents and certifications</p>
                 </div>
               </div>
-              <DocumentManager 
+              <DocumentManager
                   analysisProgress={analysisProgress}
                   setAnalysisProgress={setAnalysisProgress}
                   setSectionStatus={setSectionStatus}
                   setProfessionalData={setProfessionalData}
                   addNotification={addNotification}
                   setLastAnalyzedDocumentId={setLastAnalyzedDocumentId}
+                  onAnalyze={handleAnalyzeResume}
                 />
             </div>
           </div>

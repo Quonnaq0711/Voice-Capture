@@ -438,8 +438,7 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
     // Event handler for analysis progress
     const handleAnalysisProgress = async (event) => {
       const { section, status, progress, totalSections } = event.detail;
-      console.log('ChatDialog: Analysis progress update:', { section, status, progress });
-      
+
       if (status === 'starting') {
         // Set loading state when analysis starts
         setIsLoading(true);
@@ -467,8 +466,7 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
     // Event handler for section start
     const handleSectionStart = async (event) => {
       const { section, display_name, description, progress } = event.detail;
-      console.log('ChatDialog: Section started:', { section, display_name, description, progress });
-      
+
       // Set loading state when section starts
       setIsLoading(true);
       setIsCancelling(false);
@@ -480,48 +478,21 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
       );
     };
 
-    // Event handler for section completion
-    const handleSectionComplete = async (event) => {
-      const { section, data, error } = event.detail;
-      console.log('ChatDialog: Section completed:', { section, hasData: !!data, error });
-      
-      if (error) {
-        await addProgressMessage(
-          `❌ Error analyzing ${section.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}: ${error}`,
-          'section_complete'
-        );
-        return;
-      }
-
-      if (data) {
-        const sectionName = section.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
-        await addProgressMessage(
-          `✅ ${sectionName} analysis completed successfully! New insights are now available in your career profile.`,
-          'section_complete'
-        );
-      }
+    // Event handler for section completion - REMOVED
+    // Section completion notifications are now handled by the notification toast system
+    // No need to show them in the chat dialog anymore
+    const handleSectionComplete = async () => {
+      // Intentionally empty - notifications are handled by NotificationPanel
     };
 
-    // Event handler for analysis completion
+    // Event handler for analysis completion - REMOVED
+    // Analysis completion notifications are now handled by the notification toast system
+    // No need to show them in the chat dialog anymore
     const handleAnalysisComplete = async (event) => {
-      const { success, error } = event.detail;
-      console.log('ChatDialog: Analysis workflow completed:', { success, error });
-      
       // Clear loading state when analysis completes
       setIsLoading(false);
       setIsCancelling(false);
-      
-      if (success) {
-        await addProgressMessage(
-          `🎉 Your comprehensive career analysis is now complete! All sections have been analyzed successfully. You can explore your insights to discover new opportunities and career guidance.`,
-          'analysis_complete'
-        );
-      } else if (error) {
-        await addProgressMessage(
-          `❌ Analysis failed: ${error}. Please try again or contact support if the issue persists.`,
-          'analysis_complete'
-        );
-      }
+      // Intentionally not adding messages - notifications are handled by NotificationPanel
     };
     
     // Add event listeners to the document (global events)
@@ -2433,8 +2404,6 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
                           ? 'bg-blue-500 text-white'
                           : message.messageType === 'progress' || message.messageType === 'section_start'
                           ? 'bg-blue-50 text-blue-800 border border-blue-200'
-                          : message.messageType === 'section_complete'
-                          ? 'bg-green-50 text-green-800 border border-green-200'
                           : message.messageType === 'analysis_complete'
                           ? 'bg-purple-50 text-purple-800 border border-purple-200'
                           : 'bg-gray-100 text-gray-800'

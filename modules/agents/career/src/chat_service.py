@@ -91,32 +91,43 @@ class ChatService:
 
         # Attempt to pull historical messages from the database so that we can
         # reconstruct the context when the application restarts.
-        try:
-            db = SessionLocal()
-            # ``session_id`` is stored as Integer in the DB. Convert if needed.
-            db_session_id = int(session_id) if isinstance(session_id, str) and session_id.isdigit() else session_id
-            messages = (
-                db.query(ChatMessage)
-                .filter(ChatMessage.session_id == db_session_id)
-                .order_by(ChatMessage.id.asc())
-                .all()
-            )
+        # Only load from DB for numeric session IDs (actual user chat sessions).
+        # Skip for workflow session IDs like "section_professionalIdentity".
+        should_load_from_db = False
+        db_session_id = None
 
-            for msg in messages:
-                # Distinguish between user and assistant messages.
-                if msg.sender == "user":
-                    history.add_message(HumanMessage(content=msg.message_text))
-                else:
-                    # Treat any non-user sender as assistant for robustness.
-                    history.add_message(AIMessage(content=msg.message_text))
-        except Exception as e:
-            logger.error(f"Failed to load chat history from DB for session {session_id}: {str(e)}")
-        finally:
-            # Ensure DB session is closed even if an error occurs.
+        if isinstance(session_id, int):
+            should_load_from_db = True
+            db_session_id = session_id
+        elif isinstance(session_id, str) and session_id.isdigit():
+            should_load_from_db = True
+            db_session_id = int(session_id)
+
+        if should_load_from_db:
             try:
-                db.close()
-            except Exception:
-                pass
+                db = SessionLocal()
+                messages = (
+                    db.query(ChatMessage)
+                    .filter(ChatMessage.session_id == db_session_id)
+                    .order_by(ChatMessage.id.asc())
+                    .all()
+                )
+
+                for msg in messages:
+                    # Distinguish between user and assistant messages.
+                    if msg.sender == "user":
+                        history.add_message(HumanMessage(content=msg.message_text))
+                    else:
+                        # Treat any non-user sender as assistant for robustness.
+                        history.add_message(AIMessage(content=msg.message_text))
+            except Exception as e:
+                logger.error(f"Failed to load chat history from DB for session {session_id}: {str(e)}")
+            finally:
+                # Ensure DB session is closed even if an error occurs.
+                try:
+                    db.close()
+                except Exception:
+                    pass
 
         # Cache the reconstructed history for future calls.
         self.store[session_id] = history

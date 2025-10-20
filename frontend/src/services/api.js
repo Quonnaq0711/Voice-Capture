@@ -26,6 +26,7 @@ api.interceptors.request.use(
 
 let isRefreshing = false;
 let failedQueue = [];
+let isLoggingOut = false; // Prevent multiple simultaneous logout calls
 
 const processQueue = (error, token = null) => {
   failedQueue.forEach(prom => {
@@ -37,6 +38,20 @@ const processQueue = (error, token = null) => {
   });
 
   failedQueue = [];
+};
+
+// Centralized logout function to prevent race conditions
+const handleAuthenticationFailure = () => {
+  if (isLoggingOut) {
+    return; // Already logging out, prevent duplicate calls
+  }
+  isLoggingOut = true;
+
+  // Clear token and user state
+  auth.logout();
+
+  // Redirect to login page
+  window.location.href = '/login';
 };
 
 // Response interceptor: handle token refresh
@@ -85,8 +100,7 @@ api.interceptors.response.use(
           resolve(api(originalRequest));
         }).catch((err) => {
           processQueue(err, null);
-          auth.logout();
-          window.location.href = '/login';
+          handleAuthenticationFailure(); // Use centralized logout function
           reject(err);
         }).finally(() => {
           isRefreshing = false;
@@ -96,8 +110,7 @@ api.interceptors.response.use(
 
     // For refresh token endpoint failures or other errors, logout immediately
     if (error.response && error.response.status === 401 && originalRequest.url && originalRequest.url.includes('/auth/token/refresh')) {
-      auth.logout();
-      window.location.href = '/login';
+      handleAuthenticationFailure(); // Use centralized logout function
     }
 
     return Promise.reject(error);

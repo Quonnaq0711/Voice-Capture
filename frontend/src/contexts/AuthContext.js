@@ -7,6 +7,11 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  const logout = () => {
+    auth.logout();
+    setUser(null);
+  };
+
   useEffect(() => {
     const checkUser = async () => {
       const token = localStorage.getItem('token');
@@ -16,13 +21,15 @@ export const AuthProvider = ({ children }) => {
           setUser({ id: profile.id, token, name: profile.first_name });
         } catch (error) {
           // Token might be invalid, clear it
+          console.warn('Token validation failed during initial check:', error);
           logout();
         }
       }
       setLoading(false);
     };
     checkUser();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // logout is stable, no need to include in deps
 
   const login = async (email, password) => {
     try {
@@ -84,10 +91,6 @@ export const AuthProvider = ({ children }) => {
             throw error;
         }
     };
-  const logout = () => {
-    auth.logout();
-    setUser(null);
-  };
 
   const value = {
     user,

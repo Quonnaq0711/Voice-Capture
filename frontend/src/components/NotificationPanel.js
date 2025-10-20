@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   CheckCircleIcon, 
   ExclamationCircleIcon, 
@@ -12,28 +12,37 @@ const NotificationPanel = ({ notifications = [], onDismiss, maxVisible = 5 }) =>
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [toastNotifications, setToastNotifications] = useState([]);
 
+  // Track which notification IDs we've already shown as toast using useRef
+  // This prevents re-triggering useEffect when we update the Set
+  const shownToastIdsRef = useRef(new Set());
+
   // Handle new notifications as toast
+  // Check all notifications, not just the last one, because notifications
+  // with fixed IDs may be updated in-place (middle of array)
   useEffect(() => {
     if (notifications.length > 0) {
-      const latestNotification = notifications[notifications.length - 1];
-      const existingToast = toastNotifications.find(t => t.id === latestNotification.id);
-      
-      if (!existingToast) {
-        setToastNotifications(prev => [...prev, { ...latestNotification, showToast: true }]);
-        
-        // Auto-dismiss toast after 5 seconds (except for error notifications)
-        if (latestNotification.type !== 'error') {
-          setTimeout(() => {
-            setToastNotifications(prev => 
-              prev.map(t => t.id === latestNotification.id ? { ...t, showToast: false } : t)
-            );
-            // Remove from toast list after animation
+      // Check all notifications to catch updates to existing ones
+      notifications.forEach((notification) => {
+        // Only show toast if we haven't shown this notification ID before
+        if (!shownToastIdsRef.current.has(notification.id)) {
+          shownToastIdsRef.current.add(notification.id);
+          setToastNotifications(prev => [...prev, { ...notification, showToast: true }]);
+
+          // Auto-dismiss toast after 5 seconds (except for error notifications)
+          if (notification.type !== 'error') {
+            const notificationId = notification.id;
             setTimeout(() => {
-              setToastNotifications(prev => prev.filter(t => t.id !== latestNotification.id));
-            }, 300);
-          }, 5000);
+              setToastNotifications(prev =>
+                prev.map(t => t.id === notificationId ? { ...t, showToast: false } : t)
+              );
+              // Remove from toast list after animation
+              setTimeout(() => {
+                setToastNotifications(prev => prev.filter(t => t.id !== notificationId));
+              }, 300);
+            }, 5000);
+          }
         }
-      }
+      });
     }
   }, [notifications]);
 
