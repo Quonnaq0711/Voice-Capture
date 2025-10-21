@@ -268,7 +268,7 @@ export const chat = {
     // Use relative path in production (proxied through Nginx), localhost in development
     const apiUrl = process.env.NODE_ENV === 'production'
       ? '/api/pa/optimize'
-      : 'http://localhost:8001/api/chat/optimize';
+      : (process.env.REACT_APP_PA_URL || 'http://localhost:6001') + '/api/chat/optimize';
 
     const response = await axios.post(apiUrl,
       { query: query },
