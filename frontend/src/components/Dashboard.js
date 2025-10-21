@@ -52,7 +52,7 @@ const Dashboard = () => {
   const [insightsTab, setInsightsTab] = useState('identity');
    const [showInsightsSubTabs, setShowInsightsSubTabs] = useState(false);
   const [analysisProgress] = useState({ isAnalyzing: false });
-  const [showDashboardSubTabs, setShowDasboardSubTabs] = useState(true);
+  const [showDashboardSubTabs, setShowDashboardSubTabs] = useState(true);
   const [sectionStatus] = useState({
     professionalIdentity: 'completed',
     workExperience: 'completed',
@@ -479,12 +479,15 @@ const fetchAvatar = async () => {
   const toggleSidebar = () => {
     setSidebarExpanded(!sidebarExpanded);
   };
-  
-    const handleDashboardToggle = () => {
-    setShowDasboardSubTabs(!showDashboardSubTabs);
-    if (activeTab !== 'welcome') {
-      setActiveTab('welcome');
-    }
+
+  const handleDashboardToggle = () => {
+    setActiveTab('welcome');
+    setShowDashboardSubTabs(!showDashboardSubTabs);
+  };
+
+  const handleInsightsToggle = () => {
+    setActiveTab('insights');
+    setShowInsightsSubTabs(!showInsightsSubTabs); // FIXED: Now uses correct state variable
   };
 
   const handleDashboardTabChange = (tabId) => {
@@ -492,22 +495,13 @@ const fetchAvatar = async () => {
     setActiveTab('welcome');
   };
 
-  const handleTabChange = (tabId) => {
-    setActiveTab(tabId);
-    if (tabId === 'insights') {
-      setIsInsightsMenuOpen(true);
-    } else {
-      setIsInsightsMenuOpen(false);
-    }
-  };
-
-  const handleInsightsToggle = () => {
-    setActiveTab('insights');
-    setIsInsightsMenuOpen(!isInsightsMenuOpen);
-  };
-
   const handleInsightsSubTabChange = (subTabId) => {
     setInsightsTab(subTabId);
+    setActiveTab('insights');
+  };
+
+  const handleTabChange = (tabId) => {
+    setActiveTab(tabId);
   };
 
   // Agent modules available in the dashboard
@@ -612,11 +606,10 @@ const fetchAvatar = async () => {
   ];
 
   const tabs = [
-    { id: 'insights', name: 'Career Insights', icon: Lightbulb, disabled: false },
     { id: 'planning', name: 'Career Planning', icon: Map, disabled: true },
     { id: 'job-search', name: 'Job Search', icon: Briefcase, disabled: true },
     { id: 'resume-builder', name: 'Resume Builder', icon: FileText, disabled: true },
-    { id: 'documents', name: 'Documents', icon: FileText, disabled: true }
+    { id: 'documents', name: 'Documents', icon: FileText, disabled: false }
   ];
 
   const insightsSubTabs = [
@@ -1478,10 +1471,8 @@ const fetchAvatar = async () => {
 
       {/* Main Content */}
       <main className="min-h-screen bg-gray-50">
-
-
-        {/* Sidebar and Tab Content Section */}
-        <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 flex">
+        {/* Sidebar */}
+       <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 flex">
       <div className={`bg-white shadow-lg border-r border-gray-200 flex flex-col transition-all duration-300 relative ${
         sidebarExpanded ? 'w-64' : 'w-16'
       }`}>
@@ -1496,8 +1487,6 @@ const fetchAvatar = async () => {
             <ChevronRight className="h-3 w-3" />
           )}
         </button>
-
-
 
         <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
           {!sidebarExpanded ? (
@@ -1646,7 +1635,8 @@ const fetchAvatar = async () => {
                 )}
               </button>
 
-              {showInsightsSubTabs && activeTab === 'insights' && (
+              {/* FIXED: Removed activeTab check for better UX */}
+              {showInsightsSubTabs && (
                 <div className="ml-3 pl-3 border-l border-gray-200 space-y-1 py-1">
                   {insightsSubTabs.map((item) => (
                     <button
