@@ -55,13 +55,14 @@ class ResumeAnalyzer:
     
     async def get_latest_resume(self, user_id: int) -> Optional[Resume]:
         """Get the most recently uploaded resume for a user.
-        
+
         Args:
             user_id: The user's ID
-            
+
         Returns:
             The most recent Resume object or None if not found
         """
+        db = None
         try:
             db = SessionLocal()
             latest_resume = (
@@ -70,12 +71,19 @@ class ResumeAnalyzer:
                 .order_by(Resume.created_at.desc())
                 .first()
             )
+
+            if latest_resume:
+                logger.info(f"✅ Found latest resume for user_id={user_id}: {latest_resume.original_filename}")
+            else:
+                logger.warning(f"⚠️ No resume found for user_id={user_id}")
+
             return latest_resume
         except Exception as e:
-            logger.error(f"Error getting latest resume: {str(e)}")
+            logger.error(f"❌ Error getting latest resume for user_id={user_id}: {str(e)}", exc_info=True)
             return None
         finally:
-            db.close()
+            if db is not None:
+                db.close()
     
     async def get_resume_by_id(self, user_id: int, resume_id: int) -> Optional[Resume]:
         """Get a specific resume by ID for a user.

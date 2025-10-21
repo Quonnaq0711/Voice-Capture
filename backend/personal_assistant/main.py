@@ -25,18 +25,18 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     """
     Application lifespan manager.
-    Handles startup and shutdown events.
+    Handles startup and shutdown events with proper resource cleanup.
     """
-    # Startup
+    # ==================== STARTUP ====================
     logger.info("Starting Personal Assistant Chat API...")
-    
+
     try:
         # Initialize chat service
         chat_service = get_chat_service()
-        
+
         # Perform health check
         health_status = await chat_service.health_check()
-        
+
         if health_status["status"] == "healthy":
             logger.info("Chat service initialized successfully")
             logger.info(f"Model: {health_status['model']}")
@@ -44,15 +44,30 @@ async def lifespan(app: FastAPI):
         else:
             logger.warning(f"Chat service health check failed: {health_status.get('error', 'Unknown error')}")
             logger.warning("API will still start, but chat functionality may be limited")
-            
+
     except Exception as e:
-        logger.error(f"Failed to initialize chat service: {str(e)}")
+        logger.error(f"Failed to initialize chat service: {str(e)}", exc_info=True)
         logger.warning("API will still start, but chat functionality may be limited")
-    
+
     yield
-    
-    # Shutdown
+
+    # ==================== SHUTDOWN ====================
     logger.info("Shutting down Personal Assistant Chat API...")
+
+    # Gracefully shutdown chat service and release resources
+    try:
+        chat_service = get_chat_service()
+        if chat_service is not None:
+            logger.info("Shutting down chat service...")
+            chat_service.shutdown()
+            logger.info("Chat service shutdown completed successfully")
+        else:
+            logger.info("Chat service was not initialized, skipping shutdown")
+    except Exception as e:
+        logger.error(f"Error during chat service shutdown: {str(e)}", exc_info=True)
+        logger.warning("Chat service may not have shut down cleanly")
+
+    logger.info("Personal Assistant Chat API shutdown complete")
 
 # Create FastAPI application
 app = FastAPI(

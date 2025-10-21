@@ -14,6 +14,8 @@ import json
 from sse_starlette.sse import EventSourceResponse
 from backend.personal_assistant.chat_service import get_chat_service, ChatService
 from backend.db.database import get_db
+from backend.utils.auth import get_current_user_from_query
+from backend.models.user import User
 from sqlalchemy.orm import Session
 
 # Configure logging
@@ -111,27 +113,30 @@ async def send_message(
 ):
     """
     Send a message to the AI assistant and get a response.
-    
+
+    Internal service - called by Backend API which handles user authentication.
+    Trusts Backend to validate user permissions.
+
     Args:
-        chat_request: Chat request containing the user message
+        chat_request: Chat request containing the user message and user_id
         request: FastAPI request object for client disconnect detection
         chat_service: Injected chat service instance
-        
+
     Returns:
         AI-generated response
-        
+
     Raises:
         HTTPException: If message processing fails
     """
     try:
         if not chat_request.message.strip():
             raise HTTPException(status_code=400, detail="Message cannot be empty")
-        
+
         logger.info(f"Processing chat message: {chat_request.message[:50]}...")
-        
+
         # Create a cancellation token for this request
         cancellation_event = asyncio.Event()
-        
+
         # Create a task to monitor client disconnect
         async def monitor_client_disconnect():
             try:
@@ -143,10 +148,10 @@ async def send_message(
                     await asyncio.sleep(0.1)  # Check every 100ms
             except Exception as e:
                 logger.error(f"Error monitoring client disconnect: {e}")
-        
+
         # Start the monitoring task
         monitor_task = asyncio.create_task(monitor_client_disconnect())
-        
+
         try:
             # Generate response using the chat service with cancellation support
             result = await chat_service.generate_response(
@@ -259,14 +264,16 @@ async def clear_conversation_memory(
 ):
     """
     Clear the conversation memory for a specific session.
-    
+
+    Internal service - called by Backend API which handles authentication.
+
     Args:
         session_id: Optional session ID to clear (defaults to "default")
         chat_service: Injected chat service instance
-        
+
     Returns:
         Success status
-        
+
     Raises:
         HTTPException: If memory clearing fails
     """
@@ -297,14 +304,16 @@ async def get_conversation_history(
 ):
     """
     Get the current conversation history for a specific session.
-    
+
+    Internal service - called by Backend API which handles authentication.
+
     Args:
         session_id: Optional session ID to get history for (defaults to "default")
         chat_service: Injected chat service instance
-        
+
     Returns:
         Conversation history
-        
+
     Raises:
         HTTPException: If history retrieval fails
     """
@@ -336,15 +345,17 @@ async def remove_messages_after_index(
 ):
     """
     Remove all messages after a specific index in the conversation history.
-    
+
+    Internal service - called by Backend API which handles authentication.
+
     Args:
         message_index: Index after which to remove messages (0-based)
         session_id: Optional session ID (defaults to "default")
         chat_service: Injected chat service instance
-        
+
     Returns:
         Success status
-        
+
     Raises:
         HTTPException: If message removal fails
     """
@@ -380,16 +391,18 @@ async def update_message_at_index(
 ):
     """
     Update a specific message in the conversation history.
-    
+
+    Internal service - called by Backend API which handles authentication.
+
     Args:
         message_index: Index of the message to update (0-based)
         new_content: New content for the message
         session_id: Optional session ID (defaults to "default")
         chat_service: Injected chat service instance
-        
+
     Returns:
         Success status
-        
+
     Raises:
         HTTPException: If message update fails
     """
@@ -447,15 +460,17 @@ async def optimize_query(
 ):
     """
     Optimize a user query to make it clearer and more structured.
-    
+
+    Internal service - called by Backend API which handles authentication.
+
     Args:
         optimize_request: Request containing the query to optimize
         request: FastAPI request object for client disconnect detection
         chat_service: Injected chat service instance
-        
+
     Returns:
         Optimized query response
-        
+
     Raises:
         HTTPException: If query optimization fails
     """
@@ -519,34 +534,50 @@ async def optimize_query(
 async def send_message_stream(
     message: str = Query(..., description="Message to send to the AI"),
     session_id: Optional[str] = Query(None, description="Session ID"),
-    user_id: Optional[int] = Query(None, description="User ID for profile context"),
+    current_user: User = Depends(get_current_user_from_query),
     chat_service: ChatService = Depends(get_chat_service),
     db: Session = Depends(get_db)
 ):
     """
-    Send a message to the AI and get a streaming response using Server-Sent Events
-    
+    Send a message to the AI and get a streaming response using Server-Sent Events.
+
+    Requires authentication via query parameter (EventSource limitation).
+
     Args:
         message: Message to send to the AI
         session_id: Optional session ID (defaults to "default")
+        current_user: Authenticated user (from token query parameter)
         chat_service: Injected chat service instance
-        
+        db: Database session
+
     Returns:
         Streaming response with AI-generated content
+
+    Security:
+        - JWT authentication required via ?token=<jwt_token> query parameter
+        - User profile context automatically loaded from authenticated user
+        - Token in URL is less secure but necessary for EventSource API
+
+    Note:
+        Frontend should append token to URL:
+        /api/chat/message/stream?message=hello&token=<jwt_token>
     """
     try:
         if not message.strip():
             raise HTTPException(status_code=400, detail="Message cannot be empty")
-            
-        logger.info(f"Received streaming message: {message[:50]}...")
-        
+
+        logger.info(f"Received streaming message from user {current_user.id}: {message[:50]}...")
+
         # Use default session if none provided
         if session_id is None:
             session_id = "default"
-        
+
+        # Use authenticated user's ID for profile context
+        user_id = current_user.id
+
         async def event_generator():
             try:
-                # Generate streaming response using the chat service
+                # Generate streaming response using the chat service with user profile context
                 async for chunk in chat_service.generate_streaming_response(message, session_id, user_id, db):
                     # Format the chunk as SSE data
                     chunk_json = json.dumps(chunk)

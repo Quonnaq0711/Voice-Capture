@@ -19,6 +19,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY backend/db/ /app/backend/db/
 COPY backend/models/ /app/backend/models/
 COPY backend/utils/ /app/backend/utils/
+COPY backend/services/ /app/backend/services/
+COPY backend/config/ /app/backend/config/
 COPY backend/personal_assistant/ /app/backend/personal_assistant/
 
 # Create __init__.py files for backend module

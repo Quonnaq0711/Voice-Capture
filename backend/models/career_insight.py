@@ -15,12 +15,12 @@ class CareerInsight(Base):
     __tablename__ = "career_insights"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"))
-    resume_id = Column(Integer, ForeignKey("resumes.id"))
+    user_id = Column(Integer, ForeignKey("users.id"), index=True)  # Index for user queries
+    resume_id = Column(Integer, ForeignKey("resumes.id"), index=True)  # Index for resume queries
     professional_data = Column(Text)  # JSON string of professional data
     dashboard_summaries = Column(Text)  # JSON string of LLM-generated summaries for Dashboard
     summaries_generated_at = Column(DateTime, nullable=True)  # When summaries were last generated
-    created_at = Column(DateTime, default=utc_now)
+    created_at = Column(DateTime, default=utc_now, index=True)  # Index for time-based queries
     updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
 
     # Relationships

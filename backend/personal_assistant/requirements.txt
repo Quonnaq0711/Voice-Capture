@@ -26,6 +26,16 @@ sse-starlette
 # Data validation and serialization
 pydantic
 
+# Authentication and security
+# JWT token handling
+python-jose[cryptography]
+# Password hashing
+passlib[bcrypt]
+# OTP generation for email validation
+pyotp
+# Scheduled tasks
+APScheduler  
+
 # Async support
 aiofiles
 

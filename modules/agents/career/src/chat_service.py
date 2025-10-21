@@ -66,6 +66,21 @@ class ChatService:
             logger.error(f"Failed to initialize Career ChatService: {e}")
             raise
 
+    def shutdown(self):
+        """
+        Gracefully shutdown the chat service and release all resources.
+
+        This method should be called when the application is shutting down to ensure
+        all resources (ThreadPoolExecutor) are properly released.
+        """
+        try:
+            if self.executor:
+                logger.info("Shutting down Career Agent ThreadPoolExecutor...")
+                self.executor.shutdown(wait=True, cancel_futures=False)
+                logger.info("Career Agent ThreadPoolExecutor shut down successfully")
+        except Exception as e:
+            logger.error(f"Error during Career ChatService shutdown: {str(e)}", exc_info=True)
+
     def get_session_history(self, session_id: str) -> BaseChatMessageHistory:
         """Return chat history for a given session.
 
@@ -367,41 +382,87 @@ class ChatService:
                 if not profile:
                     logger.info(f"No profile found for user_id: {user_id}")
                     return None
-                
-                # Convert profile to dictionary, focusing on career-related fields
+
+                # Convert profile to dictionary, including ALL fields for comprehensive context
                 profile_data = {
+                    # Career Information
                     "current_job": profile.current_job,
                     "company": profile.company,
                     "industry": profile.industry,
                     "experience": profile.experience,
                     "work_style": profile.work_style,
                     "leadership_experience": profile.leadership_experience,
+
+                    # Skills and Competencies
                     "skills": profile.skills,
                     "soft_skills": profile.soft_skills,
                     "certifications": profile.certifications,
                     "skill_gaps": profile.skill_gaps,
+                    "professional_strengths": profile.professional_strengths,
+                    "growth_areas": profile.growth_areas,
+
+                    # Goals and Aspirations
                     "short_term_goals": profile.short_term_goals,
                     "career_goals": profile.career_goals,
                     "career_path_preference": profile.career_path_preference,
+                    "career_challenges": profile.career_challenges,
                     "target_industries": profile.target_industries,
+
+                    # Work Preferences
                     "work_life_balance_priority": profile.work_life_balance_priority,
                     "company_size_preference": profile.company_size_preference,
                     "career_risk_tolerance": profile.career_risk_tolerance,
                     "geographic_flexibility": profile.geographic_flexibility,
                     "work_values": profile.work_values,
-                    "career_challenges": profile.career_challenges,
-                    "professional_strengths": profile.professional_strengths,
-                    "growth_areas": profile.growth_areas,
                     "learning_preferences": profile.learning_preferences,
+                    "preferred_learning_methods": profile.preferred_learning_methods,
+
+                    # Education
                     "education_level": profile.education_level,
                     "learning_goals": profile.learning_goals,
-                    "preferred_learning_methods": profile.preferred_learning_methods
+
+                    # Personal Information
+                    "learning_style": profile.learning_style,
+                    "personality_type": profile.personality_type,
+                    "strengths": profile.strengths,
+                    "areas_for_improvement": profile.areas_for_improvement,
+
+                    # Lifestyle Preferences
+                    "fitness_level": profile.fitness_level,
+                    "health_goals": profile.health_goals,
+                    "dietary_preferences": profile.dietary_preferences,
+                    "exercise_preferences": profile.exercise_preferences,
+                    "travel_style": profile.travel_style,
+                    "preferred_destinations": profile.preferred_destinations,
+                    "travel_budget": profile.travel_budget,
+                    "travel_frequency": profile.travel_frequency,
+                    "family_status": profile.family_status,
+                    "work_life_balance": profile.work_life_balance,
+
+                    # Interests and Hobbies
+                    "hobbies": profile.hobbies,
+                    "interests": profile.interests,
+                    "creative_pursuits": profile.creative_pursuits,
+
+                    # Financial Information
+                    "income_range": profile.income_range,
+                    "financial_goals": profile.financial_goals,
+                    "investment_experience": profile.investment_experience,
+                    "risk_tolerance": profile.risk_tolerance,
+
+                    # Spiritual/Mindfulness
+                    "spiritual_practices": profile.spiritual_practices,
+                    "mindfulness_level": profile.mindfulness_level,
+                    "stress_management": profile.stress_management,
+
+                    # Relationship
+                    "relationship_goals": profile.relationship_goals
                 }
-                
+
                 # Filter out None values to keep context clean
                 profile_data = {k: v for k, v in profile_data.items() if v is not None}
-                
-                logger.info(f"Retrieved profile data for user_id: {user_id}")
+
+                logger.info(f"Retrieved comprehensive profile data for user_id: {user_id} ({len(profile_data)} fields)")
                 return profile_data
                 
             finally:
@@ -714,17 +775,18 @@ class ChatService:
 
     def _format_profile_for_context(self, profile_data: Dict[str, any]) -> str:
         """
-        Format user profile data into a readable context string for the LLM, focusing on career-related information.
-        
+        Format user profile data into a comprehensive context string for the LLM.
+        This includes all profile information to provide personalized career guidance.
+
         Args:
             profile_data: Dictionary containing user profile information
-            
+
         Returns:
             Formatted string containing user profile context
         """
         context_parts = []
         covered_keys = set()
-        
+
         # Career Information
         career_info = []
         for key, label in [
@@ -738,7 +800,7 @@ class ChatService:
                 covered_keys.add(key)
         if career_info:
             context_parts.append("Career: " + ", ".join(career_info))
-        
+
         # Skills and Competencies
         for key, label in [
             ("skills", "Technical Skills"),
@@ -753,7 +815,7 @@ class ChatService:
                 value_str = ", ".join(value) if isinstance(value, list) else value
                 context_parts.append(f"{label}: {value_str}")
                 covered_keys.add(key)
-        
+
         # Goals and Aspirations
         for key, label in [
             ("career_goals", "Career Goals"),
@@ -764,7 +826,63 @@ class ChatService:
             if profile_data.get(key):
                 context_parts.append(f"{label}: {profile_data[key]}")
                 covered_keys.add(key)
-        
+
+        # Personal Information
+        personal_info = []
+        for key, label in [
+            ("personality_type", "Personality Type"),
+            ("learning_style", "Learning Style"),
+            ("education_level", "Education")
+        ]:
+            if profile_data.get(key):
+                personal_info.append(f"{label}: {profile_data[key]}")
+                covered_keys.add(key)
+        if personal_info:
+            context_parts.append("Personal: " + ", ".join(personal_info))
+
+        # Interests and Hobbies
+        for key, label in [
+            ("hobbies", "Hobbies"),
+            ("interests", "Interests"),
+            ("creative_pursuits", "Creative Pursuits")
+        ]:
+            if profile_data.get(key):
+                value = profile_data[key]
+                value_str = ", ".join(value) if isinstance(value, list) else str(value)
+                context_parts.append(f"{label}: {value_str}")
+                covered_keys.add(key)
+
+        # Lifestyle Preferences
+        lifestyle_info = []
+        for key, label in [
+            ("fitness_level", "Fitness Level"),
+            ("health_goals", "Health Goals"),
+            ("dietary_preferences", "Dietary Preferences"),
+            ("exercise_preferences", "Exercise Preferences"),
+            ("travel_style", "Travel Style"),
+            ("preferred_destinations", "Preferred Destinations"),
+            ("travel_budget", "Travel Budget"),
+            ("travel_frequency", "Travel Frequency"),
+            ("family_status", "Family Status"),
+            ("work_life_balance", "Work-Life Balance")
+        ]:
+            if profile_data.get(key):
+                lifestyle_info.append(f"{label}: {profile_data[key]}")
+                covered_keys.add(key)
+        if lifestyle_info:
+            context_parts.append("Lifestyle: " + ", ".join(lifestyle_info))
+
+        # Financial Information
+        for key, label in [
+            ("income_range", "Income Range"),
+            ("financial_goals", "Financial Goals"),
+            ("investment_experience", "Investment Experience"),
+            ("risk_tolerance", "Risk Tolerance")
+        ]:
+            if profile_data.get(key):
+                context_parts.append(f"{label}: {profile_data[key]}")
+                covered_keys.add(key)
+
         # Work Preferences
         work_prefs = []
         for key, label in [
@@ -783,29 +901,28 @@ class ChatService:
                 covered_keys.add(key)
         if work_prefs:
             context_parts.append("Work Preferences: " + ", ".join(work_prefs))
-        
-        # Education and Learning
+
+        # Spiritual / Mindfulness
         for key, label in [
-            ("education_level", "Education Level"),
-            ("learning_goals", "Learning Goals")
+            ("spiritual_practices", "Spiritual Practices"),
+            ("mindfulness_level", "Mindfulness Level"),
+            ("stress_management", "Stress Management")
         ]:
             if profile_data.get(key):
                 context_parts.append(f"{label}: {profile_data[key]}")
                 covered_keys.add(key)
-        
-        # Target Industries
-        if profile_data.get("target_industries"):
-            value = profile_data["target_industries"]
-            value_str = ", ".join(value) if isinstance(value, list) else str(value)
-            context_parts.append(f"Target Industries: {value_str}")
-            covered_keys.add("target_industries")
-        
+
+        # Relationship Goals
+        if profile_data.get("relationship_goals"):
+            context_parts.append(f"Relationship Goals: {profile_data['relationship_goals']}")
+            covered_keys.add("relationship_goals")
+
         # Append any remaining keys that were not explicitly covered
         for key, value in profile_data.items():
             if key not in covered_keys and value:
                 value_str = ", ".join(value) if isinstance(value, list) else str(value)
                 context_parts.append(f"{key.replace('_', ' ').title()}: {value_str}")
-        
+
         return "\n".join(context_parts) if context_parts else "No detailed profile information available."
 
     async def generate_follow_up_questions(self, user_message: str, ai_response: str, session_id: str = "default", profile_data: Optional[Dict[str, any]] = None, cancellation_event: Optional[asyncio.Event] = None) -> List[str]:

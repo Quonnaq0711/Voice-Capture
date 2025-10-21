@@ -17,11 +17,11 @@ class UserActivity(Base):
     __tablename__ = "user_activities"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)  # Index for user queries
 
     # Activity details
-    activity_type = Column(String(50), nullable=False)  # 'chat', 'resume_analysis', 'agent_interaction'
-    activity_source = Column(String(50), nullable=False)  # 'dashboard', 'career', 'money', 'mind', etc.
+    activity_type = Column(String(50), nullable=False, index=True)  # Index for filtering by type
+    activity_source = Column(String(50), nullable=False, index=True)  # Index for filtering by source
     activity_title = Column(String(255), nullable=False)  # Human readable title
     activity_description = Column(Text, nullable=True)  # Optional detailed description
 
@@ -33,7 +33,7 @@ class UserActivity(Base):
     message_id = Column(Integer, ForeignKey("chat_messages.id"), nullable=True)
 
     # Timestamps
-    created_at = Column(DateTime, default=utc_now, nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False, index=True)  # Index for time-based queries
     updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
 
     # Relationships

@@ -16,8 +16,8 @@ class Resume(Base):
     original_filename = Column(String)  # Original uploaded filename
     file_path = Column(String)  # Full path to the resume file
     file_type = Column(String)  # File extension (pdf or txt)
-    user_id = Column(Integer, ForeignKey("users.id"))
-    created_at = Column(DateTime, default=utc_now)
+    user_id = Column(Integer, ForeignKey("users.id"), index=True)  # Index for user queries
+    created_at = Column(DateTime, default=utc_now, index=True)  # Index for time-based queries
     updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
 
     # Relationships

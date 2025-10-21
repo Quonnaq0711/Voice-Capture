@@ -529,6 +529,119 @@ For more troubleshooting, see:
 
 ---
 
+## Security Configuration
+
+### CORS (Cross-Origin Resource Sharing)
+
+The platform implements **environment-based CORS configuration** to balance development flexibility with production security.
+
+#### Configuration
+
+CORS origins are controlled via the `CORS_ALLOWED_ORIGINS` environment variable in `.env.dev` and `.env.staging`:
+
+**Development** (`.env.dev`):
+```bash
+CORS_ALLOWED_ORIGINS=http://localhost:1000,http://localhost:3000,http://127.0.0.1:1000,http://127.0.0.1:3000
+```
+- Allows all common development ports
+- Supports localhost and 127.0.0.1 variants
+- Enables Swagger UI access
+
+**Staging** (`.env.staging`):
+```bash
+CORS_ALLOWED_ORIGINS=https://staging.idii.co,https://idii.co
+```
+- Restricted to known production domains
+- HTTPS only
+- Prevents unauthorized API access
+
+**Production**:
+```bash
+CORS_ALLOWED_ORIGINS=https://idii.co
+```
+- Single domain only
+- Maximum security
+
+#### Implementation
+
+Located in `backend/config/cors_config.py`:
+- `get_allowed_origins()` - Returns allowed origins based on `ENVIRONMENT` variable
+- `get_allowed_methods()` - Returns allowed HTTP methods (GET, POST, PUT, DELETE, PATCH, OPTIONS)
+- `log_cors_configuration()` - Logs CORS settings at startup
+
+#### Startup Logs
+
+The backend displays CORS configuration on startup:
+
+```
+============================================================
+🔒 CORS Security Configuration
+============================================================
+Environment: development
+Allowed Origins (6):
+  ✓ http://localhost:1000
+  ✓ http://localhost:3000
+  ✓ http://127.0.0.1:1000
+  ✓ http://127.0.0.1:3000
+  ✓ http://localhost:5000
+  ✓ http://127.0.0.1:5000
+Allowed Methods: GET, POST, PUT, DELETE, PATCH, OPTIONS
+Credentials Allowed: True
+============================================================
+```
+
+#### Security Benefits
+
+| Feature | Development | Staging/Production |
+|---------|-------------|-------------------|
+| **CSRF Protection** | Limited | ✅ Full |
+| **Domain Whitelist** | Local only | ✅ Strict |
+| **Credential Safety** | Local scope | ✅ Protected |
+| **Flexibility** | ✅ High | Restricted |
+
+### File Upload Security
+
+File uploads enforce server-side validation to prevent DoS attacks and malicious file uploads.
+
+#### Resume Uploads
+
+- **Max Size**: 10 MB
+- **Allowed Formats**: `.pdf`, `.docx`, `.txt`
+- **Validation**: `backend/utils/file_validator.py`
+- **Error Code**: HTTP 413 (Payload Too Large) for oversized files
+
+#### Avatar Uploads
+
+- **Max Size**: 5 MB
+- **Allowed Formats**: `.jpg`, `.jpeg`, `.png`, `.gif`, `.webp`
+- **Processing**: Automatic resize to 500x500 max
+- **Optimization**: Quality 85%, optimized for web
+
+#### Security Features
+
+- ✅ Server-side size validation (frontend validation can be bypassed)
+- ✅ File extension whitelist
+- ✅ Filename sanitization (prevents path traversal)
+- ✅ Empty file detection
+- ✅ Orphan file cleanup on database failure
+
+Configuration in `backend/config/file_upload_config.py`:
+```python
+MAX_RESUME_SIZE = 10 * 1024 * 1024  # 10 MB
+MAX_AVATAR_SIZE = 5 * 1024 * 1024   # 5 MB
+```
+
+### Authentication & Tokens
+
+- **Access Token**: 30-minute expiry, JWT-based
+- **Refresh Token**: 7-day expiry, one-time use, database-tracked
+- **Token Rotation**: Automatic refresh before expiration
+- **Revocation**: Immediate token invalidation on logout
+
+See `backend/utils/auth.py` and `backend/models/refresh_token.py` for implementation.
+
+---
+
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

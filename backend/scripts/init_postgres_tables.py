@@ -30,6 +30,7 @@ from backend.models.resume import Resume
 from backend.models.activity import UserActivity
 from backend.models.career_insight import CareerInsight
 from backend.models.daily_recommendation import DailyRecommendation
+from backend.models.refresh_token import RefreshToken
 
 def main():
     print("Initializing PostgreSQL tables...")

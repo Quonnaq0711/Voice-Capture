@@ -6,12 +6,16 @@ import uuid
 import time
 from PIL import Image
 import io
+import logging
 
 from backend.db.database import get_db
 from backend.models.user import User
 from backend.models.profile import UserProfile
 from backend.models import schemas
 from backend.utils.auth import get_current_user, get_password_hash, verify_password
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/profile", tags=["profile"])
 
@@ -91,42 +95,73 @@ async def upload_avatar(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Upload user avatar"""
-    print(f"Received file upload request:")
-    print(f"  - Filename: {file.filename}")
-    print(f"  - Content-Type: {file.content_type}")
-    print(f"  - User ID: {current_user.id}")
+    """
+    Upload user avatar image with comprehensive security validations.
 
-    # Validate file type
-    if not file.content_type.startswith("image/"):
-        print(f"ERROR: Invalid content type: {file.content_type}")
+    Security features:
+    - File size validation (max 5MB)
+    - File type validation (images only)
+    - Filename sanitization (prevent path traversal)
+    - Image processing and optimization
+    - Automatic resize to 500x500 max
+
+    Args:
+        file: Avatar image file to upload
+        current_user: Current authenticated user
+        db: Database session
+
+    Returns:
+        Success message with avatar URL
+
+    Raises:
+        HTTPException 400: Invalid file format or empty file
+        HTTPException 413: File size exceeds limit
+    """
+    from backend.utils.file_validator import FileValidator
+
+    logger.info(f"Avatar upload request - User: {current_user.id}, Filename: {file.filename}, Type: {file.content_type}")
+
+    # Validate file (size, extension, content)
+    contents, file_extension = await FileValidator.validate_avatar(file)
+
+    # file_extension comes with dot, so remove it
+    file_extension = file_extension[1:] if file_extension.startswith('.') else file_extension
+
+    # Validate user_id doesn't contain path traversal characters
+    user_id_str = str(current_user.id)
+    if any(char in user_id_str for char in ['/', '\\', '..']):
+        logger.error(f"Invalid user_id detected: {user_id_str}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"File must be an image. Received: {file.content_type}"
+            detail="Invalid user ID"
         )
 
-    # Generate unique filename
-    file_extension = file.filename.split(".")[-1].lower()
-    print(f"  - File extension: {file_extension}")
+    # Create user-specific directory with path traversal protection
+    user_avatar_dir = os.path.normpath(os.path.join(AVATAR_DIR, user_id_str))
 
-    if file_extension not in ["jpg", "jpeg", "png", "gif", "webp"]:
-        print(f"ERROR: Unsupported extension: {file_extension}")
+    # Security check: ensure final path is still under AVATAR_DIR
+    if not user_avatar_dir.startswith(os.path.normpath(AVATAR_DIR)):
+        logger.error(f"Path traversal attempt detected: {user_avatar_dir}")
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Unsupported image format '{file_extension}'. Please use JPG, PNG, GIF, or WebP"
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied"
         )
-    
-    # Create user-specific directory
-    user_avatar_dir = os.path.join(AVATAR_DIR, str(current_user.id))
+
     os.makedirs(user_avatar_dir, exist_ok=True)
-    
+
     # Generate UUID filename
     filename = f"{uuid.uuid4().hex}.{file_extension}"
-    file_path = os.path.join(user_avatar_dir, filename)
-    
-    # Read and process image
-    contents = await file.read()
-    
+    file_path = os.path.normpath(os.path.join(user_avatar_dir, filename))
+
+    # Final security check: ensure file path is under user_avatar_dir
+    if not file_path.startswith(user_avatar_dir):
+        logger.error(f"Path traversal attempt in file path: {file_path}")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied"
+        )
+
+    # Process image (contents already read during validation)
     # Resize image to reasonable size (max 500x500)
     try:
         image = Image.open(io.BytesIO(contents))
@@ -138,10 +173,16 @@ async def upload_avatar(
         # Remove old avatar files if exist
         for old_file in os.listdir(user_avatar_dir):
             if old_file != filename:
+                old_file_path = os.path.join(user_avatar_dir, old_file)
                 try:
-                    os.remove(os.path.join(user_avatar_dir, old_file))
-                except:
-                    pass
+                    os.remove(old_file_path)
+                    logger.debug(f"Removed old avatar file: {old_file_path}")
+                except FileNotFoundError:
+                    logger.debug(f"Old avatar file already removed: {old_file_path}")
+                except PermissionError as e:
+                    logger.error(f"Permission denied removing old avatar {old_file_path}: {str(e)}")
+                except Exception as e:
+                    logger.error(f"Unexpected error removing old avatar {old_file_path}: {str(e)}", exc_info=True)
         
         # Update avatar URL in database with timestamp for cache busting
         timestamp = int(time.time())
@@ -163,9 +204,7 @@ async def upload_avatar(
             "url": avatar_url_with_cache  # Include timestamp for cache busting
         }
     except Exception as e:
-        print(f"ERROR processing image: {type(e).__name__}: {str(e)}")
-        import traceback
-        traceback.print_exc()
+        logger.error(f"Error processing avatar image for user {current_user.id}: {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Failed to process image: {str(e)}"
@@ -178,15 +217,28 @@ async def delete_avatar(current_user: User = Depends(get_current_user), db: Sess
     user_avatar_dir = os.path.join(AVATAR_DIR, str(current_user.id))
     
     if os.path.exists(user_avatar_dir):
+        # Delete all avatar files in the directory
         for avatar_file in os.listdir(user_avatar_dir):
+            avatar_file_path = os.path.join(user_avatar_dir, avatar_file)
             try:
-                os.remove(os.path.join(user_avatar_dir, avatar_file))
-            except:
-                pass
+                os.remove(avatar_file_path)
+                logger.debug(f"Deleted avatar file: {avatar_file_path}")
+            except FileNotFoundError:
+                logger.debug(f"Avatar file already deleted: {avatar_file_path}")
+            except PermissionError as e:
+                logger.error(f"Permission denied deleting avatar {avatar_file_path}: {str(e)}")
+            except Exception as e:
+                logger.error(f"Unexpected error deleting avatar {avatar_file_path}: {str(e)}", exc_info=True)
+
+        # Delete the directory itself
         try:
             os.rmdir(user_avatar_dir)
-        except:
-            pass
+            logger.debug(f"Removed avatar directory: {user_avatar_dir}")
+        except OSError as e:
+            # Directory might not be empty or permission issue
+            logger.warning(f"Could not remove avatar directory {user_avatar_dir}: {str(e)}")
+        except Exception as e:
+            logger.error(f"Unexpected error removing avatar directory {user_avatar_dir}: {str(e)}", exc_info=True)
     
     # Update avatar URL in database
     profile = db.query(UserProfile).filter(UserProfile.user_id == current_user.id).first()

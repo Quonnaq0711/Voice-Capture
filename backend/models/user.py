@@ -39,3 +39,4 @@ class User(Base):
     career_insights = relationship("CareerInsight", back_populates="user")
     activities = relationship("UserActivity", back_populates="user")
     daily_recommendations = relationship("DailyRecommendation", back_populates="user", lazy="dynamic")
+    refresh_tokens = relationship("RefreshToken", back_populates="user", cascade="all, delete-orphan")

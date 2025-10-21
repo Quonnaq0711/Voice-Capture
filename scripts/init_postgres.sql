@@ -277,6 +277,33 @@ CREATE INDEX IF NOT EXISTS idx_daily_recommendations_date ON daily_recommendatio
 CREATE INDEX IF NOT EXISTS idx_daily_recommendations_user_date ON daily_recommendations(user_id, date DESC);
 
 -- ============================================================
+-- TABLE: refresh_tokens
+-- JWT refresh token storage for secure authentication
+-- ============================================================
+CREATE TABLE IF NOT EXISTS refresh_tokens (
+    id SERIAL PRIMARY KEY,
+    token VARCHAR(500) UNIQUE NOT NULL,  -- JWT refresh token (longer than access tokens)
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+
+    -- Expiration and revocation
+    expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    revoked BOOLEAN DEFAULT FALSE NOT NULL,
+
+    -- Metadata for security tracking
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    revoked_at TIMESTAMP WITH TIME ZONE,
+
+    -- Optional: Device/IP tracking for security auditing
+    user_agent VARCHAR(500),
+    ip_address VARCHAR(50)
+);
+
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_token ON refresh_tokens(token);
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user_id ON refresh_tokens(user_id);
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_expires_at ON refresh_tokens(expires_at);
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_revoked ON refresh_tokens(revoked);
+
+-- ============================================================
 -- TRIGGERS: Auto-update updated_at timestamps
 -- ============================================================
 
@@ -334,11 +361,13 @@ CREATE TRIGGER update_daily_recommendations_updated_at BEFORE UPDATE ON daily_re
 -- 6. chat_messages (individual messages)
 -- 7. user_activities (activity tracking)
 -- 8. daily_recommendations (AI daily insights)
+-- 9. refresh_tokens (JWT refresh token storage for secure auth)
 --
--- Total: 8 tables with:
+-- Total: 9 tables with:
 --   - TIMESTAMP WITH TIME ZONE for all datetime fields (proper timezone handling)
 --   - Indexes for optimal query performance
 --   - Foreign keys with CASCADE constraints
---   - Auto-update triggers for updated_at columns
+--   - Auto-update triggers for updated_at columns (where applicable)
 --   - JSONB fields for flexible data storage
+--   - Secure refresh token mechanism for 7-day login persistence
 -- ============================================================

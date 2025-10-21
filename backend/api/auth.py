@@ -13,12 +13,16 @@ from backend.services.email_validation_service import EmailValidationService
 from backend.services.password_reset_service import PasswordResetService
 from backend.models import schemas
 from backend.models.user import User
+from backend.models.refresh_token import RefreshToken
 from backend.utils.auth import (
     get_password_hash,
     verify_password,
     create_access_token,
+    create_refresh_token,
+    verify_refresh_token,
     get_current_user,
-    ACCESS_TOKEN_EXPIRE_MINUTES
+    ACCESS_TOKEN_EXPIRE_MINUTES,
+    REFRESH_TOKEN_EXPIRE_DAYS
 )
 from backend.db.database import get_db
 
@@ -175,12 +179,32 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = 
     user.last_login = datetime.now(timezone.utc)
     db.commit()
 
-    # Create access token
+    # Create access token (short-lived)
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={"sub": user.email}, expires_delta=access_token_expires
     )
-    return {"access_token": access_token, "token_type": "bearer"}
+
+    # Create refresh token (long-lived)
+    refresh_token_expires = timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+    refresh_token = create_refresh_token(
+        data={"sub": user.email}, expires_delta=refresh_token_expires
+    )
+
+    # Store refresh token in database
+    db_refresh_token = RefreshToken(
+        token=refresh_token,
+        user_id=user.id,
+        expires_at=datetime.now(timezone.utc) + refresh_token_expires
+    )
+    db.add(db_refresh_token)
+    db.commit()
+
+    return {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": "bearer"
+    }
 
 # Password reset endpoints
 @router.post("/reset-password-request", response_model=schemas.PasswordResetResponse)
@@ -247,17 +271,91 @@ async def reset_password_confirm(
 
 
 @router.post("/token/refresh", response_model=schemas.Token)
-async def refresh_token(current_user: User = Depends(get_current_user)):
+async def refresh_token_endpoint(
+    refresh_token: str = Body(..., embed=True),
+    db: Session = Depends(get_db)
+):
+    """
+    Refresh access token using refresh token
+
+    This endpoint implements the standard OAuth2 refresh token flow:
+    1. Verify the refresh token JWT signature and expiration
+    2. Check if the refresh token exists in database and is not revoked
+    3. Generate new access token and new refresh token
+    4. Revoke old refresh token (one-time use)
+    5. Store new refresh token in database
+
+    Security features:
+    - Refresh tokens are one-time use only
+    - Expired or revoked tokens are rejected
+    - All refresh tokens are tracked in database
+    """
+    # Verify refresh token JWT
+    email = verify_refresh_token(refresh_token)
+    if not email:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid refresh token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    # Check if refresh token exists in database and is valid
+    db_refresh_token = db.query(RefreshToken).filter(
+        RefreshToken.token == refresh_token
+    ).first()
+
+    if not db_refresh_token or not db_refresh_token.is_valid():
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Refresh token expired or revoked",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    # Get user
+    user = db.query(User).filter(User.email == email).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    # Revoke old refresh token (one-time use)
+    db_refresh_token.revoke()
+    db.commit()
+
+    # Create new access token
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(
-        data={"sub": current_user.email}, expires_delta=access_token_expires
+    new_access_token = create_access_token(
+        data={"sub": user.email}, expires_delta=access_token_expires
     )
-    return {"access_token": access_token, "token_type": "bearer"}
+
+    # Create new refresh token
+    refresh_token_expires = timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+    new_refresh_token = create_refresh_token(
+        data={"sub": user.email}, expires_delta=refresh_token_expires
+    )
+
+    # Store new refresh token in database
+    new_db_refresh_token = RefreshToken(
+        token=new_refresh_token,
+        user_id=user.id,
+        expires_at=datetime.now(timezone.utc) + refresh_token_expires
+    )
+    db.add(new_db_refresh_token)
+    db.commit()
+
+    return {
+        "access_token": new_access_token,
+        "refresh_token": new_refresh_token,
+        "token_type": "bearer"
+    }
 
 # Resume Functions
 
 import uuid
 from backend.models.resume import Resume
+from backend.utils.file_validator import FileValidator
 
 @router.post("/upload-resume", response_model=schemas.ResumeUploadResponse)
 async def upload_resume(
@@ -265,15 +363,32 @@ async def upload_resume(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    # Validate file extension - Support PDF, DOCX, and TXT formats
-    file_extension = os.path.splitext(file.filename)[1].lower()
-    ALLOWED_EXTENSIONS = [".pdf", ".docx", ".txt"]
+    """
+    Upload a resume file for the current user.
 
-    if file_extension not in ALLOWED_EXTENSIONS:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Unsupported file format. Allowed formats: {', '.join(ALLOWED_EXTENSIONS)}"
-        )
+    Security features:
+    - File size validation (max 10MB)
+    - File extension validation (.pdf, .docx, .txt only)
+    - Filename sanitization (prevent path traversal)
+    - UUID-based filename (prevent overwrites and conflicts)
+
+    Args:
+        file: Resume file to upload
+        current_user: Current authenticated user
+        db: Database session
+
+    Returns:
+        ResumeUploadResponse with filename and success message
+
+    Raises:
+        HTTPException 400: Invalid file format or empty file
+        HTTPException 413: File size exceeds limit
+    """
+    # Validate file (size, extension, content)
+    content, file_extension = await FileValidator.validate_resume(file)
+
+    # Sanitize original filename
+    safe_original_filename = FileValidator.validate_filename(file.filename)
 
     # Create user directory if not exists
     # Use /app/resumes for Docker volume mount, fallback to backend/resumes for local dev
@@ -284,26 +399,40 @@ async def upload_resume(
     user_resume_dir = os.path.join(base_resume_dir, str(current_user.id))
     os.makedirs(user_resume_dir, exist_ok=True)
 
-    # Generate UUID for filename
+    # Generate UUID for filename (prevent overwrites and conflicts)
     unique_filename = f"{uuid.uuid4()}{file_extension}"
     file_path = os.path.join(user_resume_dir, unique_filename)
 
-    # Save file
-    async with aiofiles.open(file_path, 'wb') as out_file:
-        content = await file.read()
-        await out_file.write(content)
+    # Save file to disk
+    try:
+        async with aiofiles.open(file_path, 'wb') as out_file:
+            await out_file.write(content)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to save file: {str(e)}"
+        )
 
     # Create resume record in database
-    db_resume = Resume(
-        filename=unique_filename,
-        original_filename=file.filename,
-        file_path=file_path,
-        file_type=file_extension[1:],  # Remove the dot
-        user_id=current_user.id
-    )
-    db.add(db_resume)
-    db.commit()
-    db.refresh(db_resume)
+    try:
+        db_resume = Resume(
+            filename=unique_filename,
+            original_filename=safe_original_filename,
+            file_path=file_path,
+            file_type=file_extension[1:],  # Remove the dot
+            user_id=current_user.id
+        )
+        db.add(db_resume)
+        db.commit()
+        db.refresh(db_resume)
+    except Exception as e:
+        # Clean up file if database operation fails
+        if os.path.exists(file_path):
+            os.remove(file_path)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to save resume metadata: {str(e)}"
+        )
 
     return {
         "filename": unique_filename,

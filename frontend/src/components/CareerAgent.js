@@ -7,6 +7,7 @@ import PersonalAssistant from './PersonalAssistant';
 // Progress tracking is now handled in ChatDialog
 // import ProgressTracker from './ProgressTracker';
 import NotificationPanel from './NotificationPanel';
+import AgentDesignModal from './AgentDesignModal';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, LineChart, Line, ResponsiveContainer, RadialBarChart, RadialBar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar } from 'recharts';
 
 // Import Heroicons
@@ -58,11 +59,20 @@ import {
 
 // Toast notification component
 const Toast = ({ message, type, onClose }) => {
+  const isMountedRef = useRef(true);
+
   useEffect(() => {
+    isMountedRef.current = true;
     const timer = setTimeout(() => {
-      onClose();
+      // Check if component is still mounted before calling onClose
+      if (isMountedRef.current) {
+        onClose();
+      }
     }, 3000);
-    return () => clearTimeout(timer);
+    return () => {
+      isMountedRef.current = false;
+      clearTimeout(timer);
+    };
   }, [onClose]);
 
   return (
@@ -117,10 +127,13 @@ const DocumentUpload = ({ onUploadSuccess }) => {
   const [toast, setToast] = useState(null);
   const fileInputRef = useRef(null);
   const timersRef = useRef({ progressInterval: null, completionTimeout: null });
+  const isMountedRef = useRef(true);
 
-  // Cleanup timers on component unmount
+  // Cleanup timers on component unmount and track mounted state
   useEffect(() => {
+    isMountedRef.current = true;
     return () => {
+      isMountedRef.current = false;
       if (timersRef.current.progressInterval) {
         clearInterval(timersRef.current.progressInterval);
       }
@@ -160,6 +173,12 @@ const DocumentUpload = ({ onUploadSuccess }) => {
     try {
       // Simulate upload progress
       timersRef.current.progressInterval = setInterval(() => {
+        // Check if component is still mounted before updating state
+        if (!isMountedRef.current) {
+          clearInterval(timersRef.current.progressInterval);
+          timersRef.current.progressInterval = null;
+          return;
+        }
         setUploadProgress(prev => {
           if (prev >= 90) {
             clearInterval(timersRef.current.progressInterval);
@@ -176,9 +195,17 @@ const DocumentUpload = ({ onUploadSuccess }) => {
         clearInterval(timersRef.current.progressInterval);
         timersRef.current.progressInterval = null;
       }
-      setUploadProgress(100);
+
+      // Only update state if component is still mounted
+      if (isMountedRef.current) {
+        setUploadProgress(100);
+      }
 
       timersRef.current.completionTimeout = setTimeout(() => {
+        // Check if component is still mounted before updating state
+        if (!isMountedRef.current) {
+          return;
+        }
         setIsUploading(false);
         setUploadProgress(0);
         showToast('Document uploaded successfully!', 'success');
@@ -196,9 +223,33 @@ const DocumentUpload = ({ onUploadSuccess }) => {
         clearTimeout(timersRef.current.completionTimeout);
         timersRef.current.completionTimeout = null;
       }
+
+      // Only update state if component is still mounted
+      if (!isMountedRef.current) {
+        return;
+      }
+
       setIsUploading(false);
       setUploadProgress(0);
-      showToast('Failed to upload document: ' + error.message, 'error');
+
+      // Handle specific error cases
+      let errorMessage = 'Failed to upload document';
+      if (error.response) {
+        // Server responded with error
+        if (error.response.status === 413) {
+          errorMessage = 'File is too large. Maximum size is 10MB.';
+        } else if (error.response.data?.detail) {
+          errorMessage = error.response.data.detail;
+        } else if (error.response.status === 400) {
+          errorMessage = 'Invalid file format. Please upload PDF, DOCX, or TXT files only.';
+        } else {
+          errorMessage = `Upload failed: ${error.response.statusText || 'Unknown error'}`;
+        }
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+
+      showToast(errorMessage, 'error');
     }
   };
 
@@ -848,6 +899,8 @@ const CareerAgent = () => {
   const [userData, setUserData] = useState({ first_name: '', email: '' });
   const [avatarUrl, setAvatarUrl] = useState(null);
   const [isAssistantDialogOpen, setIsAssistantDialogOpen] = useState(false);
+  const [agentModalOpen, setAgentModalOpen] = useState(false);
+  const [selectedAgent, setSelectedAgent] = useState(null);
   const [activeTab, setActiveTab] = useState('insights');
     const [insightsTab, setInsightsTab] = useState('identity');
   const [isInsightsMenuOpen, setIsInsightsMenuOpen] = useState(true);
@@ -1291,7 +1344,7 @@ const CareerAgent = () => {
       if (lastAnalyzedDocumentId) {
         console.log('Loading career insights for last analyzed document:', lastAnalyzedDocumentId);
         try {
-          response = await getCareerInsightsByResume(lastAnalyzedDocumentId, user.id);
+          response = await getCareerInsightsByResume(lastAnalyzedDocumentId);
           if (response.success && response.has_data) {
             console.log('Found insights for last analyzed document');
           } else {
@@ -1632,6 +1685,23 @@ const CareerAgent = () => {
   const handlePersonalAssistant = () => {
     setIsAssistantDialogOpen(true);
     // Note: Chat activity is now tracked when messages are actually sent in ChatDialog
+  };
+
+  // Handler for Agent Design Modal
+  const handleOpenAgentModal = (agentName) => {
+    if (agentName === 'Travel Agent') {
+      setSelectedAgent({
+        title: 'Travel Agent (Preview)',
+        imageSrc: '/design/Travel Agent 4.0.png'
+      });
+      setAgentModalOpen(true);
+    } else if (agentName === 'Body Agent') {
+      setSelectedAgent({
+        title: 'Body Agent (Preview)',
+        imageSrc: '/design/Body Agent 3.0.png'
+      });
+      setAgentModalOpen(true);
+    }
   };
 
   // Navigation handlers
@@ -4468,7 +4538,7 @@ const careerInsights = {
         <div className="p-6 border-b border-gray-200">
           <div className="flex items-center space-x-3">
             <div className="w-10 h-10 bg-gradient-to-r from-orange-500 to-red-500 rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold text-lg">S</span>
+              <span className="text-white font-bold text-lg">I</span>
             </div>
             <div>
               <h1 className="text-xl font-bold text-gray-900">Idii.</h1>
@@ -4619,7 +4689,14 @@ const careerInsights = {
                 maxVisible={5}
               />
               
-              <div className="w-10 h-10 bg-gray-300 rounded-full flex items-center justify-center">
+              <div
+                onClick={handleAccount}
+                className="w-10 h-10 bg-gray-300 rounded-full flex items-center justify-center cursor-pointer hover:bg-gray-400 transition-colors duration-200"
+                role="button"
+                aria-label="Go to account settings"
+                tabIndex={0}
+                onKeyDown={(e) => e.key === 'Enter' && handleAccount()}
+              >
                 {avatarUrl ? (
                   <img
                     src={avatarUrl}
@@ -4645,13 +4722,24 @@ const careerInsights = {
         {/* Notification Panel moved to top navigation bar */}
 
         {/* Personal Assistant Section */}
-        <PersonalAssistant 
-          user={userData} 
+        <PersonalAssistant
+          user={userData}
           isDialogOpen={isAssistantDialogOpen}
           setIsDialogOpen={setIsAssistantDialogOpen}
           onDialogClose={fetchUnreadCount}
           onUnreadCountChange={fetchUnreadCount}
+          onOpenAgentModal={handleOpenAgentModal}
         />
+
+        {/* Agent Design Modal */}
+        {selectedAgent && (
+          <AgentDesignModal
+            isOpen={agentModalOpen}
+            onClose={() => setAgentModalOpen(false)}
+            title={selectedAgent.title}
+            imageSrc={selectedAgent.imageSrc}
+          />
+        )}
       </div>
     </div>
   );

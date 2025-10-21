@@ -22,6 +22,7 @@ from backend.models.user import User
 from backend.models.profile import UserProfile
 from backend.models.daily_recommendation import DailyRecommendation
 from backend.personal_assistant.prompts import FOLLOW_UP_PROMPT, OPTIMIZE_QUERY_PROMPT
+from backend.utils.db_session import get_db_session
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -83,9 +84,93 @@ class ChatService:
         except Exception as e:
             logger.error(f"Failed to initialize ChatService: {str(e)}")
             raise
-    
+
+    def shutdown(self):
+        """
+        Gracefully shutdown the chat service and release all resources.
+
+        This method should be called when the application is shutting down to ensure
+        all resources (ThreadPoolExecutor, database connections) are properly released.
+        """
+        try:
+            if self.executor:
+                logger.info("Shutting down ThreadPoolExecutor...")
+                self.executor.shutdown(wait=True, cancel_futures=False)
+                logger.info("ThreadPoolExecutor shut down successfully")
+        except Exception as e:
+            logger.error(f"Error during ChatService shutdown: {str(e)}", exc_info=True)
+
+    def get_pool_status(self) -> dict:
+        """
+        Get current database connection pool status for monitoring.
+
+        Returns:
+            Dictionary containing pool statistics
+        """
+        try:
+            from backend.db.database import engine
+            pool = engine.pool
+
+            status = {
+                "pool_size": pool.size(),
+                "checked_out": pool.checkedout(),
+                "overflow": pool.overflow(),
+                "checked_in": pool.checkedin(),
+                "total_connections": pool.size() + pool.overflow()
+            }
+
+            logger.debug(f"Connection pool status: {status}")
+            return status
+
+        except Exception as e:
+            logger.error(f"Error getting pool status: {str(e)}", exc_info=True)
+            return {"error": str(e)}
+
+    def _load_messages_from_db(self, session_id: int) -> list:
+        """
+        Load chat messages from database for a given session.
+
+        Uses context manager to ensure proper database session cleanup.
+
+        Args:
+            session_id: Integer session ID to query
+
+        Returns:
+            List of ChatMessage objects, or empty list if error occurs
+        """
+        try:
+            with get_db_session() as db:
+                messages = (
+                    db.query(ChatMessage)
+                    .filter(ChatMessage.session_id == session_id)
+                    .order_by(ChatMessage.id.asc())
+                    .all()
+                )
+                logger.debug(f"Loaded {len(messages)} messages from DB for session {session_id}")
+                return messages
+
+        except Exception as e:
+            logger.error(f"Failed to load chat messages from DB for session {session_id}: {str(e)}", exc_info=True)
+            return []
+
+    def _populate_history_from_messages(self, history: InMemoryChatMessageHistory, messages: list) -> None:
+        """
+        Populate in-memory history object from database messages.
+
+        Args:
+            history: InMemoryChatMessageHistory instance to populate
+            messages: List of ChatMessage objects from database
+        """
+        for msg in messages:
+            if msg.sender == "user":
+                history.add_message(HumanMessage(content=msg.message_text))
+            else:
+                # Treat any non-user sender as assistant for robustness
+                history.add_message(AIMessage(content=msg.message_text))
+
     def get_session_history(self, session_id: str) -> BaseChatMessageHistory:
-        """Return chat history for a given session.
+        """
+        Return chat history for a given session.
 
         If the session does not exist in memory, attempt to hydrate it from the
         persistent store (``chat_messages`` table). This prevents loss of
@@ -100,72 +185,33 @@ class ChatService:
             An ``InMemoryChatMessageHistory`` instance containing the full
             conversation history for ``session_id``.
         """
-        # Return cached history if we already have it in memory.
+        # Return cached history if we already have it in memory
         if session_id in self.store:
+            logger.debug(f"Returning cached history for session {session_id}")
             return self.store[session_id]
 
-        # Create a new in-memory history object – we'll populate it below.
+        # Create a new in-memory history object
         history = InMemoryChatMessageHistory()
 
-        # Attempt to pull historical messages from the database so that we can
-        # reconstruct the context when the application restarts.
-        # Only query the database if session_id is a valid integer or numeric string.
+        # Convert session_id to integer for database query
+        db_session_id = None
         if isinstance(session_id, str) and session_id.isdigit():
-            try:
-                db = SessionLocal()
-                db_session_id = int(session_id)
-                messages = (
-                    db.query(ChatMessage)
-                    .filter(ChatMessage.session_id == db_session_id)
-                    .order_by(ChatMessage.id.asc())
-                    .all()
-                )
-
-                for msg in messages:
-                    # Distinguish between user and assistant messages.
-                    if msg.sender == "user":
-                        history.add_message(HumanMessage(content=msg.message_text))
-                    else:
-                        # Treat any non-user sender as assistant for robustness.
-                        history.add_message(AIMessage(content=msg.message_text))
-            except Exception as e:
-                logger.error(f"Failed to load chat history from DB for session {session_id}: {str(e)}")
-            finally:
-                # Ensure DB session is closed even if an error occurs.
-                try:
-                    db.close()
-                except Exception:
-                    pass
+            db_session_id = int(session_id)
         elif isinstance(session_id, int):
-            try:
-                db = SessionLocal()
-                messages = (
-                    db.query(ChatMessage)
-                    .filter(ChatMessage.session_id == session_id)
-                    .order_by(ChatMessage.id.asc())
-                    .all()
-                )
-
-                for msg in messages:
-                    # Distinguish between user and assistant messages.
-                    if msg.sender == "user":
-                        history.add_message(HumanMessage(content=msg.message_text))
-                    else:
-                        # Treat any non-user sender as assistant for robustness.
-                        history.add_message(AIMessage(content=msg.message_text))
-            except Exception as e:
-                logger.error(f"Failed to load chat history from DB for session {session_id}: {str(e)}")
-            finally:
-                # Ensure DB session is closed even if an error occurs.
-                try:
-                    db.close()
-                except Exception:
-                    pass
+            db_session_id = session_id
         else:
             # For non-numeric session IDs like "default", skip database loading
             logger.info(f"Skipping database history load for non-numeric session_id: {session_id}")
+            self.store[session_id] = history
+            return history
 
-        # Cache the reconstructed history for future calls.
+        # Load messages from database and populate history
+        messages = self._load_messages_from_db(db_session_id)
+        self._populate_history_from_messages(history, messages)
+
+        logger.info(f"Loaded {len(messages)} messages from DB for session {session_id}")
+
+        # Cache the reconstructed history for future calls
         self.store[session_id] = history
         return history
     
@@ -445,94 +491,97 @@ class ChatService:
     async def get_user_profile(self, user_id: int, db: Optional[Session] = None) -> Optional[Dict[str, any]]:
         """
         Get user profile data from database to provide personalized context.
-        
+
+        Uses context manager for database session management to prevent connection leaks.
+        If db session is provided, uses it directly (caller is responsible for closing).
+        If db is None, creates and manages its own session with automatic cleanup.
+
         Args:
             user_id: User ID to fetch profile for
-            db: Optional database session to use
-            
+            db: Optional database session to use (if None, creates new session with context manager)
+
         Returns:
             Dictionary containing user profile data or None if not found
         """
+        def _fetch_profile(session: Session) -> Optional[Dict[str, any]]:
+            """Inner function to fetch and process profile data"""
+            # Query user profile
+            profile = session.query(UserProfile).filter(UserProfile.user_id == user_id).first()
+            if not profile:
+                logger.info(f"No profile found for user_id: {user_id}")
+                return None
+
+            # Convert profile to dictionary, handling JSON fields
+            profile_data = {
+                "current_job": profile.current_job,
+                "company": profile.company,
+                "industry": profile.industry,
+                "experience": profile.experience,
+                "work_style": profile.work_style,
+                "leadership_experience": profile.leadership_experience,
+                "skills": profile.skills,
+                "soft_skills": profile.soft_skills,
+                "certifications": profile.certifications,
+                "skill_gaps": profile.skill_gaps,
+                "short_term_goals": profile.short_term_goals,
+                "career_goals": profile.career_goals,
+                "career_path_preference": profile.career_path_preference,
+                "target_industries": profile.target_industries,
+                "work_life_balance_priority": profile.work_life_balance_priority,
+                "company_size_preference": profile.company_size_preference,
+                "career_risk_tolerance": profile.career_risk_tolerance,
+                "geographic_flexibility": profile.geographic_flexibility,
+                "work_values": profile.work_values,
+                "career_challenges": profile.career_challenges,
+                "professional_strengths": profile.professional_strengths,
+                "growth_areas": profile.growth_areas,
+                "learning_preferences": profile.learning_preferences,
+                "income_range": profile.income_range,
+                "financial_goals": profile.financial_goals,
+                "investment_experience": profile.investment_experience,
+                "risk_tolerance": profile.risk_tolerance,
+                "fitness_level": profile.fitness_level,
+                "health_goals": profile.health_goals,
+                "dietary_preferences": profile.dietary_preferences,
+                "exercise_preferences": profile.exercise_preferences,
+                "travel_style": profile.travel_style,
+                "preferred_destinations": profile.preferred_destinations,
+                "travel_budget": profile.travel_budget,
+                "travel_frequency": profile.travel_frequency,
+                "learning_style": profile.learning_style,
+                "personality_type": profile.personality_type,
+                "strengths": profile.strengths,
+                "areas_for_improvement": profile.areas_for_improvement,
+                "family_status": profile.family_status,
+                "relationship_goals": profile.relationship_goals,
+                "work_life_balance": profile.work_life_balance,
+                "hobbies": profile.hobbies,
+                "interests": profile.interests,
+                "creative_pursuits": profile.creative_pursuits,
+                "education_level": profile.education_level,
+                "learning_goals": profile.learning_goals,
+                "preferred_learning_methods": profile.preferred_learning_methods,
+                "spiritual_practices": profile.spiritual_practices,
+                "mindfulness_level": profile.mindfulness_level,
+                "stress_management": profile.stress_management
+            }
+
+            # Filter out None values to keep context clean
+            profile_data = {k: v for k, v in profile_data.items() if v is not None}
+            logger.info(f"Retrieved profile data for user_id: {user_id} ({len(profile_data)} fields)")
+            return profile_data
+
         try:
-            # Use provided db session or create a new one
-            should_close_db = False
-            if db is None:
-                db = SessionLocal()
-                should_close_db = True
-            
-            try:
-                profile = db.query(UserProfile).filter(UserProfile.user_id == user_id).first()
-                if not profile:
-                    logger.info(f"No profile found for user_id: {user_id}")
-                    return None
-                
-                # Convert profile to dictionary, handling JSON fields
-                profile_data = {
-                    "current_job": profile.current_job,
-                    "company": profile.company,
-                    "industry": profile.industry,
-                    "experience": profile.experience,
-                    "work_style": profile.work_style,
-                    "leadership_experience": profile.leadership_experience,
-                    "skills": profile.skills,
-                    "soft_skills": profile.soft_skills,
-                    "certifications": profile.certifications,
-                    "skill_gaps": profile.skill_gaps,
-                    "short_term_goals": profile.short_term_goals,
-                    "career_goals": profile.career_goals,
-                    "career_path_preference": profile.career_path_preference,
-                    "target_industries": profile.target_industries,
-                    "work_life_balance_priority": profile.work_life_balance_priority,
-                    "company_size_preference": profile.company_size_preference,
-                    "career_risk_tolerance": profile.career_risk_tolerance,
-                    "geographic_flexibility": profile.geographic_flexibility,
-                    "work_values": profile.work_values,
-                    "career_challenges": profile.career_challenges,
-                    "professional_strengths": profile.professional_strengths,
-                    "growth_areas": profile.growth_areas,
-                    "learning_preferences": profile.learning_preferences,
-                    "income_range": profile.income_range,
-                    "financial_goals": profile.financial_goals,
-                    "investment_experience": profile.investment_experience,
-                    "risk_tolerance": profile.risk_tolerance,
-                    "fitness_level": profile.fitness_level,
-                    "health_goals": profile.health_goals,
-                    "dietary_preferences": profile.dietary_preferences,
-                    "exercise_preferences": profile.exercise_preferences,
-                    "travel_style": profile.travel_style,
-                    "preferred_destinations": profile.preferred_destinations,
-                    "travel_budget": profile.travel_budget,
-                    "travel_frequency": profile.travel_frequency,
-                    "learning_style": profile.learning_style,
-                    "personality_type": profile.personality_type,
-                    "strengths": profile.strengths,
-                    "areas_for_improvement": profile.areas_for_improvement,
-                    "family_status": profile.family_status,
-                    "relationship_goals": profile.relationship_goals,
-                    "work_life_balance": profile.work_life_balance,
-                    "hobbies": profile.hobbies,
-                    "interests": profile.interests,
-                    "creative_pursuits": profile.creative_pursuits,
-                    "education_level": profile.education_level,
-                    "learning_goals": profile.learning_goals,
-                    "preferred_learning_methods": profile.preferred_learning_methods,
-                    "spiritual_practices": profile.spiritual_practices,
-                    "mindfulness_level": profile.mindfulness_level,
-                    "stress_management": profile.stress_management
-                }
-                
-                # Filter out None values to keep context clean
-                profile_data = {k: v for k, v in profile_data.items() if v is not None}
-                
-                logger.info(f"Retrieved profile data for user_id: {user_id}")
-                return profile_data
-                
-            finally:
-                if should_close_db:
-                    db.close()
-                
+            if db is not None:
+                # Use provided session (caller manages lifecycle)
+                return _fetch_profile(db)
+            else:
+                # Create new session with context manager (automatic cleanup)
+                with get_db_session() as session:
+                    return _fetch_profile(session)
+
         except Exception as e:
-            logger.error(f"Error getting user profile: {str(e)}")
+            logger.error(f"Error getting user profile for user_id {user_id}: {str(e)}", exc_info=True)
             return None
     
     def _format_profile_for_context(self, profile_data: Dict[str, any]) -> str:
@@ -681,7 +730,7 @@ class ChatService:
         try:
             logger.info(f"Generating streaming response for message: {user_message[:50]}...")
 
-            print("session_id=", session_id)
+            logger.debug(f"session_id={session_id}")
             
             # Use default session if none provided
             if session_id is None:
@@ -698,7 +747,7 @@ class ChatService:
             # Build the system prompt with user profile context
             system_content = "You are a helpful AI personal assistant. Please provide helpful, accurate, and personalized responses."
             
-            print("profile_data=",profile_data)
+            logger.debug(f"profile_data={profile_data}")
 
             if profile_data:
                 # Create a comprehensive profile summary for context
@@ -729,7 +778,7 @@ class ChatService:
                 # streaming process is cancelled before completion.
                 self.get_session_history(session_id).add_user_message(user_message)
 
-            print("messages=",messages)
+            logger.debug(f"messages={messages}")
             
             # Prepare the request payload for Ollama's generate API
             payload = {
@@ -870,7 +919,7 @@ class ChatService:
                 profile_context=profile_context
             )
             
-            print("follow_up_prompt=",follow_up_prompt)
+            logger.debug(f"follow_up_prompt={follow_up_prompt}")
 
             # Generate follow-up questions using the LLM
             loop = asyncio.get_event_loop()

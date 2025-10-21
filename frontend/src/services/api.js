@@ -119,12 +119,31 @@ api.interceptors.response.use(
 
 // Authentication related API
 export const auth = {
-  // Refresh token
+  // Refresh token using refresh token (not access token)
   refreshToken: async () => {
-    const response = await api.post('/auth/token/refresh');
+    const refreshToken = localStorage.getItem('refresh_token');
+    if (!refreshToken) {
+      throw new Error('No refresh token available');
+    }
+
+    // Note: This endpoint does NOT require Authorization header
+    // It uses the refresh token in the request body instead
+    const response = await axios.post(`${API_URL}/auth/token/refresh`, {
+      refresh_token: refreshToken
+    }, {
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    // Store both new tokens
     if (response.data.access_token) {
       localStorage.setItem('token', response.data.access_token);
     }
+    if (response.data.refresh_token) {
+      localStorage.setItem('refresh_token', response.data.refresh_token);
+    }
+
     return response.data;
   },
 
@@ -166,9 +185,14 @@ resendRegistrationOTP: async (email) => {
       },
     });
 
+    // Store both access token and refresh token
     if (response.data.access_token) {
       localStorage.setItem('token', response.data.access_token);
     }
+    if (response.data.refresh_token) {
+      localStorage.setItem('refresh_token', response.data.refresh_token);
+    }
+
     return response.data;
   },
 
@@ -191,6 +215,7 @@ resendRegistrationOTP: async (email) => {
   // Logout
   logout: () => {
     localStorage.removeItem('token');
+    localStorage.removeItem('refresh_token');
   },
 
   // Upload resume

@@ -283,14 +283,20 @@ export const sendMessageStream = (message, sessionId, userId, onToken, onComplet
   const baseUrl = streamApiUrl || `${CHAT_API_BASE_URL}/message/stream`;
   const absoluteUrl = buildAbsoluteUrl(baseUrl);
 
+  // Get authentication token from localStorage
+  const token = localStorage.getItem('token');
+  if (!token) {
+    if (onError) onError('Not authenticated. Please log in.');
+    return null;
+  }
+
   const url = new URL(absoluteUrl);
   url.searchParams.append('message', message);
+  url.searchParams.append('token', token); // Add JWT token for authentication
   if (sessionId) {
     url.searchParams.append('session_id', sessionId);
   }
-  if (userId) {
-    url.searchParams.append('user_id', userId);
-  }
+  // Note: userId is no longer needed as a parameter - it's extracted from the JWT token on the backend
 
   const eventSource = new EventSource(url.toString());
 
@@ -398,6 +404,11 @@ export const sendMessageStream = (message, sessionId, userId, onToken, onComplet
     console.error('SSE connection error:', error);
     if (eventSource.readyState === EventSource.CLOSED) {
       console.log('SSE connection was closed');
+      // Check if this might be an authentication error (EventSource doesn't expose status codes)
+      // If the connection closes immediately, it's likely a 401/403
+      if (onError) {
+        onError('Connection error occurred. This may be due to authentication failure or network issues.');
+      }
     } else {
       if (onError) onError('Connection error occurred');
     }
@@ -445,10 +456,17 @@ export const getCareerInsights = async (userId) => {
       throw new Error('Valid user ID is required');
     }
 
+    // Get authentication token
+    const token = localStorage.getItem('token');
+    if (!token) {
+      throw new Error('Not authenticated');
+    }
+
     const response = await fetch(`${CAREER_API_BASE_URL}/insights/${userId}`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
       },
     });
 
@@ -468,23 +486,30 @@ export const getCareerInsights = async (userId) => {
 /**
  * Retrieve career insights for a specific resume
  * @param {number} resumeId - The resume ID to retrieve career insights for
- * @param {number} userId - The user ID for ownership verification
  * @returns {Promise<Object>} - The career insights response object
+ *
+ * Note: Authorization is handled via JWT token. Backend verifies the resume
+ * belongs to the authenticated user before returning data.
  */
-export const getCareerInsightsByResume = async (resumeId, userId) => {
+export const getCareerInsightsByResume = async (resumeId) => {
   try {
     // Validate parameters
     if (!resumeId || typeof resumeId !== 'number') {
       throw new Error('Valid resume ID is required');
     }
-    if (!userId || typeof userId !== 'number') {
-      throw new Error('Valid user ID is required');
+
+    // Get authentication token
+    const token = localStorage.getItem('token');
+    if (!token) {
+      throw new Error('Not authenticated');
     }
 
-    const response = await fetch(`${CAREER_API_BASE_URL}/insights/resume/${resumeId}?user_id=${userId}`, {
+    // Backend uses authenticated user from JWT token for authorization
+    const response = await fetch(`${CAREER_API_BASE_URL}/insights/resume/${resumeId}`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
       },
     });
 

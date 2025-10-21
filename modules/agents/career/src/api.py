@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from typing import Optional, Dict, Any
 from chat_service import get_chat_service, ChatService
@@ -11,6 +11,9 @@ import os
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', '..', '..'))
 
 from backend.db.database import get_db
+from backend.utils.auth import get_current_user, get_current_user_from_query
+from backend.config.cors_config import get_allowed_origins
+from backend.models.user import User
 
 router = APIRouter(prefix="/api/chat", tags=["career-chat"])
 
@@ -39,11 +42,33 @@ from fastapi import Request, Query
 @router.post("/message")
 async def send_message(
     chat_request: ChatRequest,
+    current_user: User = Depends(get_current_user),
     chat_service: ChatService = Depends(get_chat_service),
     db: Session = Depends(get_db)
 ):
+    """
+    Send a message to the career agent AI.
+
+    Requires authentication. Users can only send messages for their own account.
+
+    Security:
+        - JWT authentication required
+        - Authorization check: user can only message for themselves
+    """
     if not chat_request.message:
         raise HTTPException(status_code=400, detail="Message cannot be empty")
+
+    # Authorization: validate user_id matches authenticated user
+    if hasattr(chat_request, 'user_id') and chat_request.user_id:
+        if chat_request.user_id != current_user.id:
+            raise HTTPException(
+                status_code=403,
+                detail="Cannot send messages for other users"
+            )
+
+    # Ensure user_id is set to authenticated user
+    chat_request.user_id = current_user.id
+
     try:
         result = await chat_service.generate_response(
             user_message=chat_request.message,
@@ -58,26 +83,65 @@ async def send_message(
 async def send_message_stream(
     message: str = Query(..., description="Message to send to the AI"),
     session_id: Optional[str] = Query(None, description="Session ID"),
-    user_id: Optional[int] = Query(None, description="User ID for personalized responses"),
+    current_user: User = Depends(get_current_user_from_query),
     request: Request = None,
     chat_service: ChatService = Depends(get_chat_service),
     db: Session = Depends(get_db)
 ):
     """
     Send a message to the AI and get a streaming response using Server-Sent Events.
+
+    Requires authentication via query parameter (EventSource limitation).
+
+    Security:
+        - JWT authentication required via ?token=<jwt_token> query parameter
+        - User ID from token (cannot specify other users)
+        - Token in URL is less secure but necessary for EventSource API
+        - CORS restricted to allowed origins only
+        - Always use HTTPS in production
+
+    Args:
+        message: The message to send to the AI
+        session_id: Optional session ID for conversation continuity
+        current_user: Authenticated user (from token query parameter)
+        request: Request object for CORS origin validation
+
+    Returns:
+        EventSourceResponse with streaming AI responses
+
+    Raises:
+        HTTPException: 403 if origin is not allowed
+
+    Note:
+        Frontend should append token to URL:
+        /api/chat/message/stream?message=hello&token=<jwt_token>
     """
     if not message.strip():
         raise HTTPException(status_code=400, detail="Message cannot be empty")
 
+    # CORS validation: Check if request origin is allowed
+    allowed_origins = get_allowed_origins()
+    origin_header = request.headers.get("origin", "") if request else ""
+
+    # For EventSource requests, origin header is always present
+    if origin_header and origin_header not in allowed_origins:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Origin '{origin_header}' not allowed. CORS policy violation."
+        )
+
     if session_id is None:
         session_id = "default"
+
+    # Use authenticated user's ID (from JWT token in query params)
+    user_id = current_user.id
 
     async def event_generator():
         try:
             async for chunk in chat_service.generate_streaming_response(
-                user_message=message, 
-                session_id=session_id, 
-                user_id=user_id, 
+                user_message=message,
+                session_id=session_id,
+                user_id=user_id,
                 db=db
             ):
                 yield {
@@ -92,12 +156,19 @@ async def send_message_stream(
                 "data": json.dumps({"type": "error", "content": f"Error: {str(e)}"})
             }
 
-    return EventSourceResponse(event_generator(), headers={
+    # Build secure CORS headers
+    response_headers = {
         "Cache-Control": "no-cache",
         "Connection": "keep-alive",
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Headers": "*"
-    })
+        "Access-Control-Allow-Headers": "Content-Type, Authorization"
+    }
+
+    # Only set CORS headers if origin is present and allowed
+    if origin_header:
+        response_headers["Access-Control-Allow-Origin"] = origin_header
+        response_headers["Access-Control-Allow-Credentials"] = "true"
+
+    return EventSourceResponse(event_generator(), headers=response_headers)
 
 @router.get("/health", response_model=HealthResponse)
 async def health_check(
@@ -199,28 +270,45 @@ async def deep_health_check(
 @router.get("/insights/{user_id}", response_model=CareerInsightsResponse)
 async def get_career_insights(
     user_id: int,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
     Retrieve the most recent career insights for a specific user.
-    
+    Requires authentication and authorization - users can only access their own data.
+
     Args:
         user_id: The ID of the user whose career insights to retrieve
-        
+        current_user: Authenticated user (injected by FastAPI)
+
     Returns:
         CareerInsightsResponse containing the professional data or error message
+
+    Raises:
+        HTTPException 403: If user attempts to access another user's data
     """
     import logging
     logger = logging.getLogger(__name__)
-    
+
+    # Authorization check - users can only access their own data
+    if current_user.id != user_id:
+        logger.warning(
+            f"Authorization denied: User {current_user.id} ({current_user.email}) "
+            f"attempted to access user {user_id}'s career insights"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to access this user's career insights"
+        )
+
     try:
         # Initialize resume analyzer to access career insights methods
         resume_analyzer = ResumeAnalyzer()
-        
+
         # Get the latest career insight for the user
         logger.info(f"Retrieving career insights for user {user_id}")
         professional_data = await resume_analyzer.get_latest_career_insight(user_id)
-        
+
         if professional_data:
             logger.info(f"Found career insights for user {user_id}")
             return CareerInsightsResponse(
@@ -237,7 +325,7 @@ async def get_career_insights(
                 message="No career insights found. Please perform a resume analysis first.",
                 has_data=False
             )
-            
+
     except Exception as e:
         logger.error(f"Error retrieving career insights for user {user_id}: {str(e)}")
         return CareerInsightsResponse(
@@ -250,30 +338,57 @@ async def get_career_insights(
 @router.get("/insights/resume/{resume_id}", response_model=CareerInsightsResponse)
 async def get_career_insights_by_resume(
     resume_id: int,
-    user_id: int = Query(..., description="User ID to verify ownership"),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
     Retrieve career insights for a specific resume.
-    
+    Requires authentication and authorization - users can only access their own resumes.
+
     Args:
         resume_id: The ID of the resume to get insights for
-        user_id: The ID of the user (for ownership verification)
-        
+        current_user: Authenticated user (injected by FastAPI)
+
     Returns:
         CareerInsightsResponse containing the professional data or error message
+
+    Raises:
+        HTTPException 403: If user attempts to access another user's resume
+        HTTPException 404: If resume not found or doesn't belong to user
     """
     import logging
     logger = logging.getLogger(__name__)
-    
+
     try:
+        # First, verify the resume belongs to the authenticated user
+        from backend.models.resume import Resume
+        resume = db.query(Resume).filter(Resume.id == resume_id).first()
+
+        if not resume:
+            logger.warning(f"Resume {resume_id} not found")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Resume not found"
+            )
+
+        # Authorization check - verify resume ownership
+        if resume.user_id != current_user.id:
+            logger.warning(
+                f"Authorization denied: User {current_user.id} ({current_user.email}) "
+                f"attempted to access resume {resume_id} belonging to user {resume.user_id}"
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have permission to access this resume"
+            )
+
         # Initialize resume analyzer to access career insights methods
         resume_analyzer = ResumeAnalyzer()
-        
+
         # Get career insight for the specific resume
-        logger.info(f"Retrieving career insights for resume {resume_id}, user {user_id}")
-        professional_data = await resume_analyzer.get_career_insight_by_resume(user_id, resume_id)
-        
+        logger.info(f"Retrieving career insights for resume {resume_id}, user {current_user.id}")
+        professional_data = await resume_analyzer.get_career_insight_by_resume(current_user.id, resume_id)
+
         if professional_data:
             logger.info(f"Found career insights for resume {resume_id}")
             return CareerInsightsResponse(
@@ -290,7 +405,10 @@ async def get_career_insights_by_resume(
                 message="No career insights found for this resume. Please perform an analysis first.",
                 has_data=False
             )
-            
+
+    except HTTPException:
+        # Re-raise HTTP exceptions (404, 403)
+        raise
     except Exception as e:
         logger.error(f"Error retrieving career insights for resume {resume_id}: {str(e)}")
         return CareerInsightsResponse(
@@ -299,3 +417,61 @@ async def get_career_insights_by_resume(
             message=f"Failed to retrieve career insights: {str(e)}",
             has_data=False
         )
+
+@router.post("/internal/generate")
+async def generate_internal(
+    chat_request: ChatRequest,
+    api_key: str = Query(None, alias="api_key"),
+    chat_service: ChatService = Depends(get_chat_service)
+):
+    """
+    Internal endpoint for generating AI responses without user authentication.
+
+    Security:
+        - Protected by internal API key (api_key query parameter)
+        - Should ONLY be accessible from trusted internal services
+        - Docker network isolation provides additional security layer
+        - In production, use firewall rules to restrict access
+
+    Used by:
+        - RecommendationService for generating daily recommendations
+        - Other internal backend services that need AI generation
+
+    Args:
+        chat_request: Message and optional session_id
+        api_key: Internal API key for authentication (query parameter)
+
+    Returns:
+        AI-generated response
+
+    Raises:
+        HTTPException 403: If API key is invalid or missing
+        HTTPException 400: If message is empty
+    """
+    import logging
+    import os
+    logger = logging.getLogger(__name__)
+
+    # Verify internal API key
+    internal_api_key = os.getenv("INTERNAL_API_KEY", "dev-internal-key-change-in-production")
+
+    if not api_key or api_key != internal_api_key:
+        logger.warning(f"Internal API call rejected: invalid or missing API key")
+        raise HTTPException(
+            status_code=403,
+            detail="Invalid or missing internal API key"
+        )
+
+    if not chat_request.message:
+        raise HTTPException(status_code=400, detail="Message cannot be empty")
+
+    try:
+        logger.info(f"Internal generate request: {chat_request.message[:100]}...")
+        result = await chat_service.generate_response(
+            user_message=chat_request.message,
+            session_id=chat_request.session_id or "internal_session"
+        )
+        return result
+    except Exception as e:
+        logger.error(f"Error in internal generate: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))

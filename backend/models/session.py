@@ -11,12 +11,12 @@ class ChatSession(Base):
     __tablename__ = "chat_sessions"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)  # Index for user queries
     session_name = Column(String(255), nullable=False)
     first_message_time = Column(DateTime, nullable=False)
-    created_at = Column(DateTime, default=utc_now)
+    created_at = Column(DateTime, default=utc_now, index=True)  # Index for time-based queries
     updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
-    is_active = Column(Boolean, default=False)
+    is_active = Column(Boolean, default=False, index=True)  # Index for active session queries
     unread = Column(Boolean, default=False, nullable=False)
 
     # Relationships

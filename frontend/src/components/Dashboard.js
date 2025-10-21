@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { profile as profileAPI, activities as activitiesAPI, careerInsights as careerInsightsAPI, dailyRecommendations as dailyRecommendationsAPI } from '../services/api';
@@ -37,6 +37,28 @@ const Dashboard = () => {
   const [agentModalOpen, setAgentModalOpen] = useState(false);
   const [selectedAgent, setSelectedAgent] = useState(null);
 
+  // ==================== TIMER MANAGEMENT ====================
+  // Centralized timer management to prevent memory leaks
+  const timersRef = useRef({
+    animation: null,
+    timeUpdate: null,
+    recommendationRefresh: null
+  });
+
+  // Cleanup all timers on unmount
+  useEffect(() => {
+    return () => {
+      // Clear all active timers when component unmounts
+      Object.values(timersRef.current).forEach(timerId => {
+        if (timerId) {
+          clearTimeout(timerId);
+          clearInterval(timerId);
+        }
+      });
+      console.log('[Dashboard] All timers cleared on unmount');
+    };
+  }, []);
+
   // Fetch user data and avatar on component mount
   useEffect(() => {
     fetchUserData();
@@ -50,11 +72,22 @@ const Dashboard = () => {
   // Trigger animation when user data is loaded
   useEffect(() => {
     if (userData.first_name && user) {
+      // Clear previous animation timer if exists
+      if (timersRef.current.animation) {
+        clearTimeout(timersRef.current.animation);
+      }
+
       // Delay animation slightly to ensure component is fully rendered
-      const timer = setTimeout(() => {
+      timersRef.current.animation = setTimeout(() => {
         setTriggerAnimation(true);
       }, 500);
-      return () => clearTimeout(timer);
+
+      return () => {
+        if (timersRef.current.animation) {
+          clearTimeout(timersRef.current.animation);
+          timersRef.current.animation = null;
+        }
+      };
     }
   }, [userData.first_name, user]);
 
@@ -65,30 +98,46 @@ const Dashboard = () => {
 
   // Setup timer to update time display dynamically
   useEffect(() => {
-    // Simple timer that updates every 10 seconds
-    const timer = setInterval(() => {
-      setCurrentTime(new Date());
-    }, 10000); // Update every 10 seconds
+    // Update immediately
+    setCurrentTime(new Date());
 
-    return () => clearInterval(timer);
+    // Then update every 10 seconds
+    timersRef.current.timeUpdate = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 10000);
+
+    return () => {
+      if (timersRef.current.timeUpdate) {
+        clearInterval(timersRef.current.timeUpdate);
+        timersRef.current.timeUpdate = null;
+      }
+    };
   }, []);
 
   // Setup 24-hour refresh for recommendations
   useEffect(() => {
     const checkRecommendationsRefresh = () => {
       if (shouldRefreshRecommendations()) {
-        console.log('24 hours passed, refreshing recommendations...');
+        console.log('[Dashboard] 24 hours passed, refreshing recommendations...');
         fetchDailyRecommendations();
       }
     };
 
-    // Check every hour for recommendation refresh
-    const timer = setInterval(checkRecommendationsRefresh, 60 * 60 * 1000); // Check every hour
-
-    // Also check immediately when component mounts
+    // Check immediately when component mounts
     checkRecommendationsRefresh();
 
-    return () => clearInterval(timer);
+    // Check every hour for recommendation refresh
+    timersRef.current.recommendationRefresh = setInterval(
+      checkRecommendationsRefresh,
+      60 * 60 * 1000
+    );
+
+    return () => {
+      if (timersRef.current.recommendationRefresh) {
+        clearInterval(timersRef.current.recommendationRefresh);
+        timersRef.current.recommendationRefresh = null;
+      }
+    };
   }, [recommendationsLastFetched]);
 
   const fetchUserData = async () => {
@@ -448,13 +497,13 @@ const Dashboard = () => {
     if (agentName === 'Travel Agent') {
       setSelectedAgent({
         title: 'Travel Agent (Preview)',
-        imageSrc: '/design/Travel Agent 2.0.png'
+        imageSrc: '/design/Travel Agent 4.0.png'
       });
       setAgentModalOpen(true);
     } else if (agentName === 'Body Agent') {
       setSelectedAgent({
         title: 'Body Agent (Preview)',
-        imageSrc: '/design/Body Agent.png'
+        imageSrc: '/design/Body Agent 3.0.png'
       });
       setAgentModalOpen(true);
     }
@@ -512,7 +561,7 @@ const Dashboard = () => {
     {
       name: 'Body Agent',
       description: 'Personalized health and fitness guidance for your physical well-being.',
-      icon: SparklesIcon,
+      icon: HeartIcon,
       color: 'text-purple-500',
       path: '/agents/body',
     },
@@ -1317,7 +1366,7 @@ const Dashboard = () => {
               onClick={() => handleOpenAgentModal('Body Agent')}
               className="w-full bg-gradient-to-r from-purple-500 to-pink-500 text-white px-6 py-4 rounded-lg font-medium hover:from-purple-600 hover:to-pink-600 transition-all duration-200 flex items-center space-x-3"
             >
-              <SparklesIcon className="h-5 w-5" />
+              <HeartIcon className="h-5 w-5" />
               <span>Body Agent</span>
             </button>
           </div>
@@ -1384,7 +1433,7 @@ const Dashboard = () => {
             <div className="flex items-center space-x-4">
               <div className="flex items-center space-x-3">
                 <div className="w-8 h-8 bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg flex items-center justify-center">
-                  <span className="text-white font-bold text-sm">S</span>
+                  <span className="text-white font-bold text-sm">I</span>
                 </div>
                 <h1 className="text-xl font-semibold text-gray-900">Idii.</h1>
               </div>

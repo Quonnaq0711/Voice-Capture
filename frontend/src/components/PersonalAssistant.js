@@ -1,8 +1,114 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useReducer } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import ChatDialog from './ChatDialog';
 
-const PersonalAssistant = ({ user, isDialogOpen: externalIsDialogOpen, setIsDialogOpen: externalSetIsDialogOpen, onDialogClose, onUnreadCountChange }) => {
+// Create a custom event system to replace window object pollution
+const dispatchNavigationEvent = (eventName, detail) => {
+  const event = new CustomEvent(`assistant:${eventName}`, { detail });
+  document.dispatchEvent(event);
+};
+
+const subscribeToNavigationEvent = (eventName, handler) => {
+  const eventType = `assistant:${eventName}`;
+  document.addEventListener(eventType, handler);
+  return () => document.removeEventListener(eventType, handler);
+};
+
+// ==================== NAVIGATION STATE MACHINE ====================
+// Navigation states - prevents race conditions from multiple useState calls
+const NavigationState = {
+  IDLE: 'IDLE',                   // Not navigating
+  COUNTDOWN: 'COUNTDOWN',         // Countdown in progress
+  NAVIGATING: 'NAVIGATING',       // Navigation executing
+  AGENT_WELCOME: 'AGENT_WELCOME'  // Showing agent welcome message
+};
+
+// Navigation action types
+const NavigationActions = {
+  START_COUNTDOWN: 'START_COUNTDOWN',
+  UPDATE_COUNTDOWN: 'UPDATE_COUNTDOWN',
+  CANCEL_NAVIGATION: 'CANCEL_NAVIGATION',
+  EXECUTE_NAVIGATION: 'EXECUTE_NAVIGATION',
+  SHOW_AGENT_WELCOME: 'SHOW_AGENT_WELCOME',
+  HIDE_AGENT_WELCOME: 'HIDE_AGENT_WELCOME',
+  RESET: 'RESET'
+};
+
+// Initial navigation state
+const initialNavigationState = {
+  state: NavigationState.IDLE,
+  countdown: 3,
+  targetAgent: null
+};
+
+// Navigation reducer - handles all navigation state transitions atomically
+const navigationReducer = (state, action) => {
+  switch (action.type) {
+    case NavigationActions.START_COUNTDOWN:
+      // Start countdown to navigate to target agent
+      return {
+        state: NavigationState.COUNTDOWN,
+        countdown: 3,
+        targetAgent: action.payload.targetAgent
+      };
+
+    case NavigationActions.UPDATE_COUNTDOWN:
+      // Decrement countdown timer
+      const newCountdown = state.countdown - 1;
+      if (newCountdown <= 0) {
+        // Countdown finished - transition to navigating state
+        return {
+          state: NavigationState.NAVIGATING,
+          countdown: 0,
+          targetAgent: state.targetAgent
+        };
+      }
+      return {
+        ...state,
+        countdown: newCountdown
+      };
+
+    case NavigationActions.CANCEL_NAVIGATION:
+      // Cancel ongoing navigation and return to idle
+      return {
+        state: NavigationState.IDLE,
+        countdown: 3,
+        targetAgent: null
+      };
+
+    case NavigationActions.EXECUTE_NAVIGATION:
+      // Navigation completed - show agent welcome
+      return {
+        state: NavigationState.AGENT_WELCOME,
+        countdown: 3,
+        targetAgent: state.targetAgent
+      };
+
+    case NavigationActions.SHOW_AGENT_WELCOME:
+      // Explicitly show agent welcome
+      return {
+        ...state,
+        state: NavigationState.AGENT_WELCOME
+      };
+
+    case NavigationActions.HIDE_AGENT_WELCOME:
+      // Hide agent welcome and return to idle
+      return {
+        state: NavigationState.IDLE,
+        countdown: 3,
+        targetAgent: null
+      };
+
+    case NavigationActions.RESET:
+      // Reset to initial state
+      return initialNavigationState;
+
+    default:
+      return state;
+  }
+};
+
+const PersonalAssistant = ({ user, isDialogOpen: externalIsDialogOpen, setIsDialogOpen: externalSetIsDialogOpen, onDialogClose, onUnreadCountChange, onOpenAgentModal }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const [internalIsDialogOpen, setInternalIsDialogOpen] = useState(false);
@@ -32,10 +138,11 @@ const PersonalAssistant = ({ user, isDialogOpen: externalIsDialogOpen, setIsDial
   }, []);
 
   const [position, setPosition] = useState(getInitialPosition());
-  const [showCountdown, setShowCountdown] = useState(false);
-  const [countdown, setCountdown] = useState(3);
-  const [targetAgent, setTargetAgent] = useState(null);
-  const [showAgentWelcome, setShowAgentWelcome] = useState(false);
+
+  // Use reducer for navigation state management to prevent race conditions
+  // This replaces 4 separate useState calls: showCountdown, countdown, targetAgent, showAgentWelcome
+  const [navState, dispatchNav] = useReducer(navigationReducer, initialNavigationState);
+
   const [hasDialogBeenOpened, setHasDialogBeenOpened] = useState(false);
 
   useEffect(() => {
@@ -112,7 +219,11 @@ const PersonalAssistant = ({ user, isDialogOpen: externalIsDialogOpen, setIsDial
 
   // Auto-hide welcome message after 10 seconds
   useEffect(() => {
-    console.log('[PersonalAssistant] Welcome state:', { showWelcome, userName: user?.first_name, showAgentWelcome });
+    console.log('[PersonalAssistant] Welcome state:', {
+      showWelcome,
+      userName: user?.first_name,
+      navState: navState.state
+    });
     if (showWelcome && user?.first_name) {
       console.log('[PersonalAssistant] Starting 10s timer for welcome message');
       const timer = setTimeout(() => {
@@ -125,66 +236,69 @@ const PersonalAssistant = ({ user, isDialogOpen: externalIsDialogOpen, setIsDial
         clearTimeout(timer);
       };
     }
-  }, [showWelcome, user?.first_name, showAgentWelcome]);
+  }, [showWelcome, user?.first_name, navState.state]);
   
   // Function to cancel ongoing navigation
   const cancelNavigation = useCallback(() => {
-    if (showCountdown) {
-      setShowCountdown(false);
-      setCountdown(3);
-      setTargetAgent(null);
+    if (navState.state === NavigationState.COUNTDOWN) {
+      dispatchNav({ type: NavigationActions.CANCEL_NAVIGATION });
       if (window.updateCountdownMessage) {
         window.updateCountdownMessage('Navigation cancelled. Staying on current page.');
       }
     }
-  }, [showCountdown]);
+  }, [navState.state]);
 
-  // Handle countdown timer
+  // Handle countdown timer - State machine implementation
   useEffect(() => {
     let timer;
-    if (showCountdown && countdown > 0) {
+
+    if (navState.state === NavigationState.COUNTDOWN && navState.countdown > 0) {
+      // COUNTDOWN state: Tick down every second
       timer = setTimeout(() => {
-        const newCountdown = countdown - 1;
-        setCountdown(newCountdown);
-        
+        dispatchNav({ type: NavigationActions.UPDATE_COUNTDOWN });
+
         // Send professional countdown update to chat
-        if (window.updateCountdownMessage && targetAgent) {
-          if (newCountdown > 0) {
-            const agentName = targetAgent.name === 'Dashboard' ? 'Dashboard' : `${targetAgent.displayName} Agent`;
-            window.updateCountdownMessage(`Redirecting to ${agentName} in ${newCountdown} second${newCountdown > 1 ? 's' : ''}...`);
+        if (window.updateCountdownMessage && navState.targetAgent) {
+          const newCount = navState.countdown - 1;
+          if (newCount > 0) {
+            const agentName = navState.targetAgent.name === 'Dashboard'
+              ? 'Dashboard'
+              : `${navState.targetAgent.displayName} Agent`;
+            window.updateCountdownMessage(
+              `Redirecting to ${agentName} in ${newCount} second${newCount > 1 ? 's' : ''}...`
+            );
           }
         }
       }, 1000);
-    } else if (showCountdown && countdown === 0) {
-      // Navigate to target agent
-      if (targetAgent) {
-        navigate(targetAgent.path);
-        setShowCountdown(false);
-        setCountdown(3);
-        
-        // Don't reset position - keep Personal Assistant visible
-        // resetPosition();
-        
+    } else if (navState.state === NavigationState.NAVIGATING) {
+      // NAVIGATING state: Execute navigation and transition to AGENT_WELCOME
+      if (navState.targetAgent) {
+        navigate(navState.targetAgent.path);
+
         // Send completion message to chat
         if (window.updateCountdownMessage) {
-          const agentName = targetAgent.name === 'Dashboard' ? 'Dashboard' : `${targetAgent.displayName} Agent`;
+          const agentName = navState.targetAgent.name === 'Dashboard'
+            ? 'Dashboard'
+            : `${navState.targetAgent.displayName} Agent`;
           window.updateCountdownMessage(`Successfully redirected to ${agentName}!`);
         }
-        
-        // Show agent welcome message after navigation
+
+        // Transition to agent welcome state after navigation
         setTimeout(() => {
-          setShowAgentWelcome(true);
-          setTimeout(() => {
-            setShowAgentWelcome(false);
-          }, 5000); // Hide agent welcome after 5 seconds
+          dispatchNav({ type: NavigationActions.EXECUTE_NAVIGATION });
         }, 500);
       }
+    } else if (navState.state === NavigationState.AGENT_WELCOME) {
+      // AGENT_WELCOME state: Show welcome for 5 seconds, then return to IDLE
+      timer = setTimeout(() => {
+        dispatchNav({ type: NavigationActions.HIDE_AGENT_WELCOME });
+      }, 5000);
     }
-    
+
     return () => {
       if (timer) clearTimeout(timer);
     };
-  }, [showCountdown, countdown, targetAgent, navigate]);
+  }, [navState.state, navState.countdown, navState.targetAgent, navigate]);
   
 
   
@@ -194,10 +308,8 @@ const PersonalAssistant = ({ user, isDialogOpen: externalIsDialogOpen, setIsDial
       // Check if already on dashboard
       if (location.pathname === '/dashboard') {
         // Cancel any ongoing navigation and stay on current page
-        if (showCountdown) {
-          setShowCountdown(false);
-          setCountdown(3);
-          setTargetAgent(null);
+        if (navState.state === NavigationState.COUNTDOWN) {
+          dispatchNav({ type: NavigationActions.CANCEL_NAVIGATION });
         }
         if (onCountdownMessage) {
           onCountdownMessage('Already on Dashboard. Staying on current page.');
@@ -205,123 +317,148 @@ const PersonalAssistant = ({ user, isDialogOpen: externalIsDialogOpen, setIsDial
         return;
       }
       // If there's an ongoing countdown to Dashboard, do nothing
-      if (showCountdown && targetAgent && targetAgent.name === 'Dashboard') {
+      if (navState.state === NavigationState.COUNTDOWN &&
+          navState.targetAgent &&
+          navState.targetAgent.name === 'Dashboard') {
         return;
       }
       // Navigate to dashboard
-      setTargetAgent({ name: 'Dashboard', path: '/dashboard' });
-      setShowCountdown(true);
-      setCountdown(3);
+      dispatchNav({
+        type: NavigationActions.START_COUNTDOWN,
+        payload: { targetAgent: { name: 'Dashboard', path: '/dashboard' } }
+      });
       // Send professional countdown message to chat
       if (onCountdownMessage) {
         onCountdownMessage('Redirecting to Dashboard in 3 seconds...');
       }
       return;
     }
-    
+
     const agent = agents.find(a => a.name === agentName);
     if (!agent) return;
-    
+
     const currentAgent = getCurrentAgent();
-    
+
     // If already on the selected agent page, cancel any ongoing navigation
     if (currentAgent && currentAgent.name === agentName) {
       // Cancel any ongoing navigation and stay on current page
-      if (showCountdown) {
-        setShowCountdown(false);
-        setCountdown(3);
-        setTargetAgent(null);
+      if (navState.state === NavigationState.COUNTDOWN) {
+        dispatchNav({ type: NavigationActions.CANCEL_NAVIGATION });
       }
       if (onCountdownMessage) {
         onCountdownMessage(`Already on ${agent.displayName} Agent page. Staying on current page.`);
       }
       return;
     }
-    
+
     // If there's an ongoing countdown, check if it's for the same agent
-    if (showCountdown) {
+    if (navState.state === NavigationState.COUNTDOWN) {
       // If selecting the same agent that's already being navigated to, do nothing
-      if (targetAgent && targetAgent.name === agentName) {
+      if (navState.targetAgent && navState.targetAgent.name === agentName) {
         return;
       }
       // Otherwise, cancel current countdown and start new one
-      setShowCountdown(false);
-      setCountdown(3);
+      dispatchNav({ type: NavigationActions.CANCEL_NAVIGATION });
       if (onCountdownMessage) {
         onCountdownMessage('Previous navigation cancelled.');
       }
       // Add a small delay before starting new navigation
       setTimeout(() => {
-        setTargetAgent(agent);
-        setShowCountdown(true);
-        setCountdown(3);
+        dispatchNav({
+          type: NavigationActions.START_COUNTDOWN,
+          payload: { targetAgent: agent }
+        });
         if (onCountdownMessage) {
           onCountdownMessage(`Redirecting to ${agent.displayName} Agent in 3 seconds...`);
         }
       }, 500);
       return;
     }
-    
+
     // Set target agent and start countdown
-    setTargetAgent(agent);
-    setShowCountdown(true);
-    setCountdown(3);
+    dispatchNav({
+      type: NavigationActions.START_COUNTDOWN,
+      payload: { targetAgent: agent }
+    });
     // Send professional countdown message to chat
     if (onCountdownMessage) {
       onCountdownMessage(`Redirecting to ${agent.displayName} Agent in 3 seconds...`);
     }
-  }, [location.pathname, agents, getCurrentAgent, showCountdown, targetAgent]);
+  }, [location.pathname, agents, getCurrentAgent, navState.state, navState.targetAgent]);
   
-  // Expose functions and state to global window object
+  // ==================== CUSTOM EVENT SYSTEM ====================
+  // Replace window object pollution with custom events
+  // This prevents security issues and namespace conflicts
   useEffect(() => {
-    window.resetAssistantPosition = resetPosition;
-    window.handleAgentNavigation = handleAgentNavigation;
-    window.cancelAgentNavigation = cancelNavigation;
-    window.getNavigationState = () => ({ isNavigating: showCountdown, targetAgent });
+    // Set up event listeners for navigation control
+    const unsubscribeResetPosition = subscribeToNavigationEvent('resetPosition', () => {
+      resetPosition();
+    });
+
+    const unsubscribeNavigate = subscribeToNavigationEvent('navigate', (event) => {
+      handleAgentNavigation(event.detail.agentName);
+    });
+
+    const unsubscribeCancel = subscribeToNavigationEvent('cancelNavigation', () => {
+      cancelNavigation();
+    });
+
+    const unsubscribeGetState = subscribeToNavigationEvent('getState', () => {
+      // Respond with current state
+      dispatchNavigationEvent('stateResponse', {
+        isNavigating: navState.state === NavigationState.COUNTDOWN,
+        targetAgent: navState.targetAgent
+      });
+    });
+
+    // Cleanup all event listeners on unmount
     return () => {
-      delete window.resetAssistantPosition;
-      delete window.handleAgentNavigation;
-      delete window.cancelAgentNavigation;
-      delete window.getNavigationState;
+      unsubscribeResetPosition();
+      unsubscribeNavigate();
+      unsubscribeCancel();
+      unsubscribeGetState();
+      console.log('[PersonalAssistant] All custom event listeners removed');
     };
-  }, [resetPosition, handleAgentNavigation, cancelNavigation, showCountdown, targetAgent]);
+  }, [resetPosition, handleAgentNavigation, cancelNavigation, navState.state, navState.targetAgent]);
 
+  // ==================== MOUSE EVENT MANAGEMENT ====================
+  // Properly manage mouse event listeners to prevent memory leaks
   useEffect(() => {
-    const handleMouseMove = (e) => {
-      if (isDragging) {
-        const dx = e.clientX - initialMousePos.current.x;
-        const dy = e.clientY - initialMousePos.current.y;
-        
-        let newX = dragStartPos.current.x + dx;
-        let newY = dragStartPos.current.y + dy;
-  
-        // Constrain movement within the viewport
-        if (assistantRef.current) {
-          const assistantWidth = assistantRef.current.offsetWidth;
-          const assistantHeight = assistantRef.current.offsetHeight;
-          
-          if (newX < 0) newX = 0;
-          if (newY < 0) newY = 0;
-          if (newX + assistantWidth > window.innerWidth) newX = window.innerWidth - assistantWidth;
-          if (newY + assistantHeight > window.innerHeight) newY = window.innerHeight - assistantHeight;
-        }
-  
-        setPosition({ x: newX, y: newY });
-      }
-    };
-
-    // Add listeners only when dragging
-    if (isDragging) {
-      window.addEventListener('mousemove', handleMouseMove);
-      window.addEventListener('mouseup', handleMouseUp);
+    if (!isDragging) {
+      // Not dragging - no event listeners needed
+      return;
     }
 
-    // Cleanup function
+    // Define event handlers
+    const handleMouseMove = (e) => {
+      const dx = e.clientX - initialMousePos.current.x;
+      const dy = e.clientY - initialMousePos.current.y;
+
+      let newX = dragStartPos.current.x + dx;
+      let newY = dragStartPos.current.y + dy;
+
+      // Constrain movement within the viewport
+      if (assistantRef.current) {
+        const assistantWidth = assistantRef.current.offsetWidth;
+        const assistantHeight = assistantRef.current.offsetHeight;
+
+        newX = Math.max(0, Math.min(newX, window.innerWidth - assistantWidth));
+        newY = Math.max(0, Math.min(newY, window.innerHeight - assistantHeight));
+      }
+
+      setPosition({ x: newX, y: newY });
+    };
+
+    // Add event listeners when dragging starts
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+
+    // Cleanup: remove event listeners when dragging stops or component unmounts
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [isDragging, handleMouseUp]);
+  }, [isDragging, handleMouseUp]); // Re-run when isDragging or handleMouseUp changes
 
   const WelcomeBubble = ({ user, onClose }) => (
     <div className="absolute bottom-full mb-2 w-64 bg-white p-4 rounded-lg shadow-lg right-0 transform transition-all duration-300 ease-in-out origin-bottom-right scale-100">
@@ -433,34 +570,69 @@ const PersonalAssistant = ({ user, isDialogOpen: externalIsDialogOpen, setIsDial
 
     >
       {/* Show welcome bubble on initial load */}
-      {showWelcome && user?.first_name && !showAgentWelcome && (
+      {showWelcome && user?.first_name && navState.state !== NavigationState.AGENT_WELCOME && (
         <WelcomeBubble user={user} onClose={() => setShowWelcome(false)} />
       )}
 
       {/* Show agent welcome bubble after navigation */}
-      {showAgentWelcome && (
-        <AgentWelcomeBubble onClose={() => setShowAgentWelcome(false)} />
+      {navState.state === NavigationState.AGENT_WELCOME && (
+        <AgentWelcomeBubble onClose={() => dispatchNav({ type: NavigationActions.HIDE_AGENT_WELCOME })} />
       )}
       
       <AssistantAvatar />
       
       {hasDialogBeenOpened && (
         <div style={{ display: isDialogOpen ? 'block' : 'none' }}>
-          <ChatDialog 
+          <ChatDialog
             onClose={() => {
               setIsDialogOpen(false);
               if (onDialogClose) {
                 onDialogClose();
               }
-            }} 
-            assistantPosition={position} 
+            }}
+            assistantPosition={position}
             setAssistantPosition={setPosition}
             onUnreadCountChange={onUnreadCountChange}
+            onOpenAgentModal={onOpenAgentModal}
           />
         </div>
       )}
     </div>
   );
+};
+
+// ==================== PUBLIC API ====================
+// Export functions to replace window object usage
+// Usage in other components:
+//   import { navigateToAgent, resetAssistantPosition } from './PersonalAssistant';
+//   navigateToAgent('career');
+export const navigateToAgent = (agentName) => {
+  dispatchNavigationEvent('navigate', { agentName });
+};
+
+export const cancelAgentNavigation = () => {
+  dispatchNavigationEvent('cancelNavigation', {});
+};
+
+export const resetAssistantPosition = () => {
+  dispatchNavigationEvent('resetPosition', {});
+};
+
+export const getAssistantNavigationState = () => {
+  return new Promise((resolve) => {
+    const handler = (event) => {
+      resolve(event.detail);
+      document.removeEventListener('assistant:stateResponse', handler);
+    };
+    document.addEventListener('assistant:stateResponse', handler);
+    dispatchNavigationEvent('getState', {});
+
+    // Timeout after 1 second
+    setTimeout(() => {
+      document.removeEventListener('assistant:stateResponse', handler);
+      resolve(null);
+    }, 1000);
+  });
 };
 
 export default PersonalAssistant;

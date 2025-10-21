@@ -4,6 +4,7 @@ import uvicorn
 import logging
 import os
 import sys
+from contextlib import asynccontextmanager
 
 # Add the backend directory to the Python path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..', '..')))
@@ -17,9 +18,11 @@ from backend.models.activity import UserActivity
 from backend.models.daily_recommendation import DailyRecommendation
 from backend.models.chat import ChatMessage
 from backend.models.session import ChatSession
+from backend.models.refresh_token import RefreshToken
 
 from api import router as chat_router
 from streaming_api import router as streaming_router
+from chat_service import get_chat_service
 
 # Configure logging
 logging.basicConfig(
@@ -28,10 +31,40 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Application lifespan manager.
+    Handles startup and shutdown events with proper resource cleanup.
+    """
+    # ==================== STARTUP ====================
+    logger.info("Starting Career Agent API...")
+
+    yield
+
+    # ==================== SHUTDOWN ====================
+    logger.info("Shutting down Career Agent API...")
+
+    # Gracefully shutdown chat service and release resources
+    try:
+        chat_service = get_chat_service()
+        if chat_service is not None:
+            logger.info("Shutting down career chat service...")
+            chat_service.shutdown()
+            logger.info("Career chat service shutdown completed successfully")
+        else:
+            logger.debug("Career chat service was not initialized, skipping shutdown")
+    except Exception as e:
+        logger.error(f"Error during career chat service shutdown: {str(e)}", exc_info=True)
+        logger.warning("Career chat service may not have shut down cleanly")
+
+    logger.info("Career Agent API shutdown complete")
+
 app = FastAPI(
     title="Career Agent API",
     description="API for career agent, powered by a dedicated LLM.",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan
 )
 
 # Include routers

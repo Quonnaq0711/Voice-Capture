@@ -3,9 +3,9 @@ import React from 'react';
 const BodyAgent = () => {
   return (
     <div className="w-full h-screen bg-gray-50 overflow-auto">
-      {/* Display the Body Agent design as a static image */}
+      {/* Display the Body Agent 3.0 design as a static image */}
       <img
-        src="/design/Body Agent.png"
+        src="/design/Body Agent 3.0.png"
         alt="Body Agent Interface"
         className="w-full h-auto"
         style={{ minHeight: '100vh', objectFit: 'contain' }}

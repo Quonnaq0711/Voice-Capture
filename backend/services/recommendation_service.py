@@ -231,13 +231,19 @@ class RecommendationService:
         try:
             # Prepare prompt for LLM
             prompt = self._build_recommendation_prompt(context_data)
-            logger.info(f"Calling LLM service at {self.llm_base_url}/api/chat/message for recommendation generation")
+            logger.info(f"Calling LLM service at {self.llm_base_url}/api/chat/internal/generate for recommendation generation")
 
-            # Call LLM API using the same endpoint as career agent
+            # Get internal API key from environment
+            internal_api_key = os.getenv("INTERNAL_API_KEY", "dev-internal-key-change-in-production")
+
+            # Call internal LLM API endpoint (no user authentication needed)
             response = await self.client.post(
-                f"{self.llm_base_url}/api/chat/message",
+                f"{self.llm_base_url}/api/chat/internal/generate",
                 json={
                     "message": prompt
+                },
+                params={
+                    "api_key": internal_api_key
                 },
                 timeout=600.0  # 10 minutes for local LLM processing
             )

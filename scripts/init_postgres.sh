@@ -202,6 +202,7 @@ verify_schema() {
         "chat_messages"
         "user_activities"
         "daily_recommendations"
+        "refresh_tokens"
     )
 
     if [ "$USE_CONTAINER" = true ]; then
@@ -258,7 +259,8 @@ echo -e "  2. Verify API health: ${YELLOW}curl http://localhost:8000/docs${NC}"
 echo -e "  3. Create your first user via registration endpoint"
 echo ""
 echo -e "${BLUE}Database info:${NC}"
-echo -e "  Tables: 8 (users, profiles, resumes, insights, sessions, messages, activities, recommendations)"
+echo -e "  Tables: 9 (users, profiles, resumes, insights, sessions, messages, activities, recommendations, refresh_tokens)"
 echo -e "  Indexes: Auto-created for optimal query performance"
 echo -e "  Triggers: Auto-update timestamps on all tables"
+echo -e "  Security: Refresh token mechanism for secure 7-day login persistence"
 echo ""

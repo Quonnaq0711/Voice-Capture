@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from backend.models.user import User
 from backend.models.daily_recommendation import DailyRecommendation
 from backend.services.recommendation_service import RecommendationService
-from backend.db.database import SessionLocal
+from backend.utils.db_session import get_db_session_with_commit, get_db_session
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -71,87 +71,96 @@ class DailyRecommendationScheduler:
         finally:
             try:
                 loop.close()
-            except:
-                pass
+            except Exception as loop_error:
+                logger.error(f"Error closing event loop: {loop_error}", exc_info=True)
 
     async def _async_generate_recommendations(self):
-        """Async function to generate recommendations for all users"""
-        db = SessionLocal()
+        """
+        Async function to generate recommendations for all users.
+
+        Uses context manager to ensure proper database session cleanup
+        and automatic rollback on exceptions.
+        """
         success_count = 0
         error_count = 0
 
         try:
-            # Get all active users (users who have logged in within the last 30 days)
-            thirty_days_ago = datetime.now(timezone.utc) - timedelta(days=30)
+            # Use context manager for safe session handling
+            with get_db_session() as db:
+                # Get all active users (users who have logged in within the last 30 days)
+                thirty_days_ago = datetime.now(timezone.utc) - timedelta(days=30)
 
-            active_users = db.query(User).filter(
-                User.last_login >= thirty_days_ago,
-                User.last_login.is_not(None)  # Ensure last_login is not NULL
-            ).all()
+                active_users = db.query(User).filter(
+                    User.last_login >= thirty_days_ago,
+                    User.last_login.is_not(None)  # Ensure last_login is not NULL
+                ).all()
 
-            logger.info(f"📊 Found {len(active_users)} active users to generate recommendations for")
+                logger.info(f"📊 Found {len(active_users)} active users to generate recommendations for")
 
-            # Generate recommendations for each user
-            async with RecommendationService() as rec_service:
-                for user in active_users:
-                    try:
-                        # Check if user already has recommendations for today
-                        today = datetime.now(timezone.utc)
-                        existing_rec = DailyRecommendation.get_for_user_and_date(db, user.id, today)
+                # Generate recommendations for each user
+                async with RecommendationService() as rec_service:
+                    for user in active_users:
+                        try:
+                            # Check if user already has recommendations for today
+                            today = datetime.now(timezone.utc)
+                            existing_rec = DailyRecommendation.get_for_user_and_date(db, user.id, today)
 
-                        if existing_rec:
-                            logger.info(f"⏭️ User {user.id} already has recommendations for today, skipping")
-                            continue
+                            if existing_rec:
+                                logger.info(f"⏭️ User {user.id} already has recommendations for today, skipping")
+                                continue
 
-                        # Generate new recommendations
-                        logger.info(f"🔄 Generating recommendations for user {user.id} ({user.first_name})")
+                            # Generate new recommendations
+                            logger.info(f"🔄 Generating recommendations for user {user.id} ({user.first_name})")
 
-                        result = await rec_service.generate_daily_recommendations(
-                            db=db,
-                            user_id=user.id,
-                            target_date=today
-                        )
+                            result = await rec_service.generate_daily_recommendations(
+                                db=db,
+                                user_id=user.id,
+                                target_date=today
+                            )
 
-                        if result.get("status") in ["success", "fallback"]:
-                            success_count += 1
-                            logger.info(f"✅ Generated recommendations for user {user.id}")
-                        else:
+                            if result.get("status") in ["success", "fallback"]:
+                                success_count += 1
+                                logger.info(f"✅ Generated recommendations for user {user.id}")
+                            else:
+                                error_count += 1
+                                logger.warning(f"⚠️ Failed to generate recommendations for user {user.id}")
+
+                        except Exception as user_error:
                             error_count += 1
-                            logger.warning(f"⚠️ Failed to generate recommendations for user {user.id}")
+                            logger.error(f"❌ Error generating recommendations for user {user.id}: {user_error}")
 
-                    except Exception as user_error:
-                        error_count += 1
-                        logger.error(f"❌ Error generating recommendations for user {user.id}: {user_error}")
-
-            logger.info(f"🎯 Daily recommendation generation completed: {success_count} success, {error_count} errors")
+                logger.info(f"🎯 Daily recommendation generation completed: {success_count} success, {error_count} errors")
+                # Database session automatically closed here by context manager
 
         except Exception as e:
             logger.error(f"❌ Critical error in daily recommendation generation: {e}")
-        finally:
-            db.close()
 
     def _cleanup_old_recommendations(self):
-        """Remove recommendations older than 7 days"""
+        """
+        Remove recommendations older than 7 days.
+
+        Uses context manager with automatic commit to ensure
+        proper cleanup and transaction handling.
+        """
         logger.info("🧹 Starting cleanup of old recommendations...")
 
-        db = SessionLocal()
         try:
-            # Calculate cutoff date (7 days ago)
-            seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
+            # Use context manager with auto-commit for cleanup operation
+            with get_db_session_with_commit() as db:
+                # Calculate cutoff date (7 days ago)
+                seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
 
-            # Delete old recommendations
-            deleted_count = db.query(DailyRecommendation).filter(
-                DailyRecommendation.date < seven_days_ago
-            ).delete()
+                # Delete old recommendations
+                deleted_count = db.query(DailyRecommendation).filter(
+                    DailyRecommendation.date < seven_days_ago
+                ).delete()
 
-            db.commit()
-            logger.info(f"🗑️ Cleaned up {deleted_count} old recommendations (older than 7 days)")
+                # Commit happens automatically on successful exit
+                logger.info(f"🗑️ Cleaned up {deleted_count} old recommendations (older than 7 days)")
 
         except Exception as e:
+            # Rollback happens automatically in context manager
             logger.error(f"❌ Error during recommendation cleanup: {e}")
-            db.rollback()
-        finally:
-            db.close()
 
     def generate_for_user_now(self, user_id: int):
         """Manually trigger recommendation generation for a specific user (for testing)"""
@@ -166,23 +175,34 @@ class DailyRecommendationScheduler:
         finally:
             try:
                 loop.close()
-            except:
-                pass
+            except Exception as loop_error:
+                logger.error(f"Error closing event loop: {loop_error}", exc_info=True)
 
     async def _generate_for_single_user(self, user_id: int):
-        """Generate recommendations for a single user"""
-        db = SessionLocal()
+        """
+        Generate recommendations for a single user.
+
+        Uses context manager to ensure proper session cleanup.
+
+        Args:
+            user_id: ID of the user to generate recommendations for
+        """
         try:
-            async with RecommendationService() as rec_service:
-                today = datetime.now(timezone.utc)
-                result = await rec_service.generate_daily_recommendations(
-                    db=db,
-                    user_id=user_id,
-                    target_date=today
-                )
-                logger.info(f"✅ Manual generation completed for user {user_id}: {result.get('status')}")
-        finally:
-            db.close()
+            # Use context manager for safe session handling
+            with get_db_session() as db:
+                async with RecommendationService() as rec_service:
+                    today = datetime.now(timezone.utc)
+                    result = await rec_service.generate_daily_recommendations(
+                        db=db,
+                        user_id=user_id,
+                        target_date=today
+                    )
+                    logger.info(f"✅ Manual generation completed for user {user_id}: {result.get('status')}")
+                # Database session automatically closed here
+
+        except Exception as e:
+            # Rollback happens automatically in context manager
+            logger.error(f"❌ Error in manual generation for user {user_id}: {e}")
 
 
 # Global scheduler instance

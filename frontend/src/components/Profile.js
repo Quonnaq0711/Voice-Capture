@@ -2423,7 +2423,18 @@ const Profile = () => {
       setAvatarUrl(url);
       setMessage('Avatar updated successfully');
     } catch (error) {
-      setError(error.response?.data?.detail || 'Failed to upload avatar');
+      // Handle specific error cases
+      let errorMessage = 'Failed to upload avatar';
+      if (error.response) {
+        if (error.response.status === 413) {
+          errorMessage = 'Image is too large. Maximum size is 5MB.';
+        } else if (error.response.data?.detail) {
+          errorMessage = error.response.data.detail;
+        } else if (error.response.status === 400) {
+          errorMessage = 'Invalid image format. Please upload JPG, PNG, or GIF files only.';
+        }
+      }
+      setError(errorMessage);
     } finally {
       setLoading(false);
       e.target.value = ''; // Reset file input for next upload
