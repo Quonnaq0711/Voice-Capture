@@ -2340,9 +2340,16 @@ const Profile = () => {
         const backendUrl = process.env.REACT_APP_BACKEND_URL || 'http://localhost:5000';
         url = backendUrl + url;
       }
-      setAvatarUrl(url);
+
+      // Add timestamp to force cache refresh
+      const timestamp = new Date().getTime();
+      const urlWithTimestamp = url.includes('?')
+        ? `${url}&t=${timestamp}`
+        : `${url}?t=${timestamp}`;
+
+      setAvatarUrl(urlWithTimestamp);
     } catch (error) {
-      // Avatar not found, ignore error
+      console.error('Error fetching avatar:', error);
     }
   };
 
