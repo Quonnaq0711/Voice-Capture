@@ -496,22 +496,34 @@ const DocumentManager = ({ analysisProgress, setAnalysisProgress, setSectionStat
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
+      let buffer = ''; // Buffer to accumulate incomplete data
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
 
-        const chunk = decoder.decode(value);
-        const lines = chunk.split('\n');
+        // Append new chunk to buffer
+        buffer += decoder.decode(value, { stream: true });
 
-        for (const line of lines) {
-          if (line.trim() && line.startsWith('data: ')) {
-            try {
-              const data = JSON.parse(line.slice(6));
-              console.log('Received streaming data:', data);
-              
-              // Handle different types of streaming responses
-              if (data.type === 'section_progress') {
+        // Split by double newline to get complete SSE messages
+        const messages = buffer.split('\n\n');
+
+        // Keep the last (possibly incomplete) message in the buffer
+        buffer = messages.pop() || '';
+
+        for (const message of messages) {
+          const lines = message.split('\n');
+          for (const line of lines) {
+            if (line.trim() && line.startsWith('data: ')) {
+              try {
+                const jsonStr = line.slice(6).trim();
+                if (!jsonStr) continue; // Skip empty data
+
+                const data = JSON.parse(jsonStr);
+                console.log('Received streaming data:', data);
+
+                // Handle different types of streaming responses
+                if (data.type === 'section_progress') {
                 // Update state directly for immediate UI feedback
                 setAnalysisProgress(prev => ({
                   ...prev,
@@ -547,111 +559,112 @@ const DocumentManager = ({ analysisProgress, setAnalysisProgress, setSectionStat
                   }
                 });
                 document.querySelector('[data-agent-type="career"]')?.dispatchEvent(progressEvent);
-              } else if (data.type === 'section_complete') {
-                console.log('Section completed:', data.section, data.data);
-                
-                // Update state directly for immediate UI feedback
-                if (data.data) {
-                  // Update professional data with the new section data
-                  const sectionData = data.data[data.section] || data.data;
-                  setProfessionalData(prev => {
-                    const newData = {
-                      ...prev,
-                      [data.section]: sectionData
-                    };
-                    console.log(`Updated professional data for section ${data.section}:`, newData);
-                    return newData;
-                  });
-                }
-                
-                // Update section status
-                setSectionStatus(prev => {
-                  const newStatus = { ...prev, [data.section]: 'completed' };
-                  console.log('Updated section status:', newStatus);
-                  return newStatus;
-                });
-                
-                // Update analysis progress
-                setAnalysisProgress(prev => {
-                  const newCompletedSections = [...prev.completedSections, data.section];
-                  const newProgress = Math.round((newCompletedSections.length / prev.totalSections) * 100);
-                  return {
-                    ...prev,
-                    completedSections: newCompletedSections,
-                    progress: newProgress,
-                    currentSection: null
-                  };
-                });
+                } else if (data.type === 'section_complete') {
+                  console.log('Section completed:', data.section, data.data);
 
-                // Add section completion notification
-                const sectionName = data.section.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
-                addNotification({
-                  type: 'complete',
-                  title: `✅ ${sectionName} Complete`,
-                  message: `${sectionName} analysis completed successfully! New insights are now available in your career profile.`,
-                  timestamp: Date.now()
-                });
-
-                // Also dispatch event for compatibility
-                const completeEvent = new CustomEvent('sectionComplete', {
-                  detail: {
-                    section: data.section,
-                    data: data.data,
-                    error: data.error
+                  // Update state directly for immediate UI feedback
+                  if (data.data) {
+                    // Update professional data with the new section data
+                    const sectionData = data.data[data.section] || data.data;
+                    setProfessionalData(prev => {
+                      const newData = {
+                        ...prev,
+                        [data.section]: sectionData
+                      };
+                      console.log(`Updated professional data for section ${data.section}:`, newData);
+                      return newData;
+                    });
                   }
-                });
-                document.querySelector('[data-agent-type="career"]')?.dispatchEvent(completeEvent);
-              } else if (data.type === 'analysis_complete') {
-                console.log('Analysis completed:', data);
-                
-                // Update state directly for immediate UI feedback
-                setAnalysisProgress(prev => ({
-                  ...prev,
-                  isAnalyzing: false,
-                  currentSection: null,
-                  progress: data.success ? 100 : prev.progress,
-                  error: data.error || null
-                }));
-                
-                // If backend returns complete data, merge it with existing professionalData
-                if (data.professional_data) {
-                  const finalData = data.professional_data;
-                  setProfessionalData(prev => ({
-                    ...prev,
-                    ...finalData
-                  }));
-                }
-                
-                // Add completion notification
-                if (data.success) {
+
+                  // Update section status
+                  setSectionStatus(prev => {
+                    const newStatus = { ...prev, [data.section]: 'completed' };
+                    console.log('Updated section status:', newStatus);
+                    return newStatus;
+                  });
+
+                  // Update analysis progress
+                  setAnalysisProgress(prev => {
+                    const newCompletedSections = [...prev.completedSections, data.section];
+                    const newProgress = Math.round((newCompletedSections.length / prev.totalSections) * 100);
+                    return {
+                      ...prev,
+                      completedSections: newCompletedSections,
+                      progress: newProgress,
+                      currentSection: null
+                    };
+                  });
+
+                  // Add section completion notification
+                  const sectionName = data.section.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
                   addNotification({
                     type: 'complete',
-                    title: 'Analysis Complete!',
-                    message: 'Your comprehensive career analysis is now ready',
-                    details: 'All sections have been analyzed. Explore your insights to discover new opportunities.'
+                    title: `✅ ${sectionName} Complete`,
+                    message: `${sectionName} analysis completed successfully! New insights are now available in your career profile.`,
+                    timestamp: Date.now()
                   });
-                } else if (data.error) {
-                  addNotification({
-                    type: 'error',
-                    title: 'Analysis Failed',
-                    message: 'There was an error completing your career analysis',
-                    details: data.error
+
+                  // Also dispatch event for compatibility
+                  const completeEvent = new CustomEvent('sectionComplete', {
+                    detail: {
+                      section: data.section,
+                      data: data.data,
+                      error: data.error
+                    }
                   });
-                }
-                
-                // Also dispatch event for compatibility
-                const analysisCompleteEvent = new CustomEvent('analysisComplete', {
-                  detail: {
-                    success: data.success,
-                    error: data.error,
-                    professional_data: data.professional_data
+                  document.querySelector('[data-agent-type="career"]')?.dispatchEvent(completeEvent);
+                } else if (data.type === 'analysis_complete') {
+                  console.log('Analysis completed:', data);
+
+                  // Update state directly for immediate UI feedback
+                  setAnalysisProgress(prev => ({
+                    ...prev,
+                    isAnalyzing: false,
+                    currentSection: null,
+                    progress: data.success ? 100 : prev.progress,
+                    error: data.error || null
+                  }));
+
+                  // If backend returns complete data, merge it with existing professionalData
+                  if (data.professional_data) {
+                    const finalData = data.professional_data;
+                    setProfessionalData(prev => ({
+                      ...prev,
+                      ...finalData
+                    }));
                   }
-                });
-                document.querySelector('[data-agent-type="career"]')?.dispatchEvent(analysisCompleteEvent);
-                break;
+
+                  // Add completion notification
+                  if (data.success) {
+                    addNotification({
+                      type: 'complete',
+                      title: 'Analysis Complete!',
+                      message: 'Your comprehensive career analysis is now ready',
+                      details: 'All sections have been analyzed. Explore your insights to discover new opportunities.'
+                    });
+                  } else if (data.error) {
+                    addNotification({
+                      type: 'error',
+                      title: 'Analysis Failed',
+                      message: 'There was an error completing your career analysis',
+                      details: data.error
+                    });
+                  }
+
+                  // Also dispatch event for compatibility
+                  const analysisCompleteEvent = new CustomEvent('analysisComplete', {
+                    detail: {
+                      success: data.success,
+                      error: data.error,
+                      professional_data: data.professional_data
+                    }
+                  });
+                  document.querySelector('[data-agent-type="career"]')?.dispatchEvent(analysisCompleteEvent);
+                  break;
+                }
+              } catch (parseError) {
+                console.error('Error parsing streaming data:', parseError);
               }
-            } catch (parseError) {
-              console.error('Error parsing streaming data:', parseError);
             }
           }
         }
@@ -1470,45 +1483,57 @@ const CareerAgent = () => {
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
+      let buffer = ''; // Buffer to accumulate incomplete data
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
 
-        const chunk = decoder.decode(value);
-        const lines = chunk.split('\n');
+        // Append new chunk to buffer
+        buffer += decoder.decode(value, { stream: true });
 
-        for (const line of lines) {
-          if (line.trim() && line.startsWith('data: ')) {
-            try {
-              const data = JSON.parse(line.slice(6));
-              
-              // Handle different types of streaming responses
-              if (data.type === 'error') {
-                // Handle error from streaming response
-                console.error('Streaming analysis error:', data.message);
-                setAnalysisProgress(prev => ({
-                  ...prev,
-                  isAnalyzing: false,
-                  error: data.message
-                }));
+        // Split by double newline to get complete SSE messages
+        const messages = buffer.split('\n\n');
 
-                addNotification({
-                  type: 'error',
-                  title: 'Analysis Error',
-                  message: data.message || 'An error occurred during analysis',
-                  details: data.error_details ? JSON.stringify(data.error_details) : ''
-                });
-                break; // Stop processing further chunks
-              } else if (data.type === 'status') {
-                // Handle status updates
-                console.log('Analysis status:', data.message, 'Progress:', data.progress);
-                setAnalysisProgress(prev => ({
-                  ...prev,
-                  progress: data.progress || prev.progress,
-                  currentSection: data.message
-                }));
-              } else if (data.type === 'section_progress') {
+        // Keep the last (possibly incomplete) message in the buffer
+        buffer = messages.pop() || '';
+
+        for (const message of messages) {
+          const lines = message.split('\n');
+          for (const line of lines) {
+            if (line.trim() && line.startsWith('data: ')) {
+              try {
+                const jsonStr = line.slice(6).trim();
+                if (!jsonStr) continue; // Skip empty data
+
+                const data = JSON.parse(jsonStr);
+
+                // Handle different types of streaming responses
+                if (data.type === 'error') {
+                  // Handle error from streaming response
+                  console.error('Streaming analysis error:', data.message);
+                  setAnalysisProgress(prev => ({
+                    ...prev,
+                    isAnalyzing: false,
+                    error: data.message
+                  }));
+
+                  addNotification({
+                    type: 'error',
+                    title: 'Analysis Error',
+                    message: data.message || 'An error occurred during analysis',
+                    details: data.error_details ? JSON.stringify(data.error_details) : ''
+                  });
+                  break; // Stop processing further chunks
+                } else if (data.type === 'status') {
+                  // Handle status updates
+                  console.log('Analysis status:', data.message, 'Progress:', data.progress);
+                  setAnalysisProgress(prev => ({
+                    ...prev,
+                    progress: data.progress || prev.progress,
+                    currentSection: data.message
+                  }));
+                } else if (data.type === 'section_progress') {
                 // Dispatch section progress event
                 const progressEvent = new CustomEvent('analysisProgress', {
                   detail: {
@@ -1564,8 +1589,9 @@ const CareerAgent = () => {
                 document.querySelector('[data-agent-type="career"]')?.dispatchEvent(analysisCompleteEvent);
                 break;
               }
-            } catch (parseError) {
-              console.error('Error parsing streaming data:', parseError);
+              } catch (parseError) {
+                console.error('Error parsing streaming data:', parseError);
+              }
             }
           }
         }
