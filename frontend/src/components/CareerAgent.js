@@ -2287,11 +2287,10 @@ const careerInsights = {
   ];
 
   const tabs = [
-    { id: 'insights', name: 'Career Insights', icon: Lightbulb, disabled: false },
     { id: 'planning', name: 'Career Planning', icon: Map, disabled: true },
     { id: 'job-search', name: 'Job Search', icon: Briefcase, disabled: true },
     { id: 'resume-builder', name: 'Resume Builder', icon: FileText, disabled: true },
-    { id: 'documents', name: 'Documents', icon: FileText, disabled: true }
+    { id: 'documents', name: 'Documents', icon: FileText, disabled: false }
   ];
 
   const insightsSubTabs = [
