@@ -1332,8 +1332,10 @@ const CareerAgent = () => {
 
   // Notification management functions
   const addNotification = (notification) => {
+    // Generate unique ID using timestamp + random number
+    const uniqueId = notification.id || `notification-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     const newNotification = {
-      id: notification.id || `notification-${notificationCounter}`,
+      id: uniqueId,
       timestamp: Date.now(),
       ...notification
     };
