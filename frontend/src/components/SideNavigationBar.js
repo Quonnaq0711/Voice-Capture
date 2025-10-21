@@ -70,36 +70,34 @@ export default function UnifiedSidebar() {
     { id: 'market', label: 'Market Position Analysis', section: 'marketPosition' }
   ];
 
-  const toggleSidebar = () => {
+ const toggleSidebar = () => {
     setSidebarExpanded(!sidebarExpanded);
   };
 
   const handleDashboardToggle = () => {
-    setShowDashboardSubTabs(!showDashboardSubTabs);
     setActiveTab('welcome');
+    setShowDashboardSubTabs(!showDashboardSubTabs);
+  };
+
+  const handleInsightsToggle = () => {
+    setActiveTab('insights');
+    setShowInsightsSubTabs(!showInsightsSubTabs); // FIXED: Now uses correct state variable
   };
 
   const handleDashboardTabChange = (tabId) => {
     setActiveDashboardTab(tabId);
     setActiveTab('welcome');
-    console.log(`Navigate to dashboard tab: ${tabId}`);
-  };
-
-  const handleInsightsToggle = () => {
-    setShowInsightsSubTabs(!showInsightsSubTabs);
-    setActiveTab('insights');
   };
 
   const handleInsightsSubTabChange = (subTabId) => {
     setInsightsTab(subTabId);
-    console.log(`Navigate to insights sub-tab: ${subTabId}`);
+    setActiveTab('insights');
   };
 
   const handleTabChange = (tabId) => {
     setActiveTab(tabId);
-    setShowInsightsSubTabs(false);
-    console.log(`Navigate to tab: ${tabId}`);
   };
+
 
   //Main Content Plugins
   
@@ -118,7 +116,7 @@ export default function UnifiedSidebar() {
   //   }
   // };
 
-  return (
+ return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 flex">
       <div className={`bg-white shadow-lg border-r border-gray-200 flex flex-col transition-all duration-300 relative ${
         sidebarExpanded ? 'w-64' : 'w-16'
@@ -134,8 +132,6 @@ export default function UnifiedSidebar() {
             <ChevronRight className="h-3 w-3" />
           )}
         </button>
-
-
 
         <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
           {!sidebarExpanded ? (
@@ -284,7 +280,8 @@ export default function UnifiedSidebar() {
                 )}
               </button>
 
-              {showInsightsSubTabs && activeTab === 'insights' && (
+              {/* FIXED: Removed activeTab check for better UX */}
+              {showInsightsSubTabs && (
                 <div className="ml-3 pl-3 border-l border-gray-200 space-y-1 py-1">
                   {insightsSubTabs.map((item) => (
                     <button
