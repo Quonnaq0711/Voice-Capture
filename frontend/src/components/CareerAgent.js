@@ -4780,8 +4780,8 @@ const careerInsights = {
         <div className="bg-white shadow-sm border-b border-gray-200">
           {/* Simplified Top Navigation */}
           <div className="flex items-center justify-between px-8 py-4">
-            {/* <div className="flex items-center">
-              {/* Elegantly Positioned Back to Dashboard Button 
+             <div className="flex items-center">
+                {/* Elegantly Positioned Back to Dashboard Button */}
               <button
                 onClick={handleBackToDashboard}
                 className="group flex items-center space-x-3 px-5 py-2.5 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gradient-to-r hover:from-gray-50 hover:to-gray-100 rounded-xl transition-all duration-300 border border-gray-200 hover:border-gray-300 shadow-sm hover:shadow-md"
@@ -4789,7 +4789,7 @@ const careerInsights = {
                 <ArrowLeftIcon className="h-5 w-5 text-gray-400 group-hover:text-gray-600 transition-all duration-300 group-hover:-translate-x-0.5" />
                 <span className="font-semibold tracking-wide">Back to Dashboard</span>
               </button>
-            </div> */}
+            </div> 
             <div className="flex items-center space-x-4">
               <button
                 onClick={handleAnalyzeResume}
