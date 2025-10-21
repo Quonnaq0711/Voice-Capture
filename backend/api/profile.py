@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from typing import Optional
 import os
 import uuid
+import time
 from PIL import Image
 import io
 
@@ -91,19 +92,28 @@ async def upload_avatar(
     db: Session = Depends(get_db)
 ):
     """Upload user avatar"""
+    print(f"Received file upload request:")
+    print(f"  - Filename: {file.filename}")
+    print(f"  - Content-Type: {file.content_type}")
+    print(f"  - User ID: {current_user.id}")
+
     # Validate file type
     if not file.content_type.startswith("image/"):
+        print(f"ERROR: Invalid content type: {file.content_type}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="File must be an image"
+            detail=f"File must be an image. Received: {file.content_type}"
         )
-    
+
     # Generate unique filename
     file_extension = file.filename.split(".")[-1].lower()
-    if file_extension not in ["jpg", "jpeg", "png", "gif"]:
+    print(f"  - File extension: {file_extension}")
+
+    if file_extension not in ["jpg", "jpeg", "png", "gif", "webp"]:
+        print(f"ERROR: Unsupported extension: {file_extension}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Unsupported image format. Please use JPG, PNG, or GIF"
+            detail=f"Unsupported image format '{file_extension}'. Please use JPG, PNG, GIF, or WebP"
         )
     
     # Create user-specific directory
@@ -153,9 +163,12 @@ async def upload_avatar(
             "url": avatar_url_with_cache  # Include timestamp for cache busting
         }
     except Exception as e:
+        print(f"ERROR processing image: {type(e).__name__}: {str(e)}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Failed to process image"
+            detail=f"Failed to process image: {str(e)}"
         )
 
 @router.delete("/avatar")
