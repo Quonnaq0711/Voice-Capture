@@ -2332,26 +2332,19 @@ const Profile = () => {
   };
 
   const fetchAvatar = async () => {
-  try {
-    const data = await profileAPI.getAvatarUrl();
-    // In development mode, prepend backend URL to relative avatar paths
-    let url = data.url;
-    if (process.env.NODE_ENV !== 'production' && url && url.startsWith('/')) {
-      const backendUrl = process.env.REACT_APP_BACKEND_URL || 'http://localhost:5000';
-      url = backendUrl + url;
+    try {
+      const data = await profileAPI.getAvatarUrl();
+      // In development mode, prepend backend URL to relative avatar paths
+      let url = data.url;
+      if (process.env.NODE_ENV !== 'production' && url && url.startsWith('/')) {
+        const backendUrl = process.env.REACT_APP_BACKEND_URL || 'http://localhost:5000';
+        url = backendUrl + url;
+      }
+      setAvatarUrl(url);
+    } catch (error) {
+      // Avatar not found, ignore error
     }
-    
-    // Add timestamp to force cache refresh
-    const timestamp = new Date().getTime();
-    const urlWithTimestamp = url.includes('?') 
-      ? `${url}&t=${timestamp}` 
-      : `${url}?t=${timestamp}`;
-    
-    setAvatarUrl(urlWithTimestamp);
-  } catch (error) {
-    console.error('Error fetching avatar:', error);
-  }
-};
+  };
 
   const handlePasswordChange = async (e) => {
     e.preventDefault();
@@ -2379,53 +2372,56 @@ const Profile = () => {
     }
   };
 
-const handleAvatarUpload = async (file) => {
-  try {
-    // Validate file type FIRST (before upload)
+  const handleAvatarUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // Validate file type
     const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
     if (!allowedTypes.includes(file.type)) {
       setError('Please upload a valid image file (JPG, PNG, GIF, or WebP)');
+      e.target.value = ''; // Reset file input
       return;
     }
-  
-    // Validate file size FIRST (before upload)
+
+    // Validate file size (5MB limit)
     if (file.size > 5 * 1024 * 1024) {
       setError('Image size must be less than 5MB');
+      e.target.value = ''; // Reset file input
       return;
     }
-  
-    // Clear previous states
+
     setImgError(false);
     setLoading(true);
     setError('');
     setMessage('');
-  
-    // Upload the file
-    const response = await profileAPI.uploadAvatar(file);
-    
-    // Handle the URL from backend response
-    let url = response.url;
-    if (process.env.NODE_ENV !== 'production' && url && url.startsWith('/')) {
-      const backendUrl = process.env.REACT_APP_BACKEND_URL || 'http://localhost:5000';
-      url = backendUrl + url;
-    }
-  
-    // Add timestamp if not present (for cache busting)
-    if (!url.includes('?t=')) {
+
+    try {
+      const data = await profileAPI.uploadAvatar(file);
+
+      // Add cache-busting timestamp to force browser to reload the image
       const timestamp = new Date().getTime();
-      url = `${url}?t=${timestamp}`;
+      let url = data.url;
+
+      // In development mode, prepend backend URL to relative avatar paths
+      if (process.env.NODE_ENV !== 'production' && url && url.startsWith('/')) {
+        const backendUrl = process.env.REACT_APP_BACKEND_URL || 'http://localhost:5000';
+        url = backendUrl + url;
+      }
+
+      // Add cache-busting parameter
+      const separator = url.includes('?') ? '&' : '?';
+      url = `${url}${separator}t=${timestamp}`;
+
+      setAvatarUrl(url);
+      setMessage('Avatar updated successfully');
+    } catch (error) {
+      setError(error.response?.data?.detail || 'Failed to upload avatar');
+    } finally {
+      setLoading(false);
+      e.target.value = ''; // Reset file input for next upload
     }
-    
-    setAvatarUrl(url);
-    setMessage('Avatar uploaded successfully');
-    
-  } catch (error) {
-    console.error('Error uploading avatar:', error);
-    setError(error.response?.data?.message || 'Failed to upload avatar');
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   const handleAvatarDelete = async () => {
     setLoading(true);
@@ -2610,7 +2606,7 @@ const handleAvatarUpload = async (file) => {
                           <div className="h-24 w-24 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center border-4 border-white shadow-lg ring-4 ring-blue-100">
                             <UserCircleIcon className="h-14 w-14 text-white" />
                           </div>
-                         )}
+                        )}
                         <div className="absolute -bottom-1 -right-1 w-8 h-8 bg-green-500 rounded-full border-4 border-white flex items-center justify-center">
                           <div className="w-3 h-3 bg-white rounded-full"></div>
                         </div>
@@ -2634,7 +2630,6 @@ const handleAvatarUpload = async (file) => {
                           onChange={handleAvatarUpload}
                           className="hidden"
                         />
-                         <span classname="text-xxs text-black">Only png, jpeg, png images allowed at this time</span>
                       </label>
                       <p className="text-xs text-gray-500 text-center px-2">
                         JPG, PNG, GIF, or WebP up to 5MB

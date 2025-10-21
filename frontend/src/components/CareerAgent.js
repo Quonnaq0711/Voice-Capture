@@ -55,21 +55,6 @@ import {
   DocumentIcon,
   TrashIcon
 } from '@heroicons/react/24/solid';
-import { 
-  Home, 
-  Lightbulb, 
-  Map, 
-  Briefcase, 
-  FileText,
-  ChevronDown,
-  ChevronUp,
-  ChevronLeft,
-  ChevronRight,
-  Star,
-  Sun,
-  PanelLeftClose,
-  PanelLeftOpen
-} from 'lucide-react';
 
 // Toast notification component
 const Toast = ({ message, type, onClose }) => {
@@ -390,7 +375,7 @@ const DocumentList = ({ documents, loading, onPreview, onDelete, onAnalyze, form
 };
 
 // Document manager component that combines upload and list
-const DocumentManager = ({ analysisProgress, setAnalysisProgress, setSectionStatus, setProfessionalData, addNotification, setLastAnalyzedDocumentId, onAnalyze }) => {
+const DocumentManager = ({ analysisProgress, setAnalysisProgress, setSectionStatus, setProfessionalData, addNotification, setLastAnalyzedDocumentId }) => {
   const [documents, setDocuments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState(null);
@@ -426,6 +411,266 @@ const DocumentManager = ({ analysisProgress, setAnalysisProgress, setSectionStat
       ? `/resumes/${document.user_id}/${document.filename}`
       : `${process.env.REACT_APP_BACKEND_URL || 'http://localhost:5000'}/resumes/${document.user_id}/${document.filename}`;
     window.open(documentUrl, '_blank');
+  };
+
+  const handleAnalyze = async (document) => {
+    if (analysisProgress.isAnalyzing) {
+      console.log('Analysis already in progress, ignoring request');
+      return;
+    }
+
+    try {
+      // Track resume analysis activity
+      await activitiesAPI.createActivity({
+        activity_type: 'resume_analysis',
+        activity_source: 'career',
+        activity_title: 'Resume Analysis - Document History',
+        activity_description: `Analyzed resume: ${document.original_filename}`,
+        activity_metadata: {
+          resume_filename: document.original_filename,
+          document_id: document.id,
+          source_type: 'document_history'
+        }
+      });
+      // Reset analysis state
+      setAnalysisProgress({
+        isAnalyzing: true,
+        currentSection: null,
+        completedSections: [],
+        totalSections: 7,
+        progress: 0,
+        error: null
+      });
+
+      setSectionStatus({
+        professionalIdentity: 'pending',
+        workExperience: 'pending',
+        skillsAnalysis: 'pending',
+        marketPosition: 'pending',
+        careerTrajectory: 'pending',
+        strengthsWeaknesses: 'pending',
+        salaryAnalysis: 'pending'
+      });
+
+      // Clear existing professional data to prepare for new analysis
+      setProfessionalData({
+        professionalIdentity: { title: '', summary: '', keyHighlights: [], currentRole: '', currentIndustry: '', currentCompany: '', location: '' },
+        workExperience: { totalYears: 0, timelineStart: null, timelineEnd: null, analytics: { workingYears: { years: '', period: '' }, heldRoles: { count: '', longest: '' }, heldTitles: { count: '', shortest: '' }, companies: { count: '', longest: '' }, insights: { gaps: '', shortestTenure: '', companyChanges: '', careerProgression: '' } } },
+        skillsAnalysis: { hardSkills: [], softSkills: [], coreStrengths: [], developmentAreas: [] },
+        marketPosition: { competitiveness: 0, skillRelevance: 0, industryDemand: 0, careerPotential: 0 },
+        careerTrajectory: [],
+        strengthsWeaknesses: { strengths: [], weaknesses: [] },
+        salaryAnalysis: { currentSalary: null, historicalTrends: [], marketComparison: null, predictedGrowth: null, salaryFactors: [], recommendations: [] }
+      });
+
+      // Store the document ID for later retrieval of analysis results
+      setLastAnalyzedDocumentId(document.id);
+      
+      addNotification({
+        type: 'progress',
+        title: 'Resume Analysis Started',
+        message: `Starting comprehensive analysis of ${document.original_filename}`,
+        details: 'This may take a few minutes. You will see real-time updates as each section completes.'
+      });
+      
+      // Call the streaming API with the specific document ID
+      // Use relative path in production (proxied through Nginx), localhost in development
+      const apiUrl = process.env.NODE_ENV === 'production'
+        ? '/api/career/analyze_resume_streaming'
+        : (process.env.REACT_APP_CAREER_URL || 'http://localhost:6002') + '/api/career/analyze_resume_streaming';
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({ 
+          user_id: String(document.user_id),
+          resume_id: String(document.id)
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value);
+        const lines = chunk.split('\n');
+
+        for (const line of lines) {
+          if (line.trim() && line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              console.log('Received streaming data:', data);
+              
+              // Handle different types of streaming responses
+              if (data.type === 'section_progress') {
+                // Update state directly for immediate UI feedback
+                setAnalysisProgress(prev => ({
+                  ...prev,
+                  currentSection: data.section,
+                  progress: data.progress || prev.progress,
+                  totalSections: data.total_sections || 7,
+                  isAnalyzing: true
+                }));
+                
+                setSectionStatus(prev => ({
+                  ...prev,
+                  [data.section]: 'analyzing'
+                }));
+                
+                // Add progress notification
+                const sectionName = data.section.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
+                addNotification({
+                  type: 'progress',
+                  title: 'Analysis in Progress',
+                  message: `Analyzing ${sectionName}...`,
+                  current_section: sectionName,
+                  progress: data.progress || 0,
+                  details: `Processing section ${data.progress ? Math.ceil(data.progress / (100 / (data.total_sections || 7))) : 1} of ${data.total_sections || 7}`
+                });
+                
+                // Also dispatch event for compatibility
+                const progressEvent = new CustomEvent('analysisProgress', {
+                  detail: {
+                    section: data.section,
+                    status: 'analyzing',
+                    progress: data.progress,
+                    totalSections: data.total_sections || 7
+                  }
+                });
+                document.querySelector('[data-agent-type="career"]')?.dispatchEvent(progressEvent);
+              } else if (data.type === 'section_complete') {
+                console.log('Section completed:', data.section, data.data);
+                
+                // Update state directly for immediate UI feedback
+                if (data.data) {
+                  // Update professional data with the new section data
+                  const sectionData = data.data[data.section] || data.data;
+                  setProfessionalData(prev => {
+                    const newData = {
+                      ...prev,
+                      [data.section]: sectionData
+                    };
+                    console.log(`Updated professional data for section ${data.section}:`, newData);
+                    return newData;
+                  });
+                }
+                
+                // Update section status
+                setSectionStatus(prev => {
+                  const newStatus = { ...prev, [data.section]: 'completed' };
+                  console.log('Updated section status:', newStatus);
+                  return newStatus;
+                });
+                
+                // Update analysis progress
+                setAnalysisProgress(prev => {
+                  const newCompletedSections = [...prev.completedSections, data.section];
+                  const newProgress = Math.round((newCompletedSections.length / prev.totalSections) * 100);
+                  return {
+                    ...prev,
+                    completedSections: newCompletedSections,
+                    progress: newProgress,
+                    currentSection: null
+                  };
+                });
+
+                // Add section completion notification
+                const sectionName = data.section.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
+                addNotification({
+                  type: 'complete',
+                  title: `✅ ${sectionName} Complete`,
+                  message: `${sectionName} analysis completed successfully! New insights are now available in your career profile.`,
+                  timestamp: Date.now()
+                });
+
+                // Also dispatch event for compatibility
+                const completeEvent = new CustomEvent('sectionComplete', {
+                  detail: {
+                    section: data.section,
+                    data: data.data,
+                    error: data.error
+                  }
+                });
+                document.querySelector('[data-agent-type="career"]')?.dispatchEvent(completeEvent);
+              } else if (data.type === 'analysis_complete') {
+                console.log('Analysis completed:', data);
+                
+                // Update state directly for immediate UI feedback
+                setAnalysisProgress(prev => ({
+                  ...prev,
+                  isAnalyzing: false,
+                  currentSection: null,
+                  progress: data.success ? 100 : prev.progress,
+                  error: data.error || null
+                }));
+                
+                // If backend returns complete data, merge it with existing professionalData
+                if (data.professional_data) {
+                  const finalData = data.professional_data;
+                  setProfessionalData(prev => ({
+                    ...prev,
+                    ...finalData
+                  }));
+                }
+                
+                // Add completion notification
+                if (data.success) {
+                  addNotification({
+                    type: 'complete',
+                    title: 'Analysis Complete!',
+                    message: 'Your comprehensive career analysis is now ready',
+                    details: 'All sections have been analyzed. Explore your insights to discover new opportunities.'
+                  });
+                } else if (data.error) {
+                  addNotification({
+                    type: 'error',
+                    title: 'Analysis Failed',
+                    message: 'There was an error completing your career analysis',
+                    details: data.error
+                  });
+                }
+                
+                // Also dispatch event for compatibility
+                const analysisCompleteEvent = new CustomEvent('analysisComplete', {
+                  detail: {
+                    success: data.success,
+                    error: data.error,
+                    professional_data: data.professional_data
+                  }
+                });
+                document.querySelector('[data-agent-type="career"]')?.dispatchEvent(analysisCompleteEvent);
+                break;
+              }
+            } catch (parseError) {
+              console.error('Error parsing streaming data:', parseError);
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error analyzing document:', error);
+      setAnalysisProgress(prev => ({
+        ...prev,
+        isAnalyzing: false,
+        error: `Failed to analyze resume: ${error.message}`
+      }));
+      
+      addNotification({
+        type: 'error',
+        title: 'Analysis Failed',
+        message: `Failed to analyze ${document.original_filename}`,
+        details: error.message || 'An unexpected error occurred during analysis'
+      });
+    }
   };
 
   const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, document: null });
@@ -467,12 +712,12 @@ const DocumentManager = ({ analysisProgress, setAnalysisProgress, setSectionStat
   return (
     <>
       <DocumentUpload onUploadSuccess={handleUploadSuccess} />
-      <DocumentList
-        documents={documents}
-        loading={loading}
+      <DocumentList 
+        documents={documents} 
+        loading={loading} 
         onPreview={handlePreview}
         onDelete={handleDelete}
-        onAnalyze={onAnalyze}
+        onAnalyze={handleAnalyze}
         formatDate={formatDate}
         getFileIcon={getFileIcon}
       />
@@ -589,10 +834,9 @@ const CareerAgent = () => {
   const location = useLocation();
   const [userData, setUserData] = useState({ first_name: '', email: '' });
   const [avatarUrl, setAvatarUrl] = useState(null);
-  const [isImgError, setImgError] = useState(false);
   const [isAssistantDialogOpen, setIsAssistantDialogOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('insights');
-  const [insightsTab, setInsightsTab] = useState('identity');
+    const [insightsTab, setInsightsTab] = useState('identity');
   const [isInsightsMenuOpen, setIsInsightsMenuOpen] = useState(true);
   const [unreadCount, setUnreadCount] = useState(0);
   const [careerData, setCareerData] = useState({
@@ -601,13 +845,8 @@ const CareerAgent = () => {
     skills: ['JavaScript', 'React', 'Python', 'Node.js', 'AWS'],
     goals: ['Senior Engineer', 'Tech Lead', 'Product Manager']
   });
-  const [sidebarExpanded, setSidebarExpanded] = useState(true);
-  const [activeDashboardTab, setActiveDashboardTab] = useState('insights');
-  const [showSubTabs, setShowSubTabs] = useState(true);
-  const [showDashboardSubTabs, setShowDashboardSubTabs] = useState(true);
-  const [showInsightsSubTabs, setShowInsightsSubTabs] = useState(false);
-  
-   // Professional data for visualizations
+
+  // Professional data for visualizations
   const [professionalData, setProfessionalData] = useState({
     professionalIdentity: {
       title: '',
@@ -811,7 +1050,9 @@ const CareerAgent = () => {
     // Event handler for section completion with data
     const handleSectionComplete = (event) => {
       const { section, data, error } = event.detail;
-
+      console.log('Section completed:', { section, hasData: !!data, error });
+      console.log('Section data received:', data);
+      
       if (error) {
         setAnalysisProgress(prev => ({
           ...prev,
@@ -829,21 +1070,33 @@ const CareerAgent = () => {
           // Update professional data with the new section data
           // Handle nested data structure - if data contains the section name as a key, use that value
           const sectionData = data[section] || data;
-          setProfessionalData(prev => ({
-            ...prev,
-            [section]: sectionData
-          }));
+          setProfessionalData(prev => {
+            const newData = {
+              ...prev,
+              [section]: sectionData
+            };
+            console.log('Updated professional data with new analysis:', newData);
+            console.log(`Section ${section} data:`, sectionData);
+            return newData;
+          });
+        } else {
+          console.log('Skipping data update - currently loading stored data');
         }
 
         // Update section status and progress
-        setSectionStatus(prev => ({
-          ...prev,
-          [section]: 'completed'
-        }));
+        setSectionStatus(prev => {
+          const newStatus = { ...prev, [section]: 'completed' };
+          console.log('Updated section status:', newStatus);
+          return newStatus;
+        });
         setAnalysisProgress(prev => {
           const newCompletedSections = [...prev.completedSections, section];
           const newProgress = Math.round((newCompletedSections.length / prev.totalSections) * 100);
           const isAnalysisComplete = newCompletedSections.length >= prev.totalSections;
+          
+          if (isAnalysisComplete) {
+            console.log('Analysis fully completed - preserving all data and section statuses');
+          }
           
           return {
             ...prev,
@@ -859,8 +1112,14 @@ const CareerAgent = () => {
           setActiveTab('insights');
         }
 
-        // Notification is added in the streaming handler (line ~1380)
-        // Don't add notification here to avoid duplicates
+        // Add completion notification
+        const sectionName = section.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
+        addNotification({
+          type: 'complete',
+          title: `✅ ${sectionName} Complete`,
+          message: `${sectionName} analysis completed successfully! New insights are now available in your career profile.`,
+          timestamp: Date.now()
+        });
       }
     };
 
@@ -950,26 +1209,19 @@ const CareerAgent = () => {
   };
 
   const fetchAvatar = async () => {
-  try {
-    const data = await profileAPI.getAvatarUrl();
-    // In development mode, prepend backend URL to relative avatar paths
-    let url = data.url;
-    if (process.env.NODE_ENV !== 'production' && url && url.startsWith('/')) {
-      const backendUrl = process.env.REACT_APP_BACKEND_URL || 'http://localhost:5000';
-      url = backendUrl + url;
+    try {
+      const data = await profileAPI.getAvatarUrl();
+      // In development mode, prepend backend URL to relative avatar paths
+      let url = data.url;
+      if (process.env.NODE_ENV !== 'production' && url && url.startsWith('/')) {
+        const backendUrl = process.env.REACT_APP_BACKEND_URL || 'http://localhost:5000';
+        url = backendUrl + url;
+      }
+      setAvatarUrl(url);
+    } catch (error) {
+      console.error('Error fetching avatar:', error);
     }
-    
-    // Add timestamp to force cache refresh
-    const timestamp = new Date().getTime();
-    const urlWithTimestamp = url.includes('?') 
-      ? `${url}&t=${timestamp}` 
-      : `${url}?t=${timestamp}`;
-    
-    setAvatarUrl(urlWithTimestamp);
-  } catch (error) {
-    console.error('Error fetching avatar:', error);
-  }
-};
+  };
 
   const fetchUnreadCount = async () => {
     try {
@@ -1080,10 +1332,8 @@ const CareerAgent = () => {
 
   // Notification management functions
   const addNotification = (notification) => {
-    // Generate unique ID using timestamp + random number
-    const uniqueId = notification.id || `notification-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     const newNotification = {
-      id: uniqueId,
+      id: notification.id || `notification-${notificationCounter}`,
       timestamp: Date.now(),
       ...notification
     };
@@ -1114,8 +1364,7 @@ const CareerAgent = () => {
   };
 
   // Handler for Resume Analysis
-  // Unified function to handle resume analysis from both "Analyze Recent Resume" button and document list
-  const handleAnalyzeResume = async (resumeDocument = null) => {
+  const handleAnalyzeResume = async () => {
     if (!user?.id) {
       addNotification({
         type: 'error',
@@ -1132,46 +1381,33 @@ const CareerAgent = () => {
     }
 
     try {
-      // Determine which resume to analyze
-      let targetDocument = resumeDocument;
-      let activitySource = 'document_history';
-      let activityTitle = 'Resume Analysis - Document History';
-
-      // If no document provided, get the most recent one
-      if (!targetDocument) {
-        try {
-          const documentList = await auth.getResumes();
-
-          if (documentList && documentList.length > 0) {
-            targetDocument = documentList[0]; // Most recent document
-            activitySource = 'analyze_recent_resume';
-            activityTitle = 'Resume Analysis - Recent Resume';
-          } else {
-            throw new Error('No resume documents found');
-          }
-        } catch (error) {
-          console.error('Could not fetch documents:', error);
-          addNotification({
-            type: 'error',
-            title: 'No Resume Found',
-            message: 'Please upload a resume first',
-            details: error.message
-          });
-          return;
+      // Get the most recent document to include filename in activity tracking
+      let mostRecentFilename = null;
+      try {
+        const documentList = await auth.getResumes();
+        if (documentList && documentList.length > 0) {
+          // Documents are typically sorted by upload date, get the most recent
+          const mostRecentDoc = documentList[0];
+          mostRecentFilename = mostRecentDoc.original_filename;
         }
+      } catch (error) {
+        console.warn('Could not fetch documents for activity tracking:', error);
       }
 
       // Track resume analysis activity
+      const activityDescription = mostRecentFilename
+        ? `Analyzed most recent resume: ${mostRecentFilename}`
+        : 'Analyzed most recent resume';
+
       await activitiesAPI.createActivity({
         activity_type: 'resume_analysis',
         activity_source: 'career',
-        activity_title: activityTitle,
-        activity_description: `Analyzed resume: ${targetDocument.original_filename}`,
+        activity_title: 'Resume Analysis - Recent Resume',
+        activity_description: activityDescription,
         activity_metadata: {
-          source_type: activitySource,
+          source_type: 'analyze_recent_resume',
           user_id: user.id,
-          resume_filename: targetDocument.original_filename,
-          document_id: targetDocument.id
+          resume_filename: mostRecentFilename
         }
       });
       // Reset analysis state
@@ -1205,46 +1441,25 @@ const CareerAgent = () => {
         salaryAnalysis: { currentSalary: null, historicalTrends: [], marketComparison: null, predictedGrowth: null, salaryFactors: [], recommendations: [] }
       });
 
-      // Store the document ID for later retrieval of analysis results
-      setLastAnalyzedDocumentId(targetDocument.id);
-
       addNotification({
         type: 'progress',
         title: 'Resume Analysis Started',
-        message: `Starting comprehensive analysis of ${targetDocument.original_filename}`,
+        message: 'Starting comprehensive analysis of your recent resume',
         details: 'This may take a few minutes. You will see real-time updates as each section completes.'
       });
 
-      // Validate that we have the required user ID
-      const userId = targetDocument?.user_id || user.id;
-      const resumeId = targetDocument?.id;
-
-      if (!userId) {
-        throw new Error(`Missing user_id: ${userId}`);
-      }
-
       // Call the backend streaming endpoint
-      // If resumeId exists, use it. Otherwise, backend will analyze the most recent resume.
       // Use relative path in production (proxied through Nginx), localhost in development
       const apiUrl = process.env.NODE_ENV === 'production'
         ? '/api/career/analyze_resume_streaming'
         : (process.env.REACT_APP_CAREER_URL || 'http://localhost:6002') + '/api/career/analyze_resume_streaming';
-
-      // Build request body: only include resume_id if it exists
-      const requestBody = {
-        user_id: String(userId)
-      };
-      if (resumeId) {
-        requestBody.resume_id = String(resumeId);
-      }
-
       const response = await fetch(apiUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${localStorage.getItem('token')}` // Assuming token-based auth
         },
-        body: JSON.stringify(requestBody)
+        body: JSON.stringify({ user_id: String(user.id) })
       });
 
       if (!response.ok) {
@@ -1253,19 +1468,13 @@ const CareerAgent = () => {
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
-      let buffer = ''; // Buffer to accumulate incomplete lines across chunks
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
 
-        // Decode chunk and append to buffer
-        const chunk = decoder.decode(value, { stream: true });
-        buffer += chunk;
-
-        // Split by newlines, keeping the last incomplete line in buffer
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || ''; // Keep the last (potentially incomplete) line in buffer
+        const chunk = decoder.decode(value);
+        const lines = chunk.split('\n');
 
         for (const line of lines) {
           if (line.trim() && line.startsWith('data: ')) {
@@ -1307,48 +1516,31 @@ const CareerAgent = () => {
                     totalSections: data.total_sections || 7
                   }
                 });
-                try {
-                  const careerElement = document.querySelector('[data-agent-type="career"]');
-                  if (careerElement) {
-                    careerElement.dispatchEvent(progressEvent);
-                  }
-                } catch (eventError) {
-                  console.error('Error dispatching progress event:', eventError);
-                }
+                document.querySelector('[data-agent-type="career"]')?.dispatchEvent(progressEvent);
               } else if (data.type === 'section_complete') {
+                console.log('Section completed:', data.section, data.data);
+                
                 // Update state directly for immediate UI feedback
                 if (data.data) {
                   // Update professional data with the new section data
                   const sectionData = data.data[data.section] || data.data;
-                  setProfessionalData(prev => ({
-                    ...prev,
-                    [data.section]: sectionData
-                  }));
+                  setProfessionalData(prev => {
+                    const newData = {
+                      ...prev,
+                      [data.section]: sectionData
+                    };
+                    console.log(`Updated professional data for section ${data.section}:`, newData);
+                    return newData;
+                  });
                 }
-
+                
                 // Update section status
-                setSectionStatus(prev => ({
-                  ...prev,
-                  [data.section]: 'completed'
-                }));
-
-                // Add section completion notification (with unique ID to ensure toast shows)
-                const sectionName = data.section.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
-                // Use timestamp + random to ensure unique ID for each notification
-                // This guarantees that each section completion creates a NEW notification
-                // and triggers a toast, even if sections complete very quickly
-                const notificationId = `section-${data.section}-complete-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-                addNotification({
-                  // Unique ID ensures notification is always added (not updated)
-                  // This prevents race conditions when sections complete rapidly
-                  id: notificationId,
-                  type: 'success',
-                  title: `✅ ${sectionName} Complete`,
-                  message: `${sectionName} analysis completed successfully!`,
-                  details: 'New insights are now available in your career profile.',
-                  timestamp: Date.now()
+                setSectionStatus(prev => {
+                  const newStatus = { ...prev, [data.section]: 'completed' };
+                  console.log('Updated section status:', newStatus);
+                  return newStatus;
                 });
-
+                
                 // Dispatch section completion event
                 const completeEvent = new CustomEvent('sectionComplete', {
                   detail: {
@@ -2040,82 +2232,6 @@ const careerInsights = {
     ]
   };
 
-  const dashboardTabs = [
-    {
-      id: 'insights',
-      name: 'AI Insights',
-      icon: Lightbulb,
-      color: 'text-blue-600',
-      bgColor: 'bg-blue-50'
-    },
-    {
-      id: 'achievements',
-      name: 'Achievements',
-      icon: Star,
-      color: 'text-green-600',
-      bgColor: 'bg-green-50',
-      disabled: true
-    },
-    {
-      id: 'recommendations',
-      name: 'Recommendations',
-      icon: Sun,
-      color: 'text-orange-600',
-      bgColor: 'bg-orange-50',
-      preview: true
-    }
-  ];
-
-  const tabs = [
-    { id: 'planning', name: 'Career Planning', icon: Map, disabled: true },
-    { id: 'job-search', name: 'Job Search', icon: Briefcase, disabled: true },
-    { id: 'resume-builder', name: 'Resume Builder', icon: FileText, disabled: true },
-    { id: 'documents', name: 'Documents', icon: FileText, disabled: false }
-  ];
-
-  const insightsSubTabs = [
-    { id: 'identity', label: 'Professional Identity', section: 'professionalIdentity' },
-    { id: 'work', label: 'Work Experience Analysis', section: 'workExperience' },
-    { id: 'salary', label: 'Salary Analysis', section: 'salaryAnalysis' },
-    { id: 'skills', label: 'Skills Analysis', section: 'skillsAnalysis' },
-    { id: 'market', label: 'Market Position Analysis', section: 'marketPosition' }
-  ];
-
-  const toggleSidebar = () => {
-    setSidebarExpanded(!sidebarExpanded);
-  };
-
-    const handleDashboardToggle = () => {
-    setShowDashboardSubTabs(!setShowDashboardSubTabs);
-    if (activeTab !== 'welcome') {
-      setActiveTab('welcome');
-    }
-  };
-
-  const handleDashboardTabChange = (tabId) => {
-    setActiveDashboardTab(tabId);
-    setActiveTab('welcome');
-  };
-
-  const handleTabChange = (tabId) => {
-    setActiveTab(tabId);
-    if (tabId === 'insights') {
-      setIsInsightsMenuOpen(true);
-    } else {
-      setIsInsightsMenuOpen(false);
-    }
-  };
-
-  const handleInsightsToggle = () => {
-    setActiveTab('insights');
-    setIsInsightsMenuOpen(!isInsightsMenuOpen);
-  };
-
-    const handleInsightsSubTabChange = (subTabId) => {
-    setInsightsTab(subTabId);
-  };
-
-
   // Tab content renderer
   const renderTabContent = () => {
     switch (activeTab) {
@@ -2364,14 +2480,13 @@ const careerInsights = {
                   <p className="text-gray-600">Manage your professional documents and certifications</p>
                 </div>
               </div>
-              <DocumentManager
+              <DocumentManager 
                   analysisProgress={analysisProgress}
                   setAnalysisProgress={setAnalysisProgress}
                   setSectionStatus={setSectionStatus}
                   setProfessionalData={setProfessionalData}
                   addNotification={addNotification}
                   setLastAnalyzedDocumentId={setLastAnalyzedDocumentId}
-                  onAnalyze={handleAnalyzeResume}
                 />
             </div>
           </div>
@@ -4319,302 +4434,177 @@ const careerInsights = {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 flex" data-agent-type="career">
-      {/* Sidebar */}
-      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 flex">
-      <div className={`bg-white shadow-lg border-r border-gray-200 flex flex-col transition-all duration-300 relative ${
-        sidebarExpanded ? 'w-64' : 'w-16'
-      }`}>
-        <button
-          onClick={toggleSidebar}
-          className="absolute -right-3 top-6 w-6 h-6 bg-white border border-gray-300 text-gray-600 rounded-full flex items-center justify-center hover:bg-gray-50 hover:border-gray-400 transition-all shadow-md z-50"
-          aria-label={sidebarExpanded ? 'Collapse sidebar' : 'Expand sidebar'}
-        >
-          {sidebarExpanded ? (
-            <ChevronLeft className="h-3 w-3" />
-          ) : (
-            <ChevronRight className="h-3 w-3" />
-          )}
-        </button> 
-
-        <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
-          {!sidebarExpanded ? (
-            <div className="space-y-2">
-              <button
-                onClick={handleDashboardToggle}
-                className={`w-full h-10 rounded-lg flex items-center justify-center transition-all duration-200 ${
-                  activeTab === 'welcome'
-                    ? 'bg-orange-500 text-white shadow-md'
-                    : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
-                }`}
-                title="Dashboard"
-              >
-                <Home className="h-5 w-5" />
-              </button>
-
-              <button
-                onClick={handleInsightsToggle}
-                className={`w-full h-10 rounded-lg flex items-center justify-center transition-all duration-200 ${
-                  activeTab === 'insights'
-                    ? 'bg-orange-500 text-white shadow-md'
-                    : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
-                }`}
-                title="Career Insights"
-              >
-                <Lightbulb className="h-5 w-5" />
-              </button>
-
-              {tabs.map((tab) => {
-                const IconComponent = tab.icon;
-                const isDisabled = tab.disabled;
-                const tabTitle = isDisabled ? `${tab.name} - Coming Soon` : tab.name;
-
-                return (
-                  <button
-                    key={tab.id}
-                    onClick={() => !isDisabled && handleTabChange(tab.id)}
-                    disabled={isDisabled}
-                    className={`w-full h-10 rounded-lg flex items-center justify-center transition-all duration-200 ${
-                      isDisabled
-                        ? 'text-gray-300 cursor-not-allowed opacity-50'
-                        : activeTab === tab.id
-                        ? 'bg-orange-500 text-white shadow-md'
-                        : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
-                    }`}
-                    title={tabTitle}
-                  >
-                    <IconComponent className="h-5 w-5" />
-                  </button>
-                );
-              })}
+      {/* Left Sidebar */}
+      <div className="w-64 bg-white shadow-lg border-r border-gray-200 flex flex-col">
+        {/* Header */}
+        <div className="p-6 border-b border-gray-200">
+          <div className="flex items-center space-x-3">
+            <div className="w-10 h-10 bg-gradient-to-r from-orange-500 to-red-500 rounded-lg flex items-center justify-center">
+              <span className="text-white font-bold text-lg">S</span>
             </div>
-          ) : (
-            <div className="space-y-1">
-              <button
-                onClick={handleDashboardToggle}
-                className={`w-full flex items-center justify-between space-x-3 px-4 py-3 rounded-lg text-left transition-all duration-200 ${
-                  activeTab === 'welcome'
-                    ? 'bg-orange-500 text-white shadow-md'
-                    : 'text-gray-700 hover:bg-gray-100'
-                }`}
-              >
-                <div className="flex items-center space-x-3">
-                  <Home className={`h-5 w-5 ${
-                    activeTab === 'welcome' ? 'text-white' : 'text-gray-500'
-                  }`} />
-                  <span className="font-medium">Dashboard</span>
-                </div>
-                {showDashboardSubTabs ? (
-                  <ChevronUp className={`h-4 w-4 ${
-                    activeTab === 'welcome' ? 'text-white' : 'text-gray-400'
-                  }`} />
-                ) : (
-                  <ChevronDown className={`h-4 w-4 ${
-                    activeTab === 'welcome' ? 'text-white' : 'text-gray-400'
-                  }`} />
-                )}
-              </button>
+            <div>
+              <h1 className="text-xl font-bold text-gray-900">Idii.</h1>
+              <p className="text-xs text-gray-500">Career Agent</p>
+            </div>
+          </div>
+        </div>
 
-              {showDashboardSubTabs && (
-                <div className="ml-3 pl-3 border-l border-gray-200 space-y-1 py-1">
-                  {dashboardTabs.map((dashTab) => {
-                    const DashIconComponent = dashTab.icon;
-                    const isDashDisabled = dashTab.disabled;
-                    const isPreview = dashTab.preview;
-
-                    return (
-                      <button
-                        key={dashTab.id}
-                        onClick={() => !isDashDisabled && handleDashboardTabChange(dashTab.id)}
-                        disabled={isDashDisabled}
-                        className={`w-full flex items-center space-x-3 px-3 py-2 rounded-md text-left transition-all duration-200 text-sm ${
-                          isDashDisabled
-                            ? 'text-gray-400 cursor-not-allowed opacity-50'
-                            : activeDashboardTab === dashTab.id && activeTab === 'welcome'
-                            ? `${dashTab.bgColor} ${dashTab.color} border border-current`
-                            : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                        }`}
-                      >
-                        <DashIconComponent className={`h-4 w-4 flex-shrink-0 ${
-                          isDashDisabled 
-                            ? 'text-gray-300' 
-                            : activeDashboardTab === dashTab.id && activeTab === 'welcome' 
-                            ? dashTab.color 
-                            : 'text-gray-500'
-                        }`} />
-                        <span className="font-medium text-left flex-1">{dashTab.name}</span>
-                        {isDashDisabled && (
-                          <span className="ml-auto text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded">
-                            Coming Soon
-                          </span>
-                        )}
-                        {isPreview && !isDashDisabled && (
-                          <span className="ml-auto text-xs text-orange-600 bg-orange-50 px-2 py-1 rounded border border-orange-200">
-                            Preview Only
-                          </span>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-
-              <button
-                onClick={handleInsightsToggle}
-                className={`w-full flex items-center justify-between space-x-3 px-4 py-3 rounded-lg text-left transition-all duration-200 ${
-                  activeTab === 'insights'
-                    ? 'bg-orange-500 text-white shadow-md'
-                    : 'text-gray-700 hover:bg-gray-100'
-                }`}
-              >
-                <div className="flex items-center space-x-3">
-                  <Lightbulb className={`h-5 w-5 ${
-                    activeTab === 'insights' ? 'text-white' : 'text-gray-500'
-                  }`} />
-                  <span className="font-medium">Career Insights</span>
-                </div>
-                {showInsightsSubTabs ? (
-                  <ChevronUp className={`h-4 w-4 ${
-                    activeTab === 'insights' ? 'text-white' : 'text-gray-400'
-                  }`} />
-                ) : (
-                  <ChevronDown className={`h-4 w-4 ${
-                    activeTab === 'insights' ? 'text-white' : 'text-gray-400'
-                  }`} />
-                )}
-              </button>
-
-              {showInsightsSubTabs && activeTab === 'insights' && (
-                <div className="ml-3 pl-3 border-l border-gray-200 space-y-1 py-1">
-                  {insightsSubTabs.map((item) => (
-                    <button
-                      key={item.id}
-                      onClick={() => handleInsightsSubTabChange(item.id)}
-                      className={`w-full text-left px-3 py-2 rounded-md text-sm transition-all duration-200 flex items-center ${
-                        insightsTab === item.id 
-                          ? 'bg-orange-100 text-orange-600 font-semibold' 
-                          : 'text-gray-600 hover:bg-gray-100'
-                      }`}
-                    >
-                      {sectionStatus[item.section] === 'completed' ? (
-                        <svg className="w-4 h-4 text-green-500 mr-2 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                        </svg>
-                      ) : analysisProgress.isAnalyzing ? (
-                        <svg className="w-4 h-4 text-orange-500 mr-2 flex-shrink-0 animate-spin" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                          <path className="opacity-75" fill="currentColor" d="m4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                      ) : null}
-                      {item.label}
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              {tabs.map((tab) => {
-                const IconComponent = tab.icon;
-                const isDisabled = tab.disabled;
-
-                return (
+        {/* Navigation Menu */}
+        <nav className="flex-1 px-4 py-6 space-y-2">
+          {[
+            { id: 'insights', name: 'Career Insights', icon: LightBulbIcon },
+            { id: 'planning', name: 'Career Planning', icon: MapIcon },
+            { id: 'job-search', name: 'Job Search', icon: BriefcaseIcon },
+            { id: 'resume-builder', name: 'Resume Builder', icon: DocumentTextIcon },
+            { id: 'documents', name: 'Documents', icon: DocumentTextIcon }
+          ].map((tab) => {
+            const IconComponent = tab.icon;
+            if (tab.id === 'insights') {
+              return (
+                <div key={tab.id}>
                   <button
-                    key={tab.id}
-                    onClick={() => !isDisabled && handleTabChange(tab.id)}
-                    disabled={isDisabled}
-                    className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-left transition-all duration-200 ${
-                      isDisabled
-                        ? 'text-gray-400 cursor-not-allowed opacity-50'
-                        : activeTab === tab.id
+                    onClick={() => {
+                      setActiveTab(tab.id);
+                      setIsInsightsMenuOpen(!isInsightsMenuOpen);
+                    }}
+                    className={`w-full flex items-center justify-between space-x-3 px-4 py-3 rounded-lg text-left transition-all duration-200 ${
+                      activeTab === tab.id
                         ? 'bg-orange-500 text-white shadow-md'
                         : 'text-gray-700 hover:bg-gray-100'
                     }`}
                   >
-                    <IconComponent className={`h-5 w-5 ${
-                      isDisabled
-                        ? 'text-gray-300'
-                        : activeTab === tab.id ? 'text-white' : 'text-gray-500'
-                    }`} />
-                    <span className="font-medium">{tab.name}</span>
-                    {isDisabled && (
-                      <span className="ml-auto text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded">
-                        Coming Soon
-                      </span>
-                    )}
+                    <div className="flex items-center space-x-3">
+                      <IconComponent className={`h-5 w-5 ${
+                        activeTab === tab.id ? 'text-white' : 'text-gray-500'
+                      }`} />
+                      <span className="font-medium">{tab.name}</span>
+                    </div>
+                    <ChevronDownIcon
+                      className={`h-5 w-5 transition-transform duration-200 ${
+                        isInsightsMenuOpen ? 'transform rotate-180' : ''
+                      } ${
+                        activeTab === tab.id ? 'text-white' : 'text-gray-500'
+                      }`}
+                    />
                   </button>
-                );
-              })}
-            </div>
-          )}
+                  {isInsightsMenuOpen && activeTab === 'insights' && (
+                    <div className="pl-6 pt-4 space-y-1">
+                      {[{ id: 'identity', label: 'Professional Identity', section: 'professionalIdentity' }, 
+                        { id: 'work', label: 'Work Experience Analysis', section: 'workExperience' }, 
+                        { id: 'salary', label: 'Salary Analysis', section: 'salaryAnalysis' }, 
+                        { id: 'skills', label: 'Skills Analysis', section: 'skillsAnalysis' }, 
+                        { id: 'market', label: 'Market Position Analysis', section: 'marketPosition' }].map((item) => (
+                        <button
+                          key={item.id}
+                          onClick={() => setInsightsTab(item.id)}
+                          className={`w-full text-left px-3 py-2 rounded-md text-sm transition-all duration-200 flex items-center ${insightsTab === item.id ? 'bg-orange-100 text-orange-600 font-semibold' : 'text-gray-600 hover:bg-gray-100'}`}
+                        >
+                          {sectionStatus[item.section] === 'completed' ? (
+                            <svg className="w-4 h-4 text-green-500 mr-2 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                            </svg>
+                          ) : analysisProgress.isAnalyzing ? (
+                            <svg className="w-4 h-4 text-orange-500 mr-2 flex-shrink-0 animate-spin" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="m4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                          ) : null}
+                          {item.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            }
+            // Check if tab is disabled (unimplemented features)
+            const isDisabled = ['planning', 'job-search', 'resume-builder'].includes(tab.id);
+
+            return (
+              <button
+                key={tab.id}
+                onClick={isDisabled ? undefined : () => setActiveTab(tab.id)}
+                disabled={isDisabled}
+                className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-left transition-all duration-200 ${
+                  isDisabled
+                    ? 'text-gray-400 cursor-not-allowed opacity-50'
+                    : activeTab === tab.id
+                    ? 'bg-orange-500 text-white shadow-md'
+                    : 'text-gray-700 hover:bg-gray-100'
+                }`}
+              >
+                <IconComponent className={`h-5 w-5 ${
+                  isDisabled
+                    ? 'text-gray-300'
+                    : activeTab === tab.id ? 'text-white' : 'text-gray-500'
+                }`} />
+                <span className="font-medium">{tab.name}</span>
+                {isDisabled && (
+                  <span className="ml-auto text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded">
+                    Coming Soon
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </nav>
 
-        <div className={`p-4 border-t border-gray-200 ${!sidebarExpanded ? 'px-2' : ''}`}>
-          {sidebarExpanded ? (
-            <div className="text-xs text-gray-500 text-center">
-              © 2025 Idii
-            </div>
-          ) : (
-            <div className="w-full flex justify-center">
-              <div className="w-2 h-2 bg-gray-300 rounded-full"></div>
-            </div>
-          )}
-        </div>
+
       </div>
 
-    {/* Main Content Area */}
-<div className="flex-1 flex flex-col">
-  {/* Clean Top Navigation Bar */}
-  <div className="bg-white shadow-sm border-b border-gray-200">
-    {/* Simplified Top Navigation */}
-    <div className="flex items-center justify-between px-8 py-4">
-      <div className="flex items-center">
-        {/* Elegantly Positioned Back to Dashboard Button */}
-        <button
-          onClick={handleBackToDashboard}
-          className="group flex items-center space-x-3 px-5 py-2.5 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gradient-to-r hover:from-gray-50 hover:to-gray-100 rounded-xl transition-all duration-300 border border-gray-200 hover:border-gray-300 shadow-sm hover:shadow-md"
-        >
-          <ArrowLeftIcon className="h-5 w-5 text-gray-400 group-hover:text-gray-600 transition-all duration-300 group-hover:-translate-x-0.5" />
-          <span className="font-semibold tracking-wide">Back to Dashboard</span>
-        </button>
-      </div>
-      
-      <div className="flex items-center space-x-4">
-        <button
-          onClick={handleAnalyzeResume}
-          className="bg-gradient-to-r from-green-600 to-teal-600 text-white px-6 py-2 rounded-lg font-medium hover:shadow-lg transition-all duration-200 flex items-center space-x-2"
-          disabled={analysisProgress.isAnalyzing}
-        >
-          <DocumentTextIcon className="h-5 w-5" />
-          <span>{analysisProgress.isAnalyzing ? 'Analyzing...' : 'Analyze Recent Resume'}</span>
-        </button>
-        
-        <button
-          onClick={handlePersonalAssistant}
-          className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-2 rounded-lg font-medium hover:shadow-lg transition-all duration-200"
-        >
-          Ask Career Agent
-        </button>
-        
-        {/* Notification Bell - moved from bottom to top navigation */}
-        <NotificationPanel 
-          notifications={notifications}
-          onDismiss={dismissNotification}
-          maxVisible={5}
-        />
-        
-        <div className="w-10 h-10 bg-gray-300 rounded-full flex items-center justify-center">
-          {avatarUrl && !isImgError ? (
-            <img
-              src={avatarUrl}
-              alt="User Avatar"
-              onError={() => setImgError(true)}
-              className="h-10 w-10 rounded-full object-cover"
-            />
-          ) : (
-            <UserCircleIcon className="h-6 w-6 text-gray-600" />
-          )}
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col">
+        {/* Clean Top Navigation Bar */}
+        <div className="bg-white shadow-sm border-b border-gray-200">
+          {/* Simplified Top Navigation */}
+          <div className="flex items-center justify-between px-8 py-4">
+            <div className="flex items-center">
+              {/* Elegantly Positioned Back to Dashboard Button */}
+              <button
+                onClick={handleBackToDashboard}
+                className="group flex items-center space-x-3 px-5 py-2.5 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gradient-to-r hover:from-gray-50 hover:to-gray-100 rounded-xl transition-all duration-300 border border-gray-200 hover:border-gray-300 shadow-sm hover:shadow-md"
+              >
+                <ArrowLeftIcon className="h-5 w-5 text-gray-400 group-hover:text-gray-600 transition-all duration-300 group-hover:-translate-x-0.5" />
+                <span className="font-semibold tracking-wide">Back to Dashboard</span>
+              </button>
+            </div>
+            <div className="flex items-center space-x-4">
+              <button
+                onClick={handleAnalyzeResume}
+                className="bg-gradient-to-r from-green-600 to-teal-600 text-white px-6 py-2 rounded-lg font-medium hover:shadow-lg transition-all duration-200 flex items-center space-x-2"
+                disabled={analysisProgress.isAnalyzing}
+              >
+                <DocumentTextIcon className="h-5 w-5" />
+                <span>{analysisProgress.isAnalyzing ? 'Analyzing...' : 'Analyze Recent Resume'}</span>
+              </button>
+              <button
+                onClick={handlePersonalAssistant}
+                className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-2 rounded-lg font-medium hover:shadow-lg transition-all duration-200"
+              >
+                Ask Career Agent
+              </button>
+              
+              {/* Notification Bell - moved from bottom to top navigation */}
+              <NotificationPanel 
+                notifications={notifications}
+                onDismiss={dismissNotification}
+                maxVisible={5}
+              />
+              
+              <div className="w-10 h-10 bg-gray-300 rounded-full flex items-center justify-center">
+                {avatarUrl ? (
+                  <img
+                    src={avatarUrl}
+                    alt="User Avatar"
+                    className="h-10 w-10 rounded-full object-cover"
+                  />
+                ) : (
+                  <UserCircleIcon className="h-6 w-6 text-gray-600" />
+                )}
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
-    </div>
-  </div>
 
         {/* Progress tracking is now handled in ChatDialog personal assistant */}
         {/* Enhanced Progress Tracker component removed - progress messages now appear in personal assistant chat */}
@@ -4634,7 +4624,6 @@ const careerInsights = {
           onDialogClose={fetchUnreadCount}
           onUnreadCountChange={fetchUnreadCount}
         />
-      </div>
       </div>
     </div>
   );
