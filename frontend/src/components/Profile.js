@@ -2234,6 +2234,7 @@ const Profile = () => {
   // User data state
   const [userData, setUserData] = useState({
     first_name: '',
+    last_name: '',
     email: ''
   });
   
@@ -2315,6 +2316,7 @@ const Profile = () => {
       const data = await profileAPI.getCurrentUser();
       setUserData({
         first_name: data.first_name,
+        last_name: data.last_name,
         email: data.email
       });
     } catch (error) {
@@ -2398,7 +2400,6 @@ const Profile = () => {
       return;
     }
 
-    setImgError(false);
     setLoading(true);
     setError('');
     setMessage('');
@@ -2420,6 +2421,8 @@ const Profile = () => {
       const separator = url.includes('?') ? '&' : '?';
       url = `${url}${separator}t=${timestamp}`;
 
+      // Reset image error state before setting new avatar
+      setImgError(false);
       setAvatarUrl(url);
       setMessage('Avatar updated successfully');
     } catch (error) {
@@ -2634,7 +2637,7 @@ const Profile = () => {
                         <p className="text-gray-600">{userData.email}</p>
                         <div className="flex items-center mt-2">
                           <div className="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
-                          <span className="text-sm text-green-600 font-medium">Active Assistant</span>
+                          <span className="text-sm text-green-600 font-medium">Active</span>
                         </div>
                       </div>
                     </div>
@@ -2678,7 +2681,7 @@ const Profile = () => {
                         <p className="text-sm text-gray-600">Your account details</p>
                       </div>
                     </div>
-                    
+
                     <div className="space-y-6">
                       <div>
                         <label className="block text-sm font-semibold text-gray-700 mb-3">First Name</label>
@@ -2694,13 +2697,13 @@ const Profile = () => {
                           </div>
                         </div>
                       </div>
-                       
+
                       <div>
                         <label className="block text-sm font-semibold text-gray-700 mb-3">Last Name</label>
                         <div className="relative">
                           <input
                             type="text"
-                            value={userData.last_name}
+                            value={userData.last_name || ''}
                             disabled
                             className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-700 font-medium focus:outline-none"
                           />

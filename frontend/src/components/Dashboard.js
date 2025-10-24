@@ -7,7 +7,7 @@ import CircularAgents from './CircularAgents';
 import AgentDesignModal from './AgentDesignModal';
 
 // Import Heroicons
-import { BriefcaseIcon, CurrencyDollarIcon, HeartIcon, GlobeAltIcon, UserCircleIcon, SparklesIcon, HomeIcon, BookOpenIcon, AcademicCapIcon, FireIcon, SunIcon, ChatBubbleLeftRightIcon, CommandLineIcon, LightBulbIcon, ArrowTrendingUpIcon, ClockIcon, StarIcon, ChevronLeftIcon, ChevronRightIcon, ChevronDownIcon, ChevronUpIcon, CpuChipIcon, CheckCircleIcon, UserGroupIcon } from '@heroicons/react/24/outline';
+import { BriefcaseIcon, CurrencyDollarIcon, HeartIcon, GlobeAltIcon, MapPinIcon, UserCircleIcon, SparklesIcon, HomeIcon, BookOpenIcon, AcademicCapIcon, FireIcon, SunIcon, ChatBubbleLeftRightIcon, CommandLineIcon, LightBulbIcon, ArrowTrendingUpIcon, ClockIcon, StarIcon, ChevronLeftIcon, ChevronRightIcon, ChevronDownIcon, ChevronUpIcon, CpuChipIcon, CheckCircleIcon, UserGroupIcon } from '@heroicons/react/24/outline';
 
 /**
  * Dashboard component - The main view after a user logs in.
@@ -17,7 +17,7 @@ const Dashboard = () => {
   const { logout, user } = useAuth();
   const navigate = useNavigate();
   const [avatarUrl, setAvatarUrl] = useState(null);
-  const [userData, setUserData] = useState({ first_name: '', email: '' });
+  const [userData, setUserData] = useState({ first_name: '', last_name: '', email: '' });
   const [triggerAnimation, setTriggerAnimation] = useState(false);
   const [isAssistantDialogOpen, setIsAssistantDialogOpen] = useState(false);
   const [personalizedInsights, setPersonalizedInsights] = useState([]);
@@ -144,7 +144,8 @@ const Dashboard = () => {
     try {
       const data = await profileAPI.getCurrentUser();
       setUserData({
-        first_name: data.first_name,  // Fixed: use first_name not name
+        first_name: data.first_name,
+        last_name: data.last_name,
         email: data.email
       });
     } catch (error) {
@@ -200,24 +201,24 @@ const Dashboard = () => {
       if (insights.length < 3) {
         const generalInsights = [
           {
-            id: 'financial_planning',
-            title: "Financial Planning Insight",
-            description: "Track your expenses and explore investment opportunities with the Money Agent.",
-            type: "money",
+            id: 'travel_preview',
+            title: "Travel Agent (Preview)",
+            description: "Explore personalized travel recommendations and itinerary planning.",
+            type: "travel",
             priority: "medium",
-            icon: CurrencyDollarIcon,
-            color: "bg-green-500",
-            action: "Check Money Agent"
+            icon: GlobeAltIcon,
+            color: "bg-indigo-500",
+            action: "Check Travel Agent"
           },
           {
-            id: 'wellness_recommendation',
-            title: "Wellness Recommendation",
-            description: "Consider incorporating mindfulness practices into your daily routine.",
-            type: "mind",
+            id: 'body_preview',
+            title: "Body Agent (Preview)",
+            description: "Get fitness and wellness recommendations tailored to your goals.",
+            type: "body",
             priority: "medium",
             icon: HeartIcon,
-            color: "bg-pink-500",
-            action: "Visit Mind Agent"
+            color: "bg-red-500",
+            action: "Visit Body Agent"
           }
         ];
 
@@ -236,33 +237,33 @@ const Dashboard = () => {
       const fallbackInsights = [
         {
           id: 'career_growth',
-          title: "Career Growth Opportunity",
-          description: "Upload your resume to get personalized career recommendations.",
+          title: "Upload Your Resume",
+          description: "Get personalized career insights by uploading your resume to the Career Agent.",
           type: "career",
           priority: "high",
           icon: ArrowTrendingUpIcon,
           color: "bg-blue-500",
-          action: "Explore Career Agent"
+          action: "Go to Career Agent"
         },
         {
-          id: 'financial_planning',
-          title: "Financial Planning Insight",
-          description: "Track your expenses and explore investment opportunities.",
-          type: "money",
+          id: 'travel_preview',
+          title: "Travel Agent (Preview)",
+          description: "Explore personalized travel recommendations and itinerary planning.",
+          type: "travel",
           priority: "medium",
-          icon: CurrencyDollarIcon,
-          color: "bg-green-500",
-          action: "Check Money Agent"
+          icon: GlobeAltIcon,
+          color: "bg-indigo-500",
+          action: "Check Travel Agent"
         },
         {
-          id: 'wellness_recommendation',
-          title: "Wellness Recommendation",
-          description: "Consider incorporating mindfulness practices into your daily routine.",
-          type: "mind",
+          id: 'body_preview',
+          title: "Body Agent (Preview)",
+          description: "Get fitness and wellness recommendations tailored to your goals.",
+          type: "body",
           priority: "medium",
           icon: HeartIcon,
-          color: "bg-pink-500",
-          action: "Visit Mind Agent"
+          color: "bg-red-500",
+          action: "Visit Body Agent"
         }
       ];
       setPersonalizedInsights(fallbackInsights);
@@ -762,14 +763,20 @@ const Dashboard = () => {
                           case 'salary_analysis':
                             navigate(`${baseCareerUrl}?tab=salary`);
                             break;
+                          case 'travel_preview':
+                            handleOpenAgentModal('Travel Agent');
+                            break;
+                          case 'body_preview':
+                            handleOpenAgentModal('Body Agent');
+                            break;
                           default:
                             // Fallback for other insight types
                             if (insight.action.includes('Career')) {
                               navigate('/agents/career');
-                            } else if (insight.action.includes('Money')) {
-                              navigate('/agents/money');
-                            } else if (insight.action.includes('Mind')) {
-                              navigate('/agents/mind');
+                            } else if (insight.action.includes('Travel')) {
+                              handleOpenAgentModal('Travel Agent');
+                            } else if (insight.action.includes('Body')) {
+                              handleOpenAgentModal('Body Agent');
                             }
                         }
                       }}
@@ -1356,18 +1363,24 @@ const Dashboard = () => {
 
             <button
               onClick={() => handleOpenAgentModal('Travel Agent')}
-              className="w-full bg-gradient-to-r from-indigo-500 to-purple-500 text-white px-6 py-4 rounded-lg font-medium hover:from-indigo-600 hover:to-purple-600 transition-all duration-200 flex items-center space-x-3"
+              className="w-full bg-gradient-to-r from-indigo-500 to-purple-500 text-white px-6 py-4 rounded-lg font-medium hover:from-indigo-600 hover:to-purple-600 transition-all duration-200 flex items-center justify-between"
             >
-              <GlobeAltIcon className="h-5 w-5" />
-              <span>Travel Agent</span>
+              <div className="flex items-center space-x-3">
+                <GlobeAltIcon className="h-5 w-5" />
+                <span>Travel Agent</span>
+              </div>
+              <span className="text-white text-sm opacity-90">(Preview Only)</span>
             </button>
 
             <button
               onClick={() => handleOpenAgentModal('Body Agent')}
-              className="w-full bg-gradient-to-r from-purple-500 to-pink-500 text-white px-6 py-4 rounded-lg font-medium hover:from-purple-600 hover:to-pink-600 transition-all duration-200 flex items-center space-x-3"
+              className="w-full bg-gradient-to-r from-purple-500 to-pink-500 text-white px-6 py-4 rounded-lg font-medium hover:from-purple-600 hover:to-pink-600 transition-all duration-200 flex items-center justify-between"
             >
-              <HeartIcon className="h-5 w-5" />
-              <span>Body Agent</span>
+              <div className="flex items-center space-x-3">
+                <HeartIcon className="h-5 w-5" />
+                <span>Body Agent</span>
+              </div>
+              <span className="text-white text-sm opacity-90">(Preview Only)</span>
             </button>
           </div>
         </div>

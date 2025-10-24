@@ -210,28 +210,51 @@ const Register = () => {
             />
 
             {/* Password Field with Strength Meter and Tooltip */}
-            <div className="relative">
-              <input
-                id="password"
-                type={showPassword ? "text" : "password"}
-                required
-                placeholder="Password"
-                autoComplete="new-password"
-                value={password}
-                onChange={handlePasswordChange}
-                className={`block w-full px-3 py-2 placeholder-gray-400 text-gray-900 border rounded-md sm:text-sm transition-colors duration-150
-                  ${passwordError
-                    ? "border-yellow-500 focus:ring-yellow-500 focus:border-yellow-500"
-                    : "border-gray-300 focus:ring-primary-500 focus:border-primary-500"
-                  }`}
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword((prev) => !prev)}
-                className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-500 hover:text-gray-700 transition-colors"
-              >
-                {showPassword ? "🙈" : "👁️"}
-              </button>
+            <div>
+              <div className="relative">
+                <input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  required
+                  placeholder="Password"
+                  autoComplete="new-password"
+                  value={password}
+                  onChange={handlePasswordChange}
+                  onPaste={(e) => {
+                    // Trim whitespace from pasted content to prevent accidental spaces
+                    const pastedText = e.clipboardData.getData('text').trim();
+                    e.preventDefault();
+                    setPassword(pastedText);
+                    setPasswordStrength(getPasswordStrength(pastedText));
+                    setPasswordError(validatePassword(pastedText));
+                  }}
+                  className={`block w-full pr-20 px-3 py-2 placeholder-gray-400 text-gray-900 border rounded-md sm:text-sm transition-colors duration-150
+                    ${passwordError
+                      ? "border-yellow-500 focus:ring-yellow-500 focus:border-yellow-500"
+                      : "border-gray-300 focus:ring-primary-500 focus:border-primary-500"
+                    }`}
+                />
+                <div className="absolute inset-y-0 right-0 flex items-center pr-3 space-x-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(password);
+                    }}
+                    className="text-gray-500 hover:text-gray-700 transition-colors"
+                    title="Copy password"
+                  >
+                    📋
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((prev) => !prev)}
+                    className="text-gray-500 hover:text-gray-700 transition-colors"
+                    title={showPassword ? "Hide password" : "Show password"}
+                  >
+                    {showPassword ? "🙈" : "👁️"}
+                  </button>
+                </div>
+              </div>
 
               {/* Strength Meter */}
               {password && (
@@ -294,16 +317,31 @@ const Register = () => {
             </div>
 
             {/* Confirm Password */}
-            <input
-              id="confirm-password"
-              type="password"
-              required
-              placeholder="Confirm Password"
-              autoComplete="new-password"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              className="block w-full px-3 py-2 placeholder-gray-400 text-gray-900 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 sm:text-sm transition-colors duration-150"
-            />
+            <div className="relative">
+              <input
+                id="confirm-password"
+                type="password"
+                required
+                placeholder="Confirm Password"
+                autoComplete="new-password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                onPaste={(e) => {
+                  // Trim whitespace from pasted content to prevent accidental spaces
+                  const pastedText = e.clipboardData.getData('text').trim();
+                  e.preventDefault();
+                  setConfirmPassword(pastedText);
+                }}
+                className="block w-full px-3 py-2 placeholder-gray-400 text-gray-900 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 sm:text-sm transition-colors duration-150"
+              />
+              {password && confirmPassword && password === confirmPassword && (
+                <div className="absolute inset-y-0 right-0 flex items-center pr-3">
+                  <svg className="h-5 w-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  </svg>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Submit Button */}

@@ -896,8 +896,9 @@ const CareerAgent = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const [userData, setUserData] = useState({ first_name: '', email: '' });
+  const [userData, setUserData] = useState({ first_name: '', last_name: '', email: '' });
   const [avatarUrl, setAvatarUrl] = useState(null);
+  const [isImgError, setImgError] = useState(false);
   const [isAssistantDialogOpen, setIsAssistantDialogOpen] = useState(false);
   const [agentModalOpen, setAgentModalOpen] = useState(false);
   const [selectedAgent, setSelectedAgent] = useState(null);
@@ -1267,6 +1268,7 @@ const CareerAgent = () => {
       const data = await profileAPI.getCurrentUser();
       setUserData({
         first_name: data.first_name,
+        last_name: data.last_name,
         email: data.email
       });
     } catch (error) {
@@ -4697,14 +4699,15 @@ const careerInsights = {
                 tabIndex={0}
                 onKeyDown={(e) => e.key === 'Enter' && handleAccount()}
               >
-                {avatarUrl ? (
+                {avatarUrl && !isImgError ? (
                   <img
                     src={avatarUrl}
                     alt="User Avatar"
+                    onError={() => setImgError(true)}
                     className="h-10 w-10 rounded-full object-cover"
                   />
                 ) : (
-                  <UserCircleIcon className="h-6 w-6 text-gray-600" />
+                  <UserCircleIcon className="h-10 w-10 text-gray-400" />
                 )}
               </div>
             </div>

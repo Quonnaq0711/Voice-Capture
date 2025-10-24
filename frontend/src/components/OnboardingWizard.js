@@ -257,7 +257,6 @@ const OnboardingWizard = () => {
                   <option value="Manufacturing">Manufacturing</option>
                   <option value="Retail">Retail</option>
                   <option value="Consulting">Consulting</option>
-                  <option value="Other">Other</option>
                 </select>
               </div>
               
@@ -416,7 +415,6 @@ const OnboardingWizard = () => {
                   <option value="Keto">Keto</option>
                   <option value="Paleo">Paleo</option>
                   <option value="Mediterranean">Mediterranean</option>
-                  <option value="Other">Other</option>
                 </select>
               </div>
             </div>
