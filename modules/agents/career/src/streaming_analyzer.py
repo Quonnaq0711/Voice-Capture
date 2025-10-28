@@ -7,6 +7,7 @@ sequentially and provide real-time updates to the frontend.
 import asyncio
 import json
 import logging
+import os
 from typing import Dict, Any, Optional, AsyncGenerator, Callable
 from datetime import datetime, timedelta
 import httpx
@@ -24,13 +25,13 @@ logger = logging.getLogger(__name__)
 class StreamingResumeAnalyzer:
     """Streaming resume analyzer with real-time progress updates."""
     
-    def __init__(self, chat_service: Optional[ChatService] = None, 
-                 notification_service_url: str = "http://localhost:8001",
+    def __init__(self, chat_service: Optional[ChatService] = None,
+                 notification_service_url: Optional[str] = None,
                  retry_config: Optional[RetryConfig] = None,
                  parallel_config: Optional[ParallelConfig] = None,
                  enable_parallel: bool = False):
         """Initialize the streaming analyzer.
-        
+
         Args:
             chat_service: Optional ChatService instance
             notification_service_url: URL of the personal assistant notification service
@@ -39,6 +40,10 @@ class StreamingResumeAnalyzer:
             enable_parallel: Whether to use parallel processing
         """
         self.chat_service = chat_service or ChatService()
+
+        # Get notification service URL from environment variable or use default
+        if notification_service_url is None:
+            notification_service_url = os.getenv("PA_NOTIFICATION_SERVICE_URL", "http://localhost:8001")
         
         # Configure retry settings for analysis (optimized for local LLM)
         if retry_config is None:
