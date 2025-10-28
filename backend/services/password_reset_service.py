@@ -36,6 +36,10 @@ class PasswordResetService:
         user.hashed_password = bcrypt.hash(new_password)  # with passlib
         # or: bcrypt.hashpw(new_password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
-        db.commit()
+        try:
+            db.commit()
+        except Exception as e:
+            db.rollback()
+            raise HTTPException(status_code=500, detail=f"Failed to update password: {str(e)}")
 
         return {"message": "Password reset completed successfully"}

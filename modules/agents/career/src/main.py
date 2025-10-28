@@ -5,6 +5,16 @@ import logging
 import os
 import sys
 from contextlib import asynccontextmanager
+from dotenv import load_dotenv
+
+# Load environment variables from .env.dev file
+# This is crucial for Career Agent to access SECRET_KEY for JWT validation
+env_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', '.env.dev'))
+if os.path.exists(env_path):
+    load_dotenv(env_path)
+    logging.info(f"✓ Loaded environment variables from {env_path}")
+else:
+    logging.warning(f"⚠ .env.dev not found at {env_path}, using system environment variables")
 
 # Add the backend directory to the Python path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..', '..')))

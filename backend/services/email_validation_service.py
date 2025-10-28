@@ -26,7 +26,11 @@ class EmailValidationService:
               raise HTTPException(status_code=400, detail="User not found")
 
            user.is_active = True
-           db.commit()
+           try:
+               db.commit()
+           except Exception as e:
+               db.rollback()
+               raise HTTPException(status_code=500, detail=f"Failed to activate user account: {str(e)}")
 
            return {"message": "Email verification completed successfully. Please log in to your account."}
 

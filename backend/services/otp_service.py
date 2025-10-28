@@ -40,11 +40,15 @@ class OTPService:
             (datetime.datetime.now(timezone.utc) - user.otp_requested_at).total_seconds() < self.request_timeout * 60:
             raise HTTPException(status_code=400, detail="Please wait before requesting a new OTP.")
         
-        # OTP Generator 
+        # OTP Generator
         if not user.hotp_secret:
             user.hotp_secret = pyotp.random_base32() #secrets.token_hex(20)
             user.hotp_counter = 0
-            db.commit()
+            try:
+                db.commit()
+            except Exception as e:
+                db.rollback()
+                raise HTTPException(status_code=500, detail=f"Failed to initialize OTP secret: {str(e)}")
             
 
         # Increment
@@ -53,7 +57,11 @@ class OTPService:
         user.otp_requested_at = datetime.datetime.now(timezone.utc)
         user.otp_failed_attempts = 0
         user.otp_purpose = purpose.value
-        db.commit()
+        try:
+            db.commit()
+        except Exception as e:
+            db.rollback()
+            raise HTTPException(status_code=500, detail=f"Failed to generate OTP: {str(e)}")
 
         # Development mode: Print OTP to console
         if os.getenv('ENVIRONMENT') == 'development':
@@ -100,10 +108,18 @@ class OTPService:
             user.otp_failed_attempts += 1
             if user.otp_failed_attempts >= self.failed_attempts:
                 user.otp_locked_until = datetime.datetime.now(timezone.utc) + datetime.timedelta(minutes=self.lockout_time)
-                db.commit()
+                try:
+                    db.commit()
+                except Exception as e:
+                    db.rollback()
+                    raise HTTPException(status_code=500, detail=f"Failed to lock account: {str(e)}")
                 raise HTTPException(status_code=400, detail=f"You have failed too many times to verify your code. Account locked for {self.lockout_time} minutes.")
             else:
-                db.commit()
+                try:
+                    db.commit()
+                except Exception as e:
+                    db.rollback()
+                    raise HTTPException(status_code=500, detail=f"Failed to record failed attempt: {str(e)}")
                 raise HTTPException(status_code=400, detail=f'Invalid Passcode. You made {user.otp_failed_attempts} attempts out of {self.failed_attempts}.')
 
         # Clean up OTP data after successful verification
@@ -111,6 +127,10 @@ class OTPService:
         user.otp_locked_until = None
         user.otp_requested_at = None
         user.otp_purpose = None
-        db.commit()
+        try:
+            db.commit()
+        except Exception as e:
+            db.rollback()
+            raise HTTPException(status_code=500, detail=f"Failed to clear OTP data: {str(e)}")
 
         return True

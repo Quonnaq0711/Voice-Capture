@@ -30,6 +30,8 @@ python-jose[cryptography]
 passlib[bcrypt]
 # OTP generation for email validation
 pyotp
+# Environment variable management
+python-dotenv
 # Scheduled tasks
 APScheduler  
 

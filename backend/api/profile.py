@@ -41,8 +41,15 @@ async def get_user_profile(current_user: User = Depends(get_current_user), db: S
         # Create empty profile if doesn't exist with default avatar
         profile = UserProfile(user_id=current_user.id)
         db.add(profile)
-        db.commit()
-        db.refresh(profile)
+        try:
+            db.commit()
+            db.refresh(profile)
+        except Exception as e:
+            db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to create profile: {str(e)}"
+            )
     return profile
 
 @router.post("/profile", response_model=schemas.UserProfile)
@@ -58,15 +65,29 @@ async def create_or_update_profile(
         # Update existing profile
         for field, value in profile_data.dict(exclude_unset=True).items():
             setattr(existing_profile, field, value)
-        db.commit()
-        db.refresh(existing_profile)
+        try:
+            db.commit()
+            db.refresh(existing_profile)
+        except Exception as e:
+            db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to update profile: {str(e)}"
+            )
         return existing_profile
     else:
         # Create new profile
         new_profile = UserProfile(user_id=current_user.id, **profile_data.dict(exclude_unset=True))
         db.add(new_profile)
-        db.commit()
-        db.refresh(new_profile)
+        try:
+            db.commit()
+            db.refresh(new_profile)
+        except Exception as e:
+            db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to create profile: {str(e)}"
+            )
         return new_profile
 
 @router.put("/password")
@@ -85,8 +106,15 @@ async def change_password(
     
     # Update password
     current_user.hashed_password = get_password_hash(password_data.new_password)
-    db.commit()
-    
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update password: {str(e)}"
+        )
+
     return {"message": "Password updated successfully"}
 
 @router.post("/avatar")
@@ -195,8 +223,15 @@ async def upload_avatar(
             db.add(profile)
         else:
             profile.avatar_url = avatar_url
-        db.commit()
-        db.refresh(profile)
+        try:
+            db.commit()
+            db.refresh(profile)
+        except Exception as e:
+            db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to save avatar URL: {str(e)}"
+            )
         
         return {
             "message": "Avatar uploaded successfully",
@@ -244,8 +279,15 @@ async def delete_avatar(current_user: User = Depends(get_current_user), db: Sess
     profile = db.query(UserProfile).filter(UserProfile.user_id == current_user.id).first()
     if profile:
         profile.avatar_url = None
-        db.commit()
-    
+        try:
+            db.commit()
+        except Exception as e:
+            db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to update profile after avatar deletion: {str(e)}"
+            )
+
     return {"message": "Avatar deleted successfully"}
 
 @router.get("/avatar")

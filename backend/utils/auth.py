@@ -1,3 +1,4 @@
+import os
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 from jose import JWTError, jwt
@@ -14,9 +15,12 @@ from backend.db.database import get_db
 from backend.models.user import User
 
 # Configure secret key and algorithm
-SECRET_KEY = "your-secret-key-please-change-in-production"  # Should use environment variables in production
+# Load from environment variable, fallback to default for development
+SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-please-change-in-production")
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30  # Short-lived access token
+# Increased from 30 to 120 minutes to reduce token refresh frequency
+# This aligns with the 2-hour inactivity timeout in the frontend
+ACCESS_TOKEN_EXPIRE_MINUTES = 120  # 2 hours - balanced between security and UX
 REFRESH_TOKEN_EXPIRE_DAYS = 7  # Long-lived refresh token
 
 # Password context
@@ -87,7 +91,13 @@ def verify_refresh_token(token: str) -> Optional[str]:
         Email from token if valid, None otherwise
     """
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        # Add 60 seconds leeway to handle clock skew between servers
+        payload = jwt.decode(
+            token,
+            SECRET_KEY,
+            algorithms=[ALGORITHM],
+            options={"verify_exp": True, "leeway": 60}
+        )
         email: str = payload.get("sub")
         token_type: str = payload.get("type")
 
@@ -107,7 +117,13 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        # Add 60 seconds leeway to handle clock skew between servers
+        payload = jwt.decode(
+            token,
+            SECRET_KEY,
+            algorithms=[ALGORITHM],
+            options={"verify_exp": True, "leeway": 60}
+        )
         email: str = payload.get("sub")
         if email is None:
             raise credentials_exception
@@ -155,7 +171,13 @@ async def get_current_user_from_query(
         raise credentials_exception
 
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        # Add 60 seconds leeway to handle clock skew between servers
+        payload = jwt.decode(
+            token,
+            SECRET_KEY,
+            algorithms=[ALGORITHM],
+            options={"verify_exp": True, "leeway": 60}
+        )
         email: str = payload.get("sub")
         if email is None:
             raise credentials_exception

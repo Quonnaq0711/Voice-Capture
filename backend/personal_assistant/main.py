@@ -6,6 +6,16 @@ import logging
 import sys
 import os
 from contextlib import asynccontextmanager
+from dotenv import load_dotenv
+
+# Load environment variables from .env.dev file
+# This is crucial for Personal Assistant to access SECRET_KEY for JWT validation
+env_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '.env.dev'))
+if os.path.exists(env_path):
+    load_dotenv(env_path)
+    logging.info(f"✓ Loaded environment variables from {env_path}")
+else:
+    logging.warning(f"⚠ .env.dev not found at {env_path}, using system environment variables")
 
 # Add the project root to the Python path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))

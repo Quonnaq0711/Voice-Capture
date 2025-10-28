@@ -9,6 +9,7 @@ from apscheduler.triggers.cron import CronTrigger
 from sqlalchemy.orm import Session
 from backend.models.user import User
 from backend.models.daily_recommendation import DailyRecommendation
+from backend.models.refresh_token import RefreshToken
 from backend.services.recommendation_service import RecommendationService
 from backend.utils.db_session import get_db_session_with_commit, get_db_session
 
@@ -43,9 +44,19 @@ class DailyRecommendationScheduler:
                 replace_existing=True
             )
 
+            # Schedule cleanup job for expired/revoked refresh tokens
+            self.scheduler.add_job(
+                func=self._cleanup_old_refresh_tokens,
+                trigger=CronTrigger(hour=3, minute=0, timezone=timezone.utc),  # 3:00 AM UTC daily
+                id='cleanup_refresh_tokens_job',
+                name='Cleanup Expired Refresh Tokens',
+                replace_existing=True
+            )
+
             self.scheduler.start()
             self.is_running = True
             logger.info("Daily recommendation scheduler started (6:00 AM UTC daily)")
+            logger.info("Cleanup jobs scheduled (2:00 AM and 3:00 AM UTC daily)")
 
     def stop(self):
         """Stop the scheduler"""
@@ -161,6 +172,39 @@ class DailyRecommendationScheduler:
         except Exception as e:
             # Rollback happens automatically in context manager
             logger.error(f"❌ Error during recommendation cleanup: {e}")
+
+    def _cleanup_old_refresh_tokens(self):
+        """
+        Remove expired and revoked refresh tokens older than 30 days.
+
+        This helps:
+        - Keep database size manageable
+        - Improve query performance
+        - Remove stale security data
+        """
+        logger.info("🧹 Starting cleanup of old refresh tokens...")
+
+        try:
+            with get_db_session_with_commit() as db:
+                # Calculate cutoff date (30 days ago)
+                thirty_days_ago = datetime.now(timezone.utc) - timedelta(days=30)
+
+                # Delete expired tokens older than 30 days
+                expired_count = db.query(RefreshToken).filter(
+                    RefreshToken.expires_at < thirty_days_ago
+                ).delete()
+
+                # Also delete revoked tokens older than 30 days
+                revoked_count = db.query(RefreshToken).filter(
+                    RefreshToken.revoked == True,
+                    RefreshToken.revoked_at < thirty_days_ago
+                ).delete()
+
+                total_deleted = expired_count + revoked_count
+                logger.info(f"🗑️ Cleaned up {total_deleted} old refresh tokens ({expired_count} expired, {revoked_count} revoked)")
+
+        except Exception as e:
+            logger.error(f"❌ Error during refresh token cleanup: {e}")
 
     def generate_for_user_now(self, user_id: int):
         """Manually trigger recommendation generation for a specific user (for testing)"""

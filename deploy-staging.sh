@@ -37,6 +37,15 @@ sleep 45
 echo "🤖 Setting up Ollama models..."
 ./setup-ollama-updated.sh
 
+echo "🗄️  Running database migrations..."
+# Run migrations inside the backend container
+if docker exec idii-backend-staging python backend/migrations/apply_migration.py; then
+    echo "✅ Database migrations completed successfully"
+else
+    echo "⚠️  Database migration had issues (may already be applied)"
+    # Don't fail deployment if migration already exists
+fi
+
 echo "🧪 Testing GPU acceleration..."
 echo "GPU in Ollama 1 (PA):"
 docker exec idii-ollama-staging nvidia-smi

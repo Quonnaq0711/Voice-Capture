@@ -52,8 +52,12 @@ class ActivityService:
         )
 
         db.add(activity)
-        db.commit()
-        db.refresh(activity)
+        try:
+            db.commit()
+            db.refresh(activity)
+        except Exception as e:
+            db.rollback()
+            raise Exception(f"Failed to create activity: {str(e)}")
 
         return activity
 

@@ -893,7 +893,7 @@ const professionalData = {
 
 
 const CareerAgent = () => {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [userData, setUserData] = useState({ first_name: '', last_name: '', email: '' });
@@ -1711,7 +1711,8 @@ const CareerAgent = () => {
     navigate('/dashboard');
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await logout();
     navigate('/login');
   };
 

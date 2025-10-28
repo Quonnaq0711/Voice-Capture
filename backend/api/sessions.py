@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from typing import List
-from datetime import datetime
+from datetime import datetime, timezone
 
 from backend.db.database import get_db
 from backend.models.user import User
@@ -37,36 +37,40 @@ async def create_session(
 ):
     """
     Create a new chat session
+
+    Race condition protection: Database unique constraint ensures only one active session per user.
+    The new session is created as active, and the constraint automatically ensures uniqueness.
     """
     try:
-        # Deactivate all existing sessions for this user
+        # Atomic operation: Deactivate all sessions and create new active session
+        # The unique index (idx_one_active_session_per_user) ensures only one session can be active
         db.execute(
             text("UPDATE chat_sessions SET is_active = FALSE WHERE user_id = :user_id"),
             {"user_id": current_user.id}
         )
-        
-        # Create new session
+
+        # Create new session as active
         cursor = db.execute(
             text("""
             INSERT INTO chat_sessions (user_id, session_name, first_message_time, created_at, is_active, unread)
             VALUES (:user_id, :session_name, :first_message_time, :created_at, TRUE, FALSE)
             """),
             {
-                "user_id": current_user.id, 
-                "session_name": request.session_name, 
+                "user_id": current_user.id,
+                "session_name": request.session_name,
                 "first_message_time": request.first_message_time,
-                "created_at": datetime.now()
+                "created_at": datetime.now(timezone.utc)
             }
         )
-        
+
         session_id = cursor.lastrowid
         db.commit()
-        
+
         return {
             "session_id": session_id,
             "message": "Session created successfully"
         }
-        
+
     except Exception as e:
         db.rollback()
         raise HTTPException(
@@ -117,15 +121,21 @@ async def get_user_sessions(
         # Mark the active session as read
         active_session = next((s for s in sessions if s['is_active']), None)
         if active_session:
-            db.execute(
-                text("UPDATE chat_sessions SET unread = FALSE WHERE id = :session_id"),
-                {"session_id": active_session['id']}
-            )
-            db.commit()
-            active_session['unread'] = False
+            try:
+                db.execute(
+                    text("UPDATE chat_sessions SET unread = FALSE WHERE id = :session_id"),
+                    {"session_id": active_session['id']}
+                )
+                db.commit()
+                active_session['unread'] = False
+            except Exception as e:
+                db.rollback()
+                # Don't fail the entire request if marking as read fails, just log it
+                # Still return the sessions list
+                pass
 
         return sessions
-        
+
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -276,6 +286,9 @@ async def activate_session(
 ):
     """
     Activate a specific session (deactivate others)
+
+    Race condition protection: Database unique constraint ensures only one active session per user.
+    If concurrent requests try to activate different sessions, the database will enforce the constraint.
     """
     try:
         # Verify session belongs to current user
@@ -283,29 +296,29 @@ async def activate_session(
             text("SELECT id FROM chat_sessions WHERE id = :session_id AND user_id = :user_id"),
             {"session_id": session_id, "user_id": current_user.id}
         ).fetchone()
-        
+
         if not session_check:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Session not found"
             )
-        
-        # Deactivate all sessions for this user
+
+        # Atomic operation: Deactivate all sessions and activate the target in one transaction
+        # The unique index (idx_one_active_session_per_user) ensures only one session can be active
         db.execute(
             text("UPDATE chat_sessions SET is_active = FALSE WHERE user_id = :user_id"),
             {"user_id": current_user.id}
         )
 
-        # Activate the specified session
         db.execute(
             text("UPDATE chat_sessions SET is_active = TRUE WHERE id = :session_id"),
             {"session_id": session_id}
         )
-        
+
         db.commit()
-        
+
         return {"message": "Session activated successfully"}
-        
+
     except HTTPException:
         raise
     except Exception as e:

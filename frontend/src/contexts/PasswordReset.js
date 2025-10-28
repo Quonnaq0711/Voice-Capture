@@ -28,7 +28,7 @@ export const usePasswordCountDown = () => {
     }, []);
     
     const closeBanner = () => {
-        localStorage.setItem('dissmissedBanner', 'true');
+        localStorage.setItem('dismissedBanner', 'true');
         setBanner(false);
     }
 

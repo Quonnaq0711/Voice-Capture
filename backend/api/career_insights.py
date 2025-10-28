@@ -357,7 +357,14 @@ async def generate_insight_summaries(
             if summaries:
                 # Store the generated summaries
                 insight.set_dashboard_summaries(summaries)
-                db.commit()
+                try:
+                    db.commit()
+                except Exception as e:
+                    db.rollback()
+                    raise HTTPException(
+                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                        detail=f"Failed to save dashboard summaries: {str(e)}"
+                    )
             else:
                 raise Exception("No summaries generated")
 
@@ -366,7 +373,14 @@ async def generate_insight_summaries(
             # Generate basic fallback summaries
             summaries = _generate_basic_fallback_summaries(professional_data)
             insight.set_dashboard_summaries(summaries)
-            db.commit()
+            try:
+                db.commit()
+            except Exception as e:
+                db.rollback()
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Failed to save fallback summaries: {str(e)}"
+                )
 
         return {
             "status": "success",

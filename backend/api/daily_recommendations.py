@@ -101,7 +101,12 @@ async def force_generate_daily_recommendations(
                 logger.info(f"Cleaned up {len(old_recs)} old recommendations for user {current_user.id}")
                 for old_rec in old_recs:
                     db.delete(old_rec)
-                db.commit()
+                try:
+                    db.commit()
+                except Exception as e:
+                    db.rollback()
+                    logger.error(f"Failed to delete old recommendations: {str(e)}")
+                    # Don't fail the entire request if cleanup fails
         else:
             logger.warning(f"Recommendation generation failed for user {current_user.id}, keeping existing ones")
 

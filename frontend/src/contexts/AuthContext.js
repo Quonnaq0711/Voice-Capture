@@ -1,4 +1,4 @@
-import React, { createContext, useState, useContext, useEffect } from 'react';
+import { createContext, useState, useContext, useEffect } from 'react';
 import { auth } from '../services/api';
 
 const AuthContext = createContext(null);
@@ -7,22 +7,75 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  const logout = () => {
-    auth.logout();
-    setUser(null);
+  const logout = async () => {
+    try {
+      await auth.logout();
+    } catch (error) {
+      // Even if logout fails, clear local state
+      console.error('Logout error:', error);
+    } finally {
+      setUser(null);
+    }
   };
+
+  // Listen for storage events (cross-tab synchronization)
+  // Using useEffect without dependencies to avoid re-registering listener
+  useEffect(() => {
+    const handleStorageChange = (e) => {
+      // If token was removed in another tab, logout this tab too
+      if (e.key === 'token' && !e.newValue) {
+        console.log('Token removed in another tab, logging out...');
+        setUser(null);
+        window.location.href = '/login';
+      }
+      // If token was updated in another tab, update user state
+      else if (e.key === 'token' && e.newValue) {
+        console.log('Token updated in another tab, syncing...');
+        // Update token using setUser with callback to access latest state
+        setUser(prevUser => {
+          if (prevUser) {
+            return { ...prevUser, token: e.newValue };
+          }
+          return prevUser;
+        });
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+    };
+  }, []); // Empty dependency array - only register once
 
   useEffect(() => {
     const checkUser = async () => {
       const token = localStorage.getItem('token');
+      const refreshToken = localStorage.getItem('refresh_token');
+
       if (token) {
         try {
+          // Try to get profile with current token
           const profile = await auth.getProfile(token);
           setUser({ id: profile.id, token, name: profile.first_name });
         } catch (error) {
-          // Token might be invalid, clear it
-          console.warn('Token validation failed during initial check:', error);
-          logout();
+          // If access token is expired, try to refresh it
+          if (error.response && error.response.status === 401 && refreshToken) {
+            try {
+              console.log('Access token expired, attempting to refresh...');
+              const data = await auth.refreshToken();
+              // Retry getting profile with new token
+              const profile = await auth.getProfile(data.access_token);
+              setUser({ id: profile.id, token: data.access_token, name: profile.first_name });
+            } catch (refreshError) {
+              // Refresh failed, tokens are invalid - logout
+              console.warn('Token refresh failed during initial check:', refreshError);
+              logout();
+            }
+          } else {
+            // No refresh token or other error - logout
+            console.warn('Token validation failed during initial check:', error);
+            logout();
+          }
         }
       }
       setLoading(false);

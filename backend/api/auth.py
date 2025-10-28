@@ -198,7 +198,15 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = 
         expires_at=datetime.now(timezone.utc) + refresh_token_expires
     )
     db.add(db_refresh_token)
-    db.commit()
+
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to store refresh token: {str(e)}"
+        )
 
     return {
         "access_token": access_token,
@@ -322,7 +330,14 @@ async def refresh_token_endpoint(
 
     # Revoke old refresh token (one-time use)
     db_refresh_token.revoke()
-    db.commit()
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to revoke old refresh token: {str(e)}"
+        )
 
     # Create new access token
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -343,12 +358,62 @@ async def refresh_token_endpoint(
         expires_at=datetime.now(timezone.utc) + refresh_token_expires
     )
     db.add(new_db_refresh_token)
-    db.commit()
+
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to store new refresh token: {str(e)}"
+        )
 
     return {
         "access_token": new_access_token,
         "refresh_token": new_refresh_token,
         "token_type": "bearer"
+    }
+
+@router.post("/logout")
+async def logout(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Logout endpoint - revokes all refresh tokens for the current user
+
+    This endpoint provides secure logout by:
+    1. Revoking all active refresh tokens for the user
+    2. Preventing token reuse after logout
+    3. Following security best practices (OWASP)
+
+    Note: Access tokens cannot be revoked (they are stateless JWT),
+    but they will expire after 2 hours. Revoking refresh tokens
+    prevents obtaining new access tokens.
+    """
+    # Revoke all active refresh tokens for this user
+    active_tokens = db.query(RefreshToken).filter(
+        RefreshToken.user_id == current_user.id,
+        RefreshToken.revoked == False
+    ).all()
+
+    revoked_count = 0
+    for token in active_tokens:
+        token.revoke()
+        revoked_count += 1
+
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to revoke tokens during logout: {str(e)}"
+        )
+
+    return {
+        "message": "Successfully logged out",
+        "revoked_tokens": revoked_count
     }
 
 # Resume Functions

@@ -47,10 +47,13 @@ const handleAuthenticationFailure = () => {
   }
   isLoggingOut = true;
 
+  console.warn('Authentication failure detected, logging out user');
+
   // Clear token and user state
   auth.logout();
 
-  // Redirect to login page
+  // Redirect to login page immediately
+  // Note: isLoggingOut will be reset when page reloads
   window.location.href = '/login';
 };
 
@@ -64,6 +67,7 @@ api.interceptors.response.use(
     const isLoginEndpoint = originalRequest.url && originalRequest.url.includes('/auth/token');
     const isRefreshEndpoint = originalRequest.url && originalRequest.url.includes('/auth/token/refresh');
     const isSignupEndpoint = originalRequest.url && originalRequest.url.includes('/auth/signup');
+    const isLogoutEndpoint = originalRequest.url && originalRequest.url.includes('/auth/logout');
     const isVerificationEndpoint = originalRequest.url && (
       originalRequest.url.includes('/auth/verify-registration') ||
       originalRequest.url.includes('/auth/resend-verification-otp') ||
@@ -71,12 +75,14 @@ api.interceptors.response.use(
     );
 
     // Skip interceptor for auth-related endpoints
-    if (isLoginEndpoint || isRefreshEndpoint || isSignupEndpoint || isVerificationEndpoint) {
+    // For logout: if token is expired, just proceed with local cleanup
+    if (isLoginEndpoint || isRefreshEndpoint || isSignupEndpoint || isLogoutEndpoint || isVerificationEndpoint) {
       return Promise.reject(error);
     }
 
     // If it's a 401 error and not already retried, and not an auth endpoint
     if (error.response && error.response.status === 401 && !originalRequest._retry) {
+      // If already refreshing, queue this request
       if (isRefreshing) {
         return new Promise(function(resolve, reject) {
           failedQueue.push({resolve, reject});
@@ -92,13 +98,29 @@ api.interceptors.response.use(
       isRefreshing = true;
 
       return new Promise(function (resolve, reject) {
+        const refreshToken = localStorage.getItem('refresh_token');
+
+        // Check if refresh token exists before attempting refresh
+        if (!refreshToken) {
+          console.warn('No refresh token available, cannot refresh access token');
+          isRefreshing = false;
+          processQueue(new Error('No refresh token'), null);
+          handleAuthenticationFailure();
+          reject(new Error('No refresh token available'));
+          return;
+        }
+
+        console.log('Access token expired, refreshing...');
+
         auth.refreshToken().then(data => {
           const newToken = data.access_token;
+          console.log('Token refresh successful');
           api.defaults.headers.common['Authorization'] = 'Bearer ' + newToken;
           originalRequest.headers['Authorization'] = 'Bearer ' + newToken;
           processQueue(null, newToken);
           resolve(api(originalRequest));
         }).catch((err) => {
+          console.error('Token refresh failed:', err.response?.data?.detail || err.message);
           processQueue(err, null);
           handleAuthenticationFailure(); // Use centralized logout function
           reject(err);
@@ -213,9 +235,19 @@ resendRegistrationOTP: async (email) => {
   },
 
   // Logout
-  logout: () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('refresh_token');
+  logout: async () => {
+    try {
+      // Call backend to revoke all refresh tokens
+      await api.post('/auth/logout');
+      console.log('Successfully revoked refresh tokens on server');
+    } catch (error) {
+      // Even if backend call fails, still clear local tokens
+      console.warn('Failed to revoke tokens on server:', error.message);
+    } finally {
+      // Always clear local storage
+      localStorage.removeItem('token');
+      localStorage.removeItem('refresh_token');
+    }
   },
 
   // Upload resume
