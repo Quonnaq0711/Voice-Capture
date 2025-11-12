@@ -13,6 +13,8 @@ import {
   Activity,
 } from 'lucide-react';
 
+import ChatHistoryActivities from './LandingPage/ChatHistoryActivities';
+
 export default function UnifiedSidebar() {
   const [sidebarExpanded, setSidebarExpanded] = useState(true);
   const [activeTab, setActiveTab] = useState('landing');
@@ -33,6 +35,12 @@ export default function UnifiedSidebar() {
 
   // Chat History & Activity state
   const [chatHistoryTab, setChatHistoryTab] = useState('history'); // 'history' or 'activity'
+ 
+  // User Data
+  const [userData, setUserData] = useState({ first_name: '', email: "" });
+  const [avatarUrl, setAvatarUrl] = useState(null);
+  const [isImgError, setImgError] = useState(false);
+
 
   const mainTabs = [
     { 
