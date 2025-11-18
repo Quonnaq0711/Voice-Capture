@@ -189,7 +189,7 @@ export default function UnifiedSidebarRefactored() {
   const mainTabs = [
     { 
       id: 'landing', 
-      name: 'Personal Landing Page', 
+      name: 'Dashboard',
       icon: Home,
       disabled: false 
     },
