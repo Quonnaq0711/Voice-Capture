@@ -5,7 +5,7 @@ import AutoLogoutProvider from './contexts/AutoLogoutProvider';
 import PrivateRoute from './components/PrivateRoute';
 import Login from './components/Login';
 import Register from './components/Register';
-import Dashboard from './components/Dashboard';
+// import Dashboard from './components/Dashboard';
 import Profile from './components/Profile';
 import OnboardingWizard from './components/OnboardingWizard';
 import ResetPasswordRequest from './components/ResetPasswordRequest';
@@ -13,6 +13,7 @@ import VerifyPasswordOTP from './components/VerifyPasswordOTP';
 import VerifyRegistration from './components/VerifyRegistration';
 import CareerAgent from './components/CareerAgent';
 import memoryMonitor from './utils/memoryMonitor';
+import UnifiedSidebarRefactored from './components/WelcomePage/UnifedSideBar';
 
 // Placeholder components for agent routes
 const AgentPage = ({ agentName }) => (
@@ -59,9 +60,9 @@ function App() {
           <Route
             path="/dashboard"
             element={
-              <PrivateRoute>
-                <Dashboard />
-              </PrivateRoute>
+              //<PrivateRoute>
+                <UnifiedSidebarRefactored />
+              //</PrivateRoute>
             }
           />
           <Route
