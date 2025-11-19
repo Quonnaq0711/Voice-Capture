@@ -18,6 +18,8 @@ import MobileMenuOverlay from './MobileMenuOverlay';
 import PersonalLandingPage from './PersonalLandingPage';
 import Documents from './Documents';
 import ChatHistoryActivities from './ChatHistoryActivities';
+import TravelAgent from './TravelAgent.png';
+import BodyAgent from './BodyAgent.png';
 
 // Import API services
 import profileAPI from '../../services/api';
@@ -287,13 +289,13 @@ export default function UnifiedSidebarRefactored() {
     if (agentName === 'Travel Agent') {
       setSelectedAgent({
         title: 'Travel Agent (Preview)',
-        imageSrc: 'TravelAgent'
+        imageSrc: TravelAgent
       });
       setAgentModalOpen(true);
     } else if (agentName === 'Body Agent') {
       setSelectedAgent({
         title: 'Body Agent (Preview)',
-        imageSrc: '/design/Body Agent 3.0.png'
+        imageSrc: BodyAgent
       });
       setAgentModalOpen(true);
     }
