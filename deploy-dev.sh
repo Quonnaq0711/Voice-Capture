@@ -194,64 +194,79 @@ echo -e "${BLUE}LLM Provider: ${GREEN}$LLM_PROVIDER${NC}"
 echo ""
 
 if [ "$LLM_PROVIDER" = "vllm" ]; then
-    # Start vLLM Server (for both PA and Career)
-    echo -e "${BLUE}Starting vLLM server (PA + Career Agent)...${NC}"
-    echo ""
-    echo -e "${CYAN}vLLM Configuration:${NC}"
-    echo "  Model:            ${VLLM_MODEL:-Qwen/Qwen2.5-3B-Instruct}"
-    echo "  Port:             $VLLM_PORT"
-    echo "  GPU Memory:       ${VLLM_GPU_MEMORY_UTILIZATION:-0.7} (70%)"
-    echo "  Context Length:   ${VLLM_MAX_MODEL_LEN:-4096} tokens"
-    echo "  API Base:         http://localhost:$VLLM_PORT/v1"
-    echo "  Services:         Personal Assistant + Career Agent"
-    echo ""
+    # Check if staging vLLM (port 8888) is already running
+    STAGING_VLLM_PORT=8888
+    if curl -s "http://localhost:$STAGING_VLLM_PORT/v1/models" >/dev/null 2>&1; then
+        echo -e "${GREEN}✅ Detected staging vLLM server on port $STAGING_VLLM_PORT${NC}"
+        echo -e "${BLUE}   Dev mode will share the staging vLLM server${NC}"
+        echo ""
+        echo -e "${CYAN}vLLM Configuration (shared with staging):${NC}"
+        echo "  API Base:         http://localhost:$STAGING_VLLM_PORT/v1"
+        echo "  Services:         Personal Assistant + Career Agent"
+        echo ""
+        # Update VLLM_API_BASE for this session
+        export VLLM_API_BASE="http://localhost:$STAGING_VLLM_PORT/v1"
+        echo -e "${GREEN}✓ Using staging vLLM - no additional GPU memory needed${NC}"
+    else
+        # Start vLLM Server (for both PA and Career)
+        echo -e "${BLUE}Starting vLLM server (PA + Career Agent)...${NC}"
+        echo ""
+        echo -e "${CYAN}vLLM Configuration:${NC}"
+        echo "  Model:            ${VLLM_MODEL:-Qwen/Qwen2.5-3B-Instruct}"
+        echo "  Port:             $VLLM_PORT"
+        echo "  GPU Memory:       ${VLLM_GPU_MEMORY_UTILIZATION:-0.7} (70%)"
+        echo "  Context Length:   ${VLLM_MAX_MODEL_LEN:-4096} tokens"
+        echo "  API Base:         http://localhost:$VLLM_PORT/v1"
+        echo "  Services:         Personal Assistant + Career Agent"
+        echo ""
 
-    # Check GPU availability
-    if ! nvidia-smi &>/dev/null; then
-        echo -e "${RED}❌ Error: NVIDIA GPU not detected!${NC}"
-        echo -e "${YELLOW}vLLM requires NVIDIA GPU with CUDA support${NC}"
-        exit 1
+        # Check GPU availability
+        if ! nvidia-smi &>/dev/null; then
+            echo -e "${RED}❌ Error: NVIDIA GPU not detected!${NC}"
+            echo -e "${YELLOW}vLLM requires NVIDIA GPU with CUDA support${NC}"
+            exit 1
+        fi
+
+        # Display GPU info
+        GPU_FREE=$(nvidia-smi --query-gpu=memory.free --format=csv,noheader,nounits)
+        GPU_TOTAL=$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits)
+        echo -e "${GREEN}GPU Status:${NC}"
+        echo "  Free Memory:      ${GPU_FREE} MiB / ${GPU_TOTAL} MiB"
+
+        # Check if enough GPU memory
+        REQUIRED_MEM=$(echo "$GPU_TOTAL * ${VLLM_GPU_MEMORY_UTILIZATION:-0.7}" | bc | cut -d. -f1)
+        if [ "$GPU_FREE" -lt "$REQUIRED_MEM" ]; then
+            echo -e "${RED}❌ Error: Insufficient GPU memory!${NC}"
+            echo -e "${YELLOW}   Required: ~${REQUIRED_MEM} MiB, Available: ${GPU_FREE} MiB${NC}"
+            echo -e "${YELLOW}   Tip: Free GPU memory or reduce VLLM_GPU_MEMORY_UTILIZATION in .env.dev${NC}"
+            exit 1
+        fi
+        echo ""
+
+        # Check if start-vllm-dev.sh exists
+        if [ ! -f "$PROJECT_ROOT/start-vllm-dev.sh" ]; then
+            echo -e "${RED}❌ Error: start-vllm-dev.sh not found!${NC}"
+            exit 1
+        fi
+
+        # Make sure it's executable
+        chmod +x "$PROJECT_ROOT/start-vllm-dev.sh"
+
+        # Start vLLM (script has built-in health check, will exit 1 on failure)
+        echo -e "${BLUE}Launching vLLM server...${NC}"
+        if ! bash "$PROJECT_ROOT/start-vllm-dev.sh"; then
+            echo -e "${RED}❌ vLLM server startup failed${NC}"
+            echo -e "${YELLOW}Check logs: tail -f vllm_server.log${NC}"
+            exit 1
+        fi
+
+        echo ""
+        echo -e "${GREEN}✅ vLLM server started successfully!${NC}"
+        echo -e "${YELLOW}   API Endpoint: http://localhost:$VLLM_PORT/v1${NC}"
+        echo -e "${YELLOW}   Model: ${VLLM_MODEL:-Qwen/Qwen2.5-3B-Instruct}${NC}"
+        echo -e "${YELLOW}   Used by: Personal Assistant + Career Agent${NC}"
+        echo -e "${GREEN}   ✓ Both PA and Career Agent will use vLLM for high-performance inference${NC}"
     fi
-
-    # Display GPU info
-    GPU_FREE=$(nvidia-smi --query-gpu=memory.free --format=csv,noheader,nounits)
-    GPU_TOTAL=$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits)
-    echo -e "${GREEN}GPU Status:${NC}"
-    echo "  Free Memory:      ${GPU_FREE} MiB / ${GPU_TOTAL} MiB"
-
-    # Check if enough GPU memory
-    REQUIRED_MEM=$(echo "$GPU_TOTAL * ${VLLM_GPU_MEMORY_UTILIZATION:-0.7}" | bc | cut -d. -f1)
-    if [ "$GPU_FREE" -lt "$REQUIRED_MEM" ]; then
-        echo -e "${RED}❌ Error: Insufficient GPU memory!${NC}"
-        echo -e "${YELLOW}   Required: ~${REQUIRED_MEM} MiB, Available: ${GPU_FREE} MiB${NC}"
-        echo -e "${YELLOW}   Tip: Free GPU memory or reduce VLLM_GPU_MEMORY_UTILIZATION in .env.dev${NC}"
-        exit 1
-    fi
-    echo ""
-
-    # Check if start-vllm-dev.sh exists
-    if [ ! -f "$PROJECT_ROOT/start-vllm-dev.sh" ]; then
-        echo -e "${RED}❌ Error: start-vllm-dev.sh not found!${NC}"
-        exit 1
-    fi
-
-    # Make sure it's executable
-    chmod +x "$PROJECT_ROOT/start-vllm-dev.sh"
-
-    # Start vLLM (script has built-in health check, will exit 1 on failure)
-    echo -e "${BLUE}Launching vLLM server...${NC}"
-    if ! bash "$PROJECT_ROOT/start-vllm-dev.sh"; then
-        echo -e "${RED}❌ vLLM server startup failed${NC}"
-        echo -e "${YELLOW}Check logs: tail -f vllm_server.log${NC}"
-        exit 1
-    fi
-
-    echo ""
-    echo -e "${GREEN}✅ vLLM server started successfully!${NC}"
-    echo -e "${YELLOW}   API Endpoint: http://localhost:$VLLM_PORT/v1${NC}"
-    echo -e "${YELLOW}   Model: ${VLLM_MODEL:-Qwen/Qwen2.5-3B-Instruct}${NC}"
-    echo -e "${YELLOW}   Used by: Personal Assistant + Career Agent${NC}"
-    echo -e "${GREEN}   ✓ Both PA and Career Agent will use vLLM for high-performance inference${NC}"
 
 elif [ "$LLM_PROVIDER" = "ollama" ]; then
     # Start Ollama instances (traditional mode)

@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, startTransition } from 'react';
+import { unstable_batchedUpdates } from 'react-dom';
 import {
   Home,
   Lightbulb,
@@ -52,6 +53,7 @@ export default function UnifiedSidebarRefactored() {
   // Analysis state
   const [analysisProgress, setAnalysisProgress] = useState({
     isAnalyzing: false,
+    isCancelling: false,  // Shows "Cancelling..." state immediately when Cancel is clicked
     currentSection: null,
     completedSections: [],
     totalSections: 7,
@@ -201,13 +203,51 @@ export default function UnifiedSidebarRefactored() {
 
   // Global analysis stream handler reference
   const activeReaderRef = useRef(null);
+  const analysisCancelledRef = useRef(false);
+  const [analysisSessionId, setAnalysisSessionId] = useState(null);
+  // Generation counter to ignore stale events from old analysis requests
+  // This increments each time a new analysis starts, ensuring old events are dropped
+  const analysisGenerationRef = useRef(0);
 
   // Global resume analysis stream starter - called by Documents component
   const startGlobalAnalysisStream = async (userId, documentId, documentFilename) => {
+    // CRITICAL: Cancel any existing analysis before starting a new one
+    // This prevents two analyses from running concurrently
+    if (activeReaderRef.current) {
+      try {
+        activeReaderRef.current.cancel();
+      } catch (error) {
+        // Ignore cleanup errors
+      }
+      activeReaderRef.current = null;
+    }
+
+    // Cancel previous backend analysis if session exists
+    if (analysisSessionId) {
+      try {
+        const cancelUrl = process.env.NODE_ENV === 'production'
+          ? `/api/career/analyze/cancel/${analysisSessionId}`
+          : `${process.env.REACT_APP_CAREER_URL || 'http://localhost:6002'}/api/career/analyze/cancel/${analysisSessionId}`;
+        await fetch(cancelUrl, { method: 'DELETE' });
+      } catch (error) {
+        // Ignore cancel errors
+      }
+      setAnalysisSessionId(null);
+    }
+
+    // Reset cancellation flag at start of new analysis
+    analysisCancelledRef.current = false;
+
+    // CRITICAL: Increment generation counter to invalidate any stale events from previous analysis
+    // This ensures that if an old streaming loop is still processing, it will drop all events
+    analysisGenerationRef.current += 1;
+    const currentGeneration = analysisGenerationRef.current;
+
     try {
-      // Reset and prepare analysis state
+      // Reset and prepare analysis state (clear any previous cancelling state)
       setAnalysisProgress({
         isAnalyzing: true,
+        isCancelling: false,
         currentSection: null,
         completedSections: [],
         totalSections: 7,
@@ -282,8 +322,21 @@ export default function UnifiedSidebarRefactored() {
       let buffer = '';
 
       while (true) {
+        // Check if analysis was cancelled
+        if (analysisCancelledRef.current) break;
+
+        // CRITICAL: Check if a newer analysis has started (generation changed)
+        // This handles the race condition where old events are still being processed
+        if (analysisGenerationRef.current !== currentGeneration) break;
+
         const { done, value } = await reader.read();
         if (done) break;
+
+        // Check cancellation again after read (in case cancelled during blocking read)
+        if (analysisCancelledRef.current) break;
+
+        // Check generation again after read to catch race conditions
+        if (analysisGenerationRef.current !== currentGeneration) break;
 
         const chunk = decoder.decode(value, { stream: true });
         buffer += chunk;
@@ -291,6 +344,9 @@ export default function UnifiedSidebarRefactored() {
         buffer = lines.pop() || '';
 
         for (const line of lines) {
+          // CRITICAL: Check generation before processing each event to prevent stale updates
+          if (analysisGenerationRef.current !== currentGeneration) break;
+
           if (line.trim() && line.startsWith('data: ')) {
             try {
               const jsonString = line.slice(6).trim();
@@ -298,72 +354,166 @@ export default function UnifiedSidebarRefactored() {
 
               const data = JSON.parse(jsonString);
 
-              if (data.type === 'section_progress') {
-                setAnalysisProgress(prev => ({
-                  ...prev,
-                  currentSection: data.section,
-                  progress: data.progress || prev.progress,
-                  totalSections: data.total_sections || 7,
-                  isAnalyzing: true
-                }));
-                setSectionStatus(prev => ({ ...prev, [data.section]: 'analyzing' }));
+              // Extract session_id from initial status message for cancellation support
+              if (data.type === 'status' && data.session_id) {
+                setAnalysisSessionId(data.session_id);
+              }
 
-              } else if (data.type === 'section_complete') {
-                if (data.data) {
-                  const sectionData = data.data[data.section] || data.data;
-                  setProfessionalData(prev => ({ ...prev, [data.section]: sectionData }));
-                }
-
-                setSectionStatus(prev => ({ ...prev, [data.section]: 'completed' }));
-
-                setAnalysisProgress(prev => {
-                  const newCompletedSections = [...prev.completedSections, data.section];
-                  const newProgress = Math.round((newCompletedSections.length / prev.totalSections) * 100);
-                  return {
+              if (data.type === 'section_start') {
+                // Backend sends section_start when beginning a new section
+                unstable_batchedUpdates(() => {
+                  setAnalysisProgress(prev => ({
                     ...prev,
-                    completedSections: newCompletedSections,
-                    progress: newProgress,
-                    currentSection: null
-                  };
+                    currentSection: data.section,
+                    progress: data.progress || prev.progress,
+                    totalSections: data.total_sections || 7,
+                    isAnalyzing: true
+                  }));
+                  setSectionStatus(prev => ({ ...prev, [data.section]: 'analyzing' }));
                 });
 
-                // Add notification for section completion - works on all pages
-                const sectionName = data.section.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
-                addNotification({
-                  type: 'complete',
-                  title: `✅ ${sectionName} Complete`,
-                  message: `${sectionName} analysis completed successfully! New insights are now available in your career profile.`,
-                  timestamp: Date.now()
+              } else if (data.type === 'section_complete') {
+                // Batch all state updates together for better performance
+                unstable_batchedUpdates(() => {
+                  // Update professional data with the new section
+                  if (data.data) {
+                    const sectionData = data.data[data.section] || data.data;
+                    setProfessionalData(prev => ({ ...prev, [data.section]: sectionData }));
+                  }
+
+                  // Update section status
+                  setSectionStatus(prev => ({ ...prev, [data.section]: 'completed' }));
+
+                  // Update analysis progress
+                  setAnalysisProgress(prev => {
+                    const newCompletedSections = [...prev.completedSections, data.section];
+                    const newProgress = Math.round((newCompletedSections.length / prev.totalSections) * 100);
+                    return {
+                      ...prev,
+                      completedSections: newCompletedSections,
+                      progress: newProgress,
+                      currentSection: null
+                    };
+                  });
+                });
+
+                // Defer notification to avoid blocking render (non-critical UI update)
+                startTransition(() => {
+                  const sectionName = data.section.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
+                  addNotification({
+                    type: 'complete',
+                    title: `✅ ${sectionName} Complete`,
+                    message: `${sectionName} analysis completed successfully! New insights are now available in your career profile.`,
+                    timestamp: Date.now()
+                  });
                 });
 
               } else if (data.type === 'analysis_complete') {
-                setAnalysisProgress(prev => ({
-                  ...prev,
-                  isAnalyzing: false,
-                  currentSection: null,
-                  progress: data.success ? 100 : prev.progress,
-                  error: data.error || null
-                }));
+                // Batch final state updates for completion
+                unstable_batchedUpdates(() => {
+                  setAnalysisProgress(prev => ({
+                    ...prev,
+                    isAnalyzing: false,
+                    currentSection: null,
+                    progress: data.success ? 100 : prev.progress,
+                    error: data.error || null
+                  }));
 
-                if (data.professional_data) {
-                  setProfessionalData(prev => ({ ...prev, ...data.professional_data }));
-                }
+                  if (data.professional_data) {
+                    setProfessionalData(prev => ({ ...prev, ...data.professional_data }));
+                  }
+                });
 
-                if (data.success) {
+                // Defer notification to non-blocking update
+                startTransition(() => {
+                  if (data.success) {
+                    addNotification({
+                      type: 'complete',
+                      title: '✅ Resume Analysis Complete',
+                      message: 'Resume analysis completed successfully! All insights are now available in your career profile.',
+                      timestamp: Date.now()
+                    });
+                  } else if (data.error) {
+                    addNotification({
+                      type: 'error',
+                      title: 'Analysis Failed',
+                      message: 'There was an error completing your career analysis',
+                      details: data.error
+                    });
+                  }
+                });
+
+                activeReaderRef.current = null;
+                break;
+
+              } else if (data.type === 'cancelled') {
+                // Handle backend cancellation confirmation
+                unstable_batchedUpdates(() => {
+                  setAnalysisProgress(prev => ({
+                    ...prev,
+                    isAnalyzing: false,
+                    isCancelling: false,
+                    currentSection: null,
+                    error: 'Analysis cancelled by user'
+                  }));
+                });
+
+                startTransition(() => {
                   addNotification({
-                    type: 'complete',
-                    title: '✅ Resume Analysis Complete',
-                    message: 'Resume analysis completed successfully! All insights are now available in your career profile.',
+                    type: 'warning',
+                    title: 'Analysis Cancelled',
+                    message: `Analysis cancelled. ${data.sections_completed || 0} sections were completed.`,
                     timestamp: Date.now()
                   });
-                } else if (data.error) {
+                });
+
+                activeReaderRef.current = null;
+                break;
+
+              } else if (data.type === 'section_error') {
+                // Handle individual section failures (analysis may continue)
+                unstable_batchedUpdates(() => {
+                  setSectionStatus(prev => ({ ...prev, [data.section]: 'failed' }));
+                  setAnalysisProgress(prev => ({
+                    ...prev,
+                    progress: data.progress || prev.progress
+                  }));
+                });
+
+                startTransition(() => {
+                  const sectionName = data.display_name || data.section;
                   addNotification({
                     type: 'error',
-                    title: 'Analysis Failed',
-                    message: 'There was an error completing your career analysis',
-                    details: data.error
+                    title: `Section Failed: ${sectionName}`,
+                    message: data.can_continue
+                      ? 'Analysis will continue with remaining sections.'
+                      : 'Too many failures. Analysis stopped.',
+                    details: data.error,
+                    timestamp: Date.now()
                   });
-                }
+                });
+
+              } else if (data.type === 'error') {
+                // Handle fatal errors from backend
+                unstable_batchedUpdates(() => {
+                  setAnalysisProgress(prev => ({
+                    ...prev,
+                    isAnalyzing: false,
+                    isCancelling: false,
+                    currentSection: null,
+                    error: data.message || 'An error occurred during analysis'
+                  }));
+                });
+
+                startTransition(() => {
+                  addNotification({
+                    type: 'error',
+                    title: 'Analysis Error',
+                    message: data.message || 'An unexpected error occurred',
+                    details: data.original_error || data.error_details,
+                    timestamp: Date.now()
+                  });
+                });
 
                 activeReaderRef.current = null;
                 break;
@@ -405,6 +555,63 @@ export default function UnifiedSidebarRefactored() {
       }
     };
   }, []);
+
+  // Cancel analysis handler - allows user to stop ongoing analysis
+  const cancelAnalysis = async () => {
+    // Only proceed if analysis is actually running
+    if (!analysisProgress.isAnalyzing) return;
+
+    // Immediately show "Cancelling..." state to give user feedback
+    // Actual cancellation happens after current LLM section completes
+    setAnalysisProgress(prev => ({
+      ...prev,
+      isCancelling: true
+    }));
+
+    // Set cancellation flag - this will stop the streaming loop
+    analysisCancelledRef.current = true;
+
+    // Try to cancel the reader if available
+    if (activeReaderRef.current) {
+      try {
+        activeReaderRef.current.cancel();
+      } catch (error) {
+        // Ignore cleanup errors
+      }
+      activeReaderRef.current = null;
+    }
+
+    // Call backend cancel API to stop LLM processing
+    if (analysisSessionId) {
+      try {
+        const cancelUrl = process.env.NODE_ENV === 'production'
+          ? `/api/career/analyze/cancel/${analysisSessionId}`
+          : `${process.env.REACT_APP_CAREER_URL || 'http://localhost:6002'}/api/career/analyze/cancel/${analysisSessionId}`;
+
+        await fetch(cancelUrl, { method: 'DELETE' });
+      } catch (error) {
+        // Continue with frontend cancellation even if backend call fails
+      }
+      setAnalysisSessionId(null);
+    }
+
+    // Reset analysis state (including isCancelling flag)
+    setAnalysisProgress(prev => ({
+      ...prev,
+      isAnalyzing: false,
+      isCancelling: false,
+      currentSection: null,
+      error: 'Analysis cancelled by user'
+    }));
+
+    // Add cancellation notification
+    addNotification({
+      type: 'warning',
+      title: 'Analysis Cancelled',
+      message: 'Resume analysis was cancelled. Previously completed sections are preserved.',
+      timestamp: Date.now()
+    });
+  };
 
   // Fetch user data
   const fetchUserData = async () => {
@@ -687,6 +894,8 @@ export default function UnifiedSidebarRefactored() {
         externalSetProfessionalData={setProfessionalData}
         externalAddNotification={addNotification}
         externalStartGlobalAnalysisStream={startGlobalAnalysisStream}
+        externalCancelAnalysis={cancelAnalysis}
+        externalAnalyzingDocumentId={lastAnalyzedDocumentId}
         externalOnOpenAssistant={() => setIsAssistantDialogOpen(true)}
       />
     );
@@ -712,8 +921,6 @@ export default function UnifiedSidebarRefactored() {
           <div className="space-y-8">
             <div className="bg-white rounded-2xl shadow-lg p-8">
               <Documents
-                analysisProgress={analysisProgress}
-                startGlobalAnalysisStream={startGlobalAnalysisStream}
                 onUploadClick={() => handleTrackActivity('upload', 'documents', 'Document upload initiated')}
               />
             </div>

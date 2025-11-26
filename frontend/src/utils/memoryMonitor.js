@@ -221,15 +221,16 @@ export const closeTrackedEventSource = (eventSource) => {
 if (process.env.NODE_ENV === 'development') {
   // Expose to window for debugging
   window.memoryMonitor = memoryMonitor;
-  
+
   // Auto-start monitoring in development
   memoryMonitor.startMonitoring();
-  
-  // Log memory report every 2 minutes
-  setInterval(() => {
+
+  // Log memory report every 2 minutes (tracked to allow cleanup)
+  const reportIntervalId = setInterval(() => {
     memoryMonitor.printMemoryReport();
   }, 120000);
-  
+  memoryMonitor.trackInterval(reportIntervalId);
+
   console.log('🔧 Memory monitoring enabled in development mode');
   console.log('Use window.memoryMonitor to access monitoring functions');
 }

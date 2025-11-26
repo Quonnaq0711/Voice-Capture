@@ -2,7 +2,7 @@ import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { BrowserRouter } from 'react-router-dom';
-import Login from '../src/components/Login';
+import Login from '../src/components/auth/Login';
 import { useAuth } from '../src/contexts/AuthContext';
 
 // Mock the AuthContext
@@ -173,7 +173,7 @@ describe('Login Component', () => {
     await userEvent.click(submitButton);
 
     await waitFor(() => {
-      expect(screen.getByText('Login failed: Invalid credentials')).toBeInTheDocument();
+      expect(screen.getByText('Invalid email or password. Please try again.')).toBeInTheDocument();
     });
   });
 
@@ -196,7 +196,7 @@ describe('Login Component', () => {
     await userEvent.click(submitButton);
 
     await waitFor(() => {
-      expect(screen.getByText('Login failed: Please check your email and password')).toBeInTheDocument();
+      expect(screen.getByText('Invalid email or password. Please try again.')).toBeInTheDocument();
     });
   });
 
@@ -263,7 +263,7 @@ describe('Login Component', () => {
     await userEvent.click(submitButton);
 
     await waitFor(() => {
-      expect(screen.getByText('Login failed: Invalid credentials')).toBeInTheDocument();
+      expect(screen.getByText('Invalid email or password. Please try again.')).toBeInTheDocument();
     });
 
     // Second successful attempt
@@ -273,7 +273,7 @@ describe('Login Component', () => {
     await userEvent.click(submitButton);
 
     await waitFor(() => {
-      expect(screen.queryByText('Login failed: Invalid credentials')).not.toBeInTheDocument();
+      expect(screen.queryByText('Invalid email or password. Please try again.')).not.toBeInTheDocument();
     });
   });
 

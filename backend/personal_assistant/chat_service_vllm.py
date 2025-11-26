@@ -26,8 +26,11 @@ from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from langchain_core.chat_history import BaseChatMessageHistory, InMemoryChatMessageHistory
 from typing import Dict, List, Optional, AsyncIterator, Any
+from collections import OrderedDict
+import threading
 import logging
 import asyncio
+import atexit
 from concurrent.futures import ThreadPoolExecutor
 import httpx
 import json
@@ -46,6 +49,44 @@ from backend.personal_assistant.base_chat_service import BaseChatService
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+class LRUSessionCache:
+    """Thread-safe LRU cache for session histories with bounded size."""
+
+    def __init__(self, max_size: int = 1000):
+        self._cache: OrderedDict[str, InMemoryChatMessageHistory] = OrderedDict()
+        self._max_size = max_size
+        self._lock = threading.Lock()
+
+    def get(self, key: str) -> Optional[InMemoryChatMessageHistory]:
+        with self._lock:
+            if key in self._cache:
+                self._cache.move_to_end(key)
+                return self._cache[key]
+            return None
+
+    def set(self, key: str, value: InMemoryChatMessageHistory) -> None:
+        with self._lock:
+            if key in self._cache:
+                self._cache.move_to_end(key)
+                self._cache[key] = value  # Update existing value
+            else:
+                if len(self._cache) >= self._max_size:
+                    self._cache.popitem(last=False)
+                self._cache[key] = value
+
+    def __contains__(self, key: str) -> bool:
+        with self._lock:
+            return key in self._cache
+
+    def __len__(self) -> int:
+        with self._lock:
+            return len(self._cache)
+
+    def clear(self) -> None:
+        with self._lock:
+            self._cache.clear()
 
 
 class ChatServiceVLLM(BaseChatService):
@@ -110,8 +151,12 @@ class ChatServiceVLLM(BaseChatService):
         self.executor = ThreadPoolExecutor(max_workers=16)
         self._shutdown = False  # Track cleanup state
 
-        # Session store for chat histories (in-memory cache)
-        self.store: Dict[str, InMemoryChatMessageHistory] = {}
+        # Session store for chat histories (LRU cache with bounded size)
+        # Max 1000 sessions to prevent unbounded memory growth
+        self.store = LRUSessionCache(max_size=1000)
+
+        # Register cleanup on process exit
+        atexit.register(self.cleanup)
 
         # Cache tiktoken encoder for efficient token counting
         # Create once and reuse to avoid repeated initialization overhead
@@ -200,8 +245,9 @@ class ChatServiceVLLM(BaseChatService):
             InMemoryChatMessageHistory instance containing the full conversation history
         """
         # Return cached history if already in memory
-        if session_id in self.store:
-            return self.store[session_id]
+        cached = self.store.get(session_id)
+        if cached is not None:
+            return cached
 
         # Create new in-memory history object
         history = InMemoryChatMessageHistory()
@@ -240,7 +286,7 @@ class ChatServiceVLLM(BaseChatService):
             logger.debug(f"Skipping database history load for non-numeric session_id: {session_id}")
 
         # Cache the reconstructed history
-        self.store[session_id] = history
+        self.store.set(session_id, history)
         return history
 
     def _count_message_tokens(self, messages: List) -> int:
@@ -1438,16 +1484,30 @@ class ChatServiceVLLM(BaseChatService):
 
     def cleanup(self):
         """
-        Explicitly cleanup resources (ThreadPoolExecutor).
+        Explicitly cleanup resources (ThreadPoolExecutor and session cache).
 
-        This method ensures proper cleanup of the thread pool to prevent
-        resource leaks. Should be called when the service is no longer needed.
+        This method ensures proper cleanup of the thread pool and session cache
+        to prevent resource leaks. Should be called when the service is no longer needed.
         """
         if not self._shutdown:
             logger.info("[vLLM] Cleaning up ChatServiceVLLM resources...")
-            if self.executor:
+
+            # Clear session cache
+            if hasattr(self, 'store'):
+                self.store.clear()
+                logger.info("[vLLM] Session cache cleared")
+
+            # Shutdown thread pool
+            if hasattr(self, 'executor') and self.executor:
                 self.executor.shutdown(wait=True, cancel_futures=True)
                 logger.info("[vLLM] ThreadPoolExecutor shut down successfully")
+
+            # Unregister atexit handler to prevent double cleanup
+            try:
+                atexit.unregister(self.cleanup)
+            except Exception:
+                pass
+
             self._shutdown = True
 
     def __del__(self):

@@ -8,7 +8,7 @@ import asyncio
 import json
 import logging
 import os
-from typing import Dict, Any, Optional, AsyncGenerator, Callable
+from typing import Dict, Any, Optional, AsyncGenerator, Callable, List
 from datetime import datetime, timedelta
 import httpx
 
@@ -24,6 +24,14 @@ logger = logging.getLogger(__name__)
 
 class StreamingResumeAnalyzer:
     """Streaming resume analyzer with real-time progress updates."""
+
+    # Class-level cancellation tokens storage
+    # Maps session_id -> asyncio.Event (set when cancelled)
+    _cancellation_tokens: Dict[str, asyncio.Event] = {}
+
+    # Track active sessions per user to prevent concurrent analyses
+    # Maps user_id -> session_id
+    _active_user_sessions: Dict[int, str] = {}
 
     def __init__(self,
                  notification_service_url: str = "http://localhost:8001",
@@ -132,20 +140,121 @@ class StreamingResumeAnalyzer:
             logger.error(f"Failed to send notification: {e}")
             # Don't raise - notifications are non-critical, analysis should continue
         
-    async def analyze_resume_streaming(self, user_id: int, resume_id: Optional[int] = None) -> AsyncGenerator[Dict[str, Any], None]:
+    @classmethod
+    def cancel_analysis(cls, session_id: str) -> bool:
+        """Cancel an ongoing analysis by session ID.
+
+        Args:
+            session_id: The session ID to cancel
+
+        Returns:
+            True if the session was found and cancelled, False otherwise
+        """
+        if session_id in cls._cancellation_tokens:
+            cls._cancellation_tokens[session_id].set()
+            logger.info(f"Analysis cancelled for session: {session_id}")
+            return True
+        logger.warning(f"No active session found for cancellation: {session_id}")
+        return False
+
+    @classmethod
+    def cancel_user_analysis(cls, user_id: int) -> str:
+        """Cancel any active analysis for a specific user.
+
+        This prevents multiple concurrent analyses for the same user.
+
+        Args:
+            user_id: The user ID to cancel analysis for
+
+        Returns:
+            The old session_id if found and cancelled, None otherwise
+        """
+        if user_id in cls._active_user_sessions:
+            old_session_id = cls._active_user_sessions[user_id]
+            logger.info(f"Cancelling previous analysis for user {user_id}: {old_session_id}")
+            cls.cancel_analysis(old_session_id)
+            # Remove from active sessions immediately to prevent interference
+            del cls._active_user_sessions[user_id]
+            return old_session_id
+        return None
+
+    @classmethod
+    def is_cancelled(cls, session_id: str) -> bool:
+        """Check if a session has been cancelled.
+
+        Args:
+            session_id: The session ID to check
+
+        Returns:
+            True if the session is cancelled, False otherwise
+        """
+        if session_id in cls._cancellation_tokens:
+            return cls._cancellation_tokens[session_id].is_set()
+        return False
+
+    async def analyze_resume_streaming(self, user_id: int, resume_id: Optional[int] = None, session_id: Optional[str] = None) -> AsyncGenerator[Dict[str, Any], None]:
         """Analyze resume with streaming progress updates.
-        
+
         Args:
             user_id: The user's ID
             resume_id: Optional specific resume ID to analyze. If None, analyzes the latest resume.
-            
+            session_id: Optional session ID for cancellation support. If None, one will be generated.
+
         Yields:
             Streaming analysis results and progress updates
         """
-        session_id = f"analysis_{user_id}_{int(datetime.now().timestamp())}"
-        
+        # Generate session_id if not provided
+        # Use microseconds to avoid collision if user clicks quickly
+        if session_id is None:
+            import time
+            session_id = f"analysis_{user_id}_{int(time.time() * 1000)}"
+
+        logger.info(f"New analysis request: user={user_id}, session={session_id}")
+
+        # CRITICAL: Cancel any previous analysis for this user before starting new one
+        # This prevents multiple concurrent analyses from running simultaneously
+        old_session_id = self.cancel_user_analysis(user_id)
+        if old_session_id:
+            logger.info(f"Cancelled previous analysis for user {user_id}: {old_session_id}")
+            # Wait for old analysis to fully clean up its cancellation token
+            max_wait = 5.0  # Maximum wait time in seconds
+            wait_interval = 0.2
+            total_wait = 0
+            while old_session_id in self._cancellation_tokens and total_wait < max_wait:
+                await asyncio.sleep(wait_interval)
+                total_wait += wait_interval
+                logger.debug(f"Waiting for old session {old_session_id} to clean up... ({total_wait:.1f}s)")
+
+            # IMPORTANT: Do NOT delete the old token!
+            # If we delete it, is_cancelled() returns False and old analysis continues.
+            # The old analysis needs the token to remain (and be set) so it can detect cancellation.
+            if old_session_id in self._cancellation_tokens:
+                # Ensure it's set (cancelled) but don't delete - old analysis needs to see it
+                self._cancellation_tokens[old_session_id].set()
+                logger.warning(f"Old session {old_session_id} still running after {total_wait:.1f}s - keeping token set")
+
+        # Register cancellation token for this session (fresh Event, not set)
+        self._cancellation_tokens[session_id] = asyncio.Event()
+        logger.info(f"Created new cancellation token for session: {session_id}, is_set={self._cancellation_tokens[session_id].is_set()}")
+
+        # Register this session as active for this user
+        self._active_user_sessions[user_id] = session_id
+        logger.info(f"Registered active session for user {user_id}: {session_id}")
+
+        # Set up cancellation check callback for workflow
+        # This allows the workflow to check for cancellation between sections
+        def cancellation_check() -> bool:
+            is_cancelled = self.is_cancelled(session_id)
+            if is_cancelled:
+                logger.info(f"Cancellation check for session {session_id}: CANCELLED")
+            return is_cancelled
+
+        if hasattr(self.workflow, 'cancellation_check'):
+            self.workflow.cancellation_check = cancellation_check
+            logger.info(f"Set cancellation_check callback for session: {session_id}")
+
         try:
-            logger.info(f"Starting streaming analysis for user {user_id}")
+            logger.info(f"Starting streaming analysis for user {user_id}, session {session_id}")
             
             # Send initial progress notification
             await self._send_notification(
@@ -158,11 +267,12 @@ class StreamingResumeAnalyzer:
                 status="starting"
             )
             
-            # Initial status
+            # Initial status - include session_id for frontend to use for cancellation
             yield {
                 "type": "status",
                 "message": "Initializing analysis...",
                 "progress": 0,
+                "session_id": session_id,
                 "timestamp": datetime.now().isoformat()
             }
             
@@ -241,9 +351,21 @@ class StreamingResumeAnalyzer:
             total_sections = len(self.workflow.sections)  # Dynamic count from workflow
             
             async for result in analysis_method(resume_content, current_year):
+                # Check for cancellation before processing each result
+                if self.is_cancelled(session_id):
+                    logger.info(f"Analysis cancelled for session {session_id}")
+                    yield {
+                        "type": "cancelled",
+                        "message": "Analysis cancelled by user",
+                        "session_id": session_id,
+                        "sections_completed": section_count,
+                        "timestamp": datetime.now().isoformat()
+                    }
+                    return
+
                 # Add timestamp to all results
                 result["timestamp"] = datetime.now().isoformat()
-                
+
                 # Handle progress updates and send notifications
                 if result.get("type") == "progress":
                     progress_data = result.get("data", {})
@@ -301,9 +423,9 @@ class StreamingResumeAnalyzer:
                     # Log to verify summary is preserved
                     summary_key = f"{section_name}_summary"
                     if summary_key in section_data:
-                        logger.info(f"✓ [STREAMING] Summary preserved for {section_name}: {section_data[summary_key][:50]}...")
+                        logger.info(f"[STREAMING] Summary preserved for {section_name}: {section_data[summary_key][:50]}...")
                     else:
-                        logger.warning(f"✗ [STREAMING] No summary found in section_data for {section_name}")
+                        logger.warning(f"[STREAMING] No summary found in section_data for {section_name}")
                     
                     # Send section completion notification
                     await self._send_notification(
@@ -413,7 +535,7 @@ class StreamingResumeAnalyzer:
                     }
             
             logger.info(f"Completed streaming analysis for user {user_id}")
-            
+
         except Exception as e:
             logger.error(f"Streaming analysis failed for user {user_id}: {str(e)}")
             
@@ -445,7 +567,24 @@ class StreamingResumeAnalyzer:
                 "original_error": str(e),
                 "timestamp": datetime.now().isoformat()
             }
-    
+
+        finally:
+            logger.info(f"Cleaning up session {session_id} for user {user_id}")
+            # Clean up cancellation token
+            if session_id in self._cancellation_tokens:
+                del self._cancellation_tokens[session_id]
+                logger.info(f"Cleaned up cancellation token for session: {session_id}")
+            else:
+                logger.info(f"Cancellation token already cleaned for session: {session_id}")
+
+            # Clean up user session tracking (only if this session is still the active one)
+            if user_id in self._active_user_sessions:
+                if self._active_user_sessions[user_id] == session_id:
+                    del self._active_user_sessions[user_id]
+                    logger.info(f"Cleaned up active session tracking for user: {user_id}")
+                else:
+                    logger.info(f"Skipping cleanup: active session is {self._active_user_sessions[user_id]}, not {session_id}")
+
     async def get_analysis_status(self) -> Dict[str, Any]:
         """Get current analysis status.
         
@@ -644,15 +783,136 @@ class ProgressNotificationService:
     
     def get_session_status(self, session_id: str) -> Optional[Dict[str, Any]]:
         """Get status for a specific session.
-        
+
         Args:
             session_id: Session identifier
-            
+
         Returns:
             Session status information or None if not found
         """
         return self.active_sessions.get(session_id)
-    
+
+    def get_active_sessions(self) -> List[str]:
+        """Get list of active session IDs.
+
+        Returns:
+            List of active session IDs
+        """
+        return list(self.active_sessions.keys())
+
+    def session_exists(self, session_id: str) -> bool:
+        """Check if a session exists.
+
+        Args:
+            session_id: Session identifier
+
+        Returns:
+            True if session exists, False otherwise
+        """
+        return session_id in self.active_sessions
+
+    def cancel_session(self, session_id: str) -> bool:
+        """Cancel a session.
+
+        Args:
+            session_id: Session identifier
+
+        Returns:
+            True if session was cancelled, False if not found
+        """
+        if session_id in self.active_sessions:
+            self.active_sessions[session_id]["status"] = "cancelled"
+            logger.info(f"Session {session_id} cancelled")
+            return True
+        return False
+
+    def complete_analysis(self, session_id: str, success: bool = True, error: Optional[str] = None):
+        """Mark analysis as complete.
+
+        Args:
+            session_id: Session identifier
+            success: Whether analysis completed successfully
+            error: Error message if failed
+        """
+        if session_id in self.active_sessions:
+            self.active_sessions[session_id]["status"] = "completed" if success else "failed"
+            self.active_sessions[session_id]["end_time"] = datetime.now()
+            if error:
+                self.active_sessions[session_id]["error"] = error
+            logger.info(f"Analysis {session_id} {'completed' if success else 'failed'}")
+
+    def cleanup_session(self, session_id: str):
+        """Clean up a specific session.
+
+        Args:
+            session_id: Session identifier
+        """
+        if session_id in self.active_sessions:
+            del self.active_sessions[session_id]
+            logger.info(f"Cleaned up session {session_id}")
+
+    def update_progress(self, session_id: str, section: str, status: str,
+                       data: Optional[Dict[str, Any]] = None, error: Optional[str] = None):
+        """Update progress for a session.
+
+        Args:
+            session_id: Session identifier
+            section: Current section name
+            status: Current status
+            data: Optional section data
+            error: Optional error message
+        """
+        if session_id in self.active_sessions:
+            self.active_sessions[session_id]["current_section"] = section
+            self.active_sessions[session_id]["status"] = status
+            self.active_sessions[session_id]["last_update"] = datetime.now()
+            if data:
+                self.active_sessions[session_id]["data"] = data
+            if error:
+                self.active_sessions[session_id]["error"] = error
+
+    def get_progress(self, session_id: str) -> Optional[Dict[str, Any]]:
+        """Get progress for a session.
+
+        Args:
+            session_id: Session identifier
+
+        Returns:
+            Progress information or None if not found
+        """
+        return self.active_sessions.get(session_id)
+
+    async def stream_updates(self, session_id: str) -> AsyncGenerator[Dict[str, Any], None]:
+        """Stream updates for a session.
+
+        Args:
+            session_id: Session identifier
+
+        Yields:
+            Progress updates
+        """
+        if session_id not in self.active_sessions:
+            return
+
+        while True:
+            session = self.active_sessions.get(session_id)
+            if not session:
+                break
+
+            yield {
+                "type": "progress",
+                "session_id": session_id,
+                "status": session.get("status"),
+                "current_section": session.get("current_section"),
+                "last_update": session.get("last_update", datetime.now()).isoformat()
+            }
+
+            if session.get("status") in ["completed", "failed", "cancelled"]:
+                yield {"type": "complete", "session_id": session_id}
+                break
+
+            await asyncio.sleep(1)
+
     def cleanup_old_sessions(self, max_age_hours: int = 24):
         """Clean up old sessions.
         

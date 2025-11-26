@@ -2711,7 +2711,7 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
             onClick={isOptimized ? revertOptimization : optimizeInput}
             type="button"
             disabled={isNavigating || isCancelling || isLoading || isOptimizing || !input.trim()}
-            className={`absolute bottom-2 right-16 p-2 rounded-lg transition-colors ${
+            className={`chat-input-buttons absolute bottom-2 right-16 p-2 rounded-lg transition-colors ${
               isNavigating || isCancelling || isLoading || isOptimizing || !input.trim()
                 ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
                 : isOptimized
@@ -2740,7 +2740,7 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
             onClick={isLoading && !isCancelling ? handleCancel : undefined}
             type={isLoading && !isCancelling ? 'button' : 'submit'}
             disabled={isNavigating || isOptimizing || (isLoading ? false : !input.trim())}
-            className={`absolute bottom-2 right-4 p-2 rounded-lg transition-colors ${
+            className={`chat-input-buttons absolute bottom-2 right-4 p-2 rounded-lg transition-colors ${
               isNavigating || isOptimizing || (isLoading ? false : !input.trim())
                 ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
                 : isLoading && !isCancelling

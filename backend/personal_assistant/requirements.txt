@@ -49,8 +49,8 @@ pytest-asyncio
 # For testing HTTP endpoints
 httpx
 
-# vLLM and OpenAI-compatible LLM support
-vllm==0.11.0
+# OpenAI-compatible LLM support (vLLM runs as separate service)
 langchain-openai>=0.2.0
+openai>=1.0.0
 # Token counting for accurate context management
-tiktoken>=0.5.0  
+tiktoken>=0.5.0

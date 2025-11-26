@@ -55,7 +55,8 @@ import {
   FlagIcon,
   CloudArrowUpIcon,
   DocumentIcon,
-  TrashIcon
+  TrashIcon,
+  StopIcon
 } from '@heroicons/react/24/solid';
 
 // Toast notification component
@@ -348,7 +349,14 @@ const DocumentUpload = ({ onUploadSuccess }) => {
 };
 
 // Document list component with search, filters, and pagination
-const DocumentList = ({ documents, loading, onPreview, onDelete, onAnalyze, formatDate, getFileIcon }) => {
+// analyzingDocumentId is now managed by parent (UnifiedSidebar) for persistence across navigation
+const DocumentList = ({ documents, loading, onPreview, onDelete, onAnalyze, onCancel, analysisProgress, analyzingDocumentId, formatDate, getFileIcon }) => {
+  // Handle cancel - delegates to parent's cancelAnalysis
+  const handleCancel = () => {
+    if (onCancel) {
+      onCancel();
+    }
+  };
   const [searchQuery, setSearchQuery] = useState('');
   const [docTypeFilter, setDocTypeFilter] = useState('all'); // 'all', 'pdf', 'docx', 'txt'
   const [currentPage, setCurrentPage] = useState(1);
@@ -572,13 +580,39 @@ const DocumentList = ({ documents, loading, onPreview, onDelete, onAnalyze, form
                             <EyeIcon className="h-3 w-3 sm:mr-1" />
                             <span className="hidden sm:inline">View</span>
                           </button>
-                          <button
-                            onClick={() => onAnalyze(document)}
-                            className="inline-flex items-center px-2 py-1.5 border border-green-300 shadow-sm text-xs font-medium rounded text-green-700 bg-white hover:bg-green-50 transition-colors"
-                          >
-                            <ChartBarIcon className="h-3 w-3 sm:mr-1" />
-                            <span className="hidden sm:inline">Analyze</span>
-                          </button>
+                          {/* Analyze/Cancel/Cancelling Button */}
+                          {analysisProgress?.isAnalyzing && analyzingDocumentId === document.id ? (
+                            analysisProgress?.isCancelling ? (
+                              <button
+                                disabled
+                                className="inline-flex items-center px-2 py-1.5 border border-yellow-500 shadow-sm text-xs font-medium rounded text-white bg-yellow-500 cursor-not-allowed transition-colors"
+                              >
+                                <StopIcon className="h-3 w-3 sm:mr-1 animate-pulse" />
+                                <span className="hidden sm:inline">Cancelling...</span>
+                              </button>
+                            ) : (
+                              <button
+                                onClick={handleCancel}
+                                className="inline-flex items-center px-2 py-1.5 border border-red-500 shadow-sm text-xs font-medium rounded text-white bg-red-500 hover:bg-red-600 transition-colors"
+                              >
+                                <StopIcon className="h-3 w-3 sm:mr-1" />
+                                <span className="hidden sm:inline">Cancel</span>
+                              </button>
+                            )
+                          ) : (
+                            <button
+                              onClick={() => onAnalyze(document)}
+                              disabled={analysisProgress?.isAnalyzing}
+                              className={`inline-flex items-center px-2 py-1.5 border shadow-sm text-xs font-medium rounded transition-colors ${
+                                analysisProgress?.isAnalyzing
+                                  ? 'border-gray-200 text-gray-400 bg-gray-50 cursor-not-allowed'
+                                  : 'border-green-300 text-green-700 bg-white hover:bg-green-50'
+                              }`}
+                            >
+                              <ChartBarIcon className="h-3 w-3 sm:mr-1" />
+                              <span className="hidden sm:inline">Analyze</span>
+                            </button>
+                          )}
                           <button
                             onClick={() => onDelete(document)}
                             className="inline-flex items-center px-2 py-1.5 border border-red-300 shadow-sm text-xs font-medium rounded text-red-700 bg-white hover:bg-red-50 transition-colors"
@@ -663,7 +697,7 @@ const DocumentList = ({ documents, loading, onPreview, onDelete, onAnalyze, form
 };
 
 // Document manager component that combines upload and list
-const DocumentManager = ({ analysisProgress, startGlobalAnalysisStream }) => {
+const DocumentManager = ({ analysisProgress, startGlobalAnalysisStream, cancelAnalysis, analyzingDocumentId }) => {
   const [documents, setDocuments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState(null);
@@ -725,8 +759,6 @@ const DocumentManager = ({ analysisProgress, startGlobalAnalysisStream }) => {
         }
       });
 
-      showToast('Starting document analysis...', 'success');
-
       // Call global stream handler - this keeps running even when user switches pages
       await startGlobalAnalysisStream(document.user_id, document.id, document.original_filename);
     } catch (error) {
@@ -773,12 +805,15 @@ const DocumentManager = ({ analysisProgress, startGlobalAnalysisStream }) => {
   return (
     <>
       <DocumentUpload onUploadSuccess={handleUploadSuccess} />
-      <DocumentList 
-        documents={documents} 
-        loading={loading} 
+      <DocumentList
+        documents={documents}
+        loading={loading}
         onPreview={handlePreview}
         onDelete={handleDelete}
         onAnalyze={handleAnalyze}
+        onCancel={cancelAnalysis}
+        analysisProgress={analysisProgress}
+        analyzingDocumentId={analyzingDocumentId}
         formatDate={formatDate}
         getFileIcon={getFileIcon}
       />
@@ -902,6 +937,8 @@ const CareerAgent = ({
   externalSetProfessionalData = null,
   externalAddNotification = null,
   externalStartGlobalAnalysisStream = null,
+  externalCancelAnalysis = null,
+  externalAnalyzingDocumentId = null,
   externalOnOpenAssistant = null
 }) => {
   const { user, logout } = useAuth();
@@ -1034,6 +1071,14 @@ const CareerAgent = ({
   const setSectionStatus = externalSetSectionStatus || setInternalSectionStatus;
   const professionalData = externalProfessionalData || internalProfessionalData;
   const setProfessionalData = externalSetProfessionalData || setInternalProfessionalData;
+
+  // Ref to track analyzing state for async functions (allows checking state without stale closures)
+  const isAnalyzingRef = useRef(false);
+
+  // Sync isAnalyzingRef with analysisProgress.isAnalyzing for use in async functions
+  useEffect(() => {
+    isAnalyzingRef.current = analysisProgress.isAnalyzing;
+  }, [analysisProgress.isAnalyzing]);
 
   // Notifications state
   const [internalNotifications, setInternalNotifications] = useState([]);
@@ -1374,6 +1419,12 @@ const CareerAgent = ({
       }
       
       if (response.success && response.has_data && response.professional_data) {
+        // Check again if analysis started during the async call - use ref for real-time state
+        if (isAnalyzingRef.current) {
+          console.log('Analysis started during data fetch, discarding stored data to avoid overwriting fresh analysis');
+          return;
+        }
+
         console.log('Found stored career insights:', response.professional_data);
         const rawData = response.professional_data;
         const unnestedData = { ...rawData };
@@ -1384,10 +1435,10 @@ const CareerAgent = ({
             }
         }
         setProfessionalData(unnestedData);
-        
+
         // Switch to insights tab if we have stored data
         setActiveTab('insights');
-        
+
         // Add notification about loaded data
         const documentInfo = lastAnalyzedDocumentId ? 'for your last analyzed document' : 'from your most recent analysis';
         addNotification({
@@ -1449,6 +1500,8 @@ const CareerAgent = ({
   };
 
   // Handler for Resume Analysis
+  // IMPORTANT: This now delegates to externalStartGlobalAnalysisStream when available
+  // to ensure proper cancellation support and avoid duplicate streaming implementations
   const handleAnalyzeResume = async () => {
     if (!user?.id) {
       addNotification({
@@ -1466,22 +1519,31 @@ const CareerAgent = ({
     }
 
     try {
-      // Get the most recent document to include filename in activity tracking
-      let mostRecentFilename = null;
+      // Get the most recent document
+      let mostRecentDoc = null;
       try {
         const documentList = await auth.getResumes();
         if (documentList && documentList.length > 0) {
           // Documents are typically sorted by upload date, get the most recent
-          const mostRecentDoc = documentList[0];
-          mostRecentFilename = mostRecentDoc.original_filename;
+          mostRecentDoc = documentList[0];
         }
       } catch (error) {
-        console.warn('Could not fetch documents for activity tracking:', error);
+        console.warn('Could not fetch documents:', error);
+      }
+
+      if (!mostRecentDoc) {
+        addNotification({
+          type: 'error',
+          title: 'No Resume Found',
+          message: 'Please upload a resume first before analyzing',
+          details: 'Go to Documents to upload your resume'
+        });
+        return;
       }
 
       // Track resume analysis activity
-      const activityDescription = mostRecentFilename
-        ? `Analyzed most recent resume: ${mostRecentFilename}`
+      const activityDescription = mostRecentDoc.original_filename
+        ? `Analyzed most recent resume: ${mostRecentDoc.original_filename}`
         : 'Analyzed most recent resume';
 
       await activitiesAPI.createActivity({
@@ -1492,231 +1554,28 @@ const CareerAgent = ({
         activity_metadata: {
           source_type: 'analyze_recent_resume',
           user_id: user.id,
-          resume_filename: mostRecentFilename
+          resume_id: mostRecentDoc.id,
+          resume_filename: mostRecentDoc.original_filename
         }
       });
-      // Reset analysis state
-      setAnalysisProgress({
-        isAnalyzing: true,
-        currentSection: null,
-        completedSections: [],
-        totalSections: 7,
-        progress: 0,
-        error: null
-      });
 
-      setSectionStatus({
-        professionalIdentity: 'pending',
-        educationBackground: 'pending',
-        workExperience: 'pending',
-        skillsAnalysis: 'pending',
-        marketPosition: 'pending',
-        careerTrajectory: 'pending',
-        strengthsWeaknesses: 'pending',
-        salaryAnalysis: 'pending'
-      });
-
-      // Clear existing professional data to prepare for new analysis
-      setProfessionalData({
-        professionalIdentity: {
-          title: '',
-          summary: '',
-          keyHighlights: [],
-          currentRole: '',
-          currentIndustry: '',
-          currentCompany: '',
-          location: '',
-          marketPosition: { competitiveness: 0, skillRelevance: 0, industryDemand: 0, careerPotential: 0 }
-        },
-        workExperience: { totalYears: 0, timelineStart: null, timelineEnd: null, analytics: { workingYears: { years: '', period: '' }, heldRoles: { count: '', longest: '' }, heldTitles: { count: '', shortest: '' }, companies: { count: '', longest: '' }, insights: { gaps: '', shortestTenure: '', companySize: '', averageRoleDuration: '' } }, companies: [], industries: [] },
-        skillsAnalysis: { hardSkills: [], softSkills: [], coreStrengths: [], developmentAreas: [] },
-        careerTrajectory: [],
-        strengthsWeaknesses: { strengths: [], weaknesses: [] },
-        salaryAnalysis: { currentSalary: null, historicalTrends: [], marketComparison: null, predictedGrowth: null, salaryFactors: [], recommendations: [] }
-      });
-
-      addNotification({
-        type: 'progress',
-        title: 'Resume Analysis Started',
-        message: 'Starting comprehensive analysis of your recent resume',
-        details: 'This may take a few minutes. You will see real-time updates as each section completes.'
-      });
-
-      // Call the backend streaming endpoint
-      // Use relative path in production (proxied through Nginx), localhost in development
-      const apiUrl = process.env.NODE_ENV === 'production'
-        ? '/api/career/analyze_resume_streaming'
-        : (process.env.REACT_APP_CAREER_URL || 'http://localhost:6002') + '/api/career/analyze_resume_streaming';
-      const response = await streamingFetch(apiUrl, {
-        method: 'POST',
-        body: JSON.stringify({ user_id: String(user.id) })
-      });
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = ''; // Buffer to accumulate incomplete lines
-
-      let streamCompleted = false;
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) {
-          streamCompleted = true;
-          break;
-        }
-
-        // Decode and append to buffer
-        const chunk = decoder.decode(value, { stream: true });
-        buffer += chunk;
-
-        // Split by newlines, but keep the last incomplete line in buffer
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || ''; // Keep last incomplete line
-
-        for (const line of lines) {
-          if (line.trim() && line.startsWith('data: ')) {
-            try {
-              const jsonString = line.slice(6).trim();
-              if (!jsonString) continue; // Skip empty data lines
-
-              const data = JSON.parse(jsonString);
-
-              // Handle different types of streaming responses
-              if (data.type === 'error') {
-                // Handle error from streaming response
-                console.error('Streaming analysis error:', data.message);
-                setAnalysisProgress(prev => ({
-                  ...prev,
-                  isAnalyzing: false,
-                  error: data.message
-                }));
-
-                addNotification({
-                  type: 'error',
-                  title: 'Analysis Error',
-                  message: data.message || 'An error occurred during analysis',
-                  details: data.error_details ? JSON.stringify(data.error_details) : ''
-                });
-                break; // Stop processing further chunks
-              } else if (data.type === 'status') {
-                // Handle status updates
-                console.log('Analysis status:', data.message, 'Progress:', data.progress);
-                setAnalysisProgress(prev => ({
-                  ...prev,
-                  progress: data.progress || prev.progress,
-                  currentSection: data.message
-                }));
-              } else if (data.type === 'section_progress') {
-                // Dispatch section progress event (browser only)
-                if (typeof document !== 'undefined' && typeof document.querySelector === 'function') {
-                  const progressEvent = new CustomEvent('analysisProgress', {
-                    bubbles: true,
-                    detail: {
-                      section: data.section,
-                      status: 'analyzing',
-                      progress: data.progress,
-                      totalSections: data.total_sections || 7
-                    }
-                  });
-                  document.querySelector('[data-agent-type="career"]')?.dispatchEvent(progressEvent);
-                }
-              } else if (data.type === 'section_complete') {
-                console.log('Section completed:', data.section, data.data);
-
-                // Update state directly for immediate UI feedback
-                if (data.data) {
-                  // Update professional data with the new section data
-                  const sectionData = data.data[data.section] || data.data;
-                  setProfessionalData(prev => {
-                    const newData = {
-                      ...prev,
-                      [data.section]: sectionData
-                    };
-                    console.log(`Updated professional data for section ${data.section}:`, newData);
-                    return newData;
-                  });
-                }
-
-                // Update section status
-                setSectionStatus(prev => {
-                  const newStatus = { ...prev, [data.section]: 'completed' };
-                  console.log('Updated section status:', newStatus);
-                  return newStatus;
-                });
-
-                // Add notification for section completion
-                const sectionName = data.section.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
-                addNotification({
-                  type: 'complete',
-                  title: `✅ ${sectionName} Complete`,
-                  message: `${sectionName} analysis completed successfully! New insights are now available in your career profile.`,
-                  timestamp: Date.now()
-                });
-
-                // Dispatch section completion event (browser only)
-                if (typeof document !== 'undefined' && typeof document.querySelector === 'function') {
-                  const completeEvent = new CustomEvent('sectionComplete', {
-                    bubbles: true,
-                    detail: {
-                      section: data.section,
-                      data: data.data,
-                      error: data.error
-                    }
-                  });
-                  document.querySelector('[data-agent-type="career"]')?.dispatchEvent(completeEvent);
-                }
-              } else if (data.type === 'analysis_complete') {
-                // Add notification for analysis completion
-                if (data.success) {
-                  addNotification({
-                    type: 'complete',
-                    title: '✅ Resume Analysis Complete',
-                    message: 'Resume analysis completed successfully! All insights are now available in your career profile.',
-                    timestamp: Date.now()
-                  });
-                } else if (data.error) {
-                  addNotification({
-                    type: 'error',
-                    title: 'Analysis Failed',
-                    message: 'There was an error completing your career analysis',
-                    details: data.error
-                  });
-                }
-
-                // Dispatch analysis completion event (browser only)
-                if (typeof document !== 'undefined' && typeof document.querySelector === 'function') {
-                  const analysisCompleteEvent = new CustomEvent('analysisComplete', {
-                    bubbles: true,
-                    detail: {
-                      success: data.success,
-                      error: data.error,
-                      professional_data: data.professional_data
-                    }
-                  });
-                  document.querySelector('[data-agent-type="career"]')?.dispatchEvent(analysisCompleteEvent);
-                }
-                break;
-              }
-            } catch (parseError) {
-              console.error('Error parsing streaming data:', parseError);
-            }
-          }
-        }
-      }
-
-      // Fallback: Ensure isAnalyzing is reset when stream ends
-      // This handles cases where the analysisComplete event might not be dispatched/received
-      if (streamCompleted) {
-        setAnalysisProgress(prev => {
-          // Only reset if we're still in analyzing state (not already reset by event handler)
-          if (prev.isAnalyzing) {
-            console.log('Stream completed - resetting isAnalyzing state as fallback');
-            return {
-              ...prev,
-              isAnalyzing: false,
-              currentSection: null
-            };
-          }
-          return prev;
+      // CRITICAL: Use externalStartGlobalAnalysisStream when available
+      // This ensures proper cancellation support via UnifiedSidebar's generation counter
+      if (externalStartGlobalAnalysisStream) {
+        console.log('Using externalStartGlobalAnalysisStream for analysis with cancellation support');
+        await externalStartGlobalAnalysisStream(
+          user.id,
+          mostRecentDoc.id,
+          mostRecentDoc.original_filename
+        );
+      } else {
+        // Fallback: Log warning and show error - external stream should always be available
+        console.error('externalStartGlobalAnalysisStream not available - cancellation will not work properly');
+        addNotification({
+          type: 'error',
+          title: 'Configuration Error',
+          message: 'Analysis system not properly configured. Please refresh the page.',
+          details: 'Missing streaming handler'
         });
       }
     } catch (error) {
@@ -1726,7 +1585,7 @@ const CareerAgent = ({
         isAnalyzing: false,
         error: `Failed to analyze resume: ${error.message}`
       }));
-      
+
       addNotification({
         type: 'error',
         title: 'Analysis Failed',
@@ -2658,6 +2517,8 @@ const careerInsights = {
               <DocumentManager
                   analysisProgress={analysisProgress}
                   startGlobalAnalysisStream={externalStartGlobalAnalysisStream}
+                  cancelAnalysis={externalCancelAnalysis}
+                  analyzingDocumentId={externalAnalyzingDocumentId}
                 />
             </div>
           </div>
@@ -4883,19 +4744,32 @@ const careerInsights = {
               {/* Title or empty space for alignment */}
             </div>
             <div className="flex items-center space-x-4">
-              <button
-                onClick={handleAnalyzeResume}
-                className="bg-gradient-to-r from-green-600 to-teal-600 text-white px-6 py-2 rounded-lg font-medium hover:shadow-lg transition-all duration-200 flex items-center space-x-2"
-                disabled={analysisProgress.isAnalyzing}
-              >
-                <DocumentTextIcon className="h-5 w-5" />
-                <span>{analysisProgress.isAnalyzing ? 'Analyzing...' : 'Analyze Recent Resume'}</span>
-              </button>
+              {analysisProgress.isAnalyzing ? (
+                <button
+                  onClick={() => externalCancelAnalysis && externalCancelAnalysis()}
+                  disabled={analysisProgress.isCancelling}
+                  className={`${analysisProgress.isCancelling
+                    ? 'bg-gradient-to-r from-yellow-500 to-orange-500 cursor-not-allowed'
+                    : 'bg-gradient-to-r from-red-500 to-red-600 hover:shadow-lg'
+                  } text-white px-6 py-2 rounded-lg font-medium transition-all duration-200 flex items-center space-x-2`}
+                >
+                  <StopIcon className={`h-5 w-5 ${analysisProgress.isCancelling ? 'animate-pulse' : ''}`} />
+                  <span>{analysisProgress.isCancelling ? 'Cancelling...' : 'Cancel Analysis'}</span>
+                </button>
+              ) : (
+                <button
+                  onClick={handleAnalyzeResume}
+                  className="bg-gradient-to-r from-green-600 to-teal-600 text-white px-6 py-2 rounded-lg font-medium hover:shadow-lg transition-all duration-200 flex items-center space-x-2"
+                >
+                  <DocumentTextIcon className="h-5 w-5" />
+                  <span>Analyze Recent Resume</span>
+                </button>
+              )}
               <button
                 onClick={handlePersonalAssistant}
                 className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-2 rounded-lg font-medium hover:shadow-lg transition-all duration-200"
               >
-                Ask Career Agent
+                Ask Personal Assistant
               </button>
 
               {/* Only show NotificationPanel and Avatar when standalone (showSidebar=true) */}

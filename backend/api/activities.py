@@ -40,6 +40,82 @@ class ActivitySummaryResponse(BaseModel):
     period_end: str
 
 
+class DailyActivityItem(BaseModel):
+    """Model for daily activity data point"""
+    date: str
+    day: str
+    count: int
+
+
+class MostActiveDay(BaseModel):
+    """Model for most active day info"""
+    date: str
+    count: int
+
+
+class MostUsedSource(BaseModel):
+    """Model for most used source info"""
+    source: str
+    count: int
+
+
+class TimeOfDayDistribution(BaseModel):
+    """Model for time of day activity distribution"""
+    morning: int = 0
+    afternoon: int = 0
+    evening: int = 0
+    night: int = 0
+
+
+class WeekdayDistributionItem(BaseModel):
+    """Model for weekday activity distribution"""
+    day: str
+    count: int
+
+
+class MostActiveWeekday(BaseModel):
+    """Model for most active weekday"""
+    day: str
+    count: int
+
+
+class HeatmapItem(BaseModel):
+    """Model for weekly heatmap data point"""
+    day: int
+    hour: int
+    count: int
+
+
+class UsageAnalyticsResponse(BaseModel):
+    """Response model for comprehensive usage analytics"""
+    total_activities: int
+    daily_activity: List[DailyActivityItem]
+    activity_by_type: dict
+    activity_by_source: dict
+    most_active_day: Optional[MostActiveDay]
+    most_used_source: Optional[MostUsedSource]
+    average_daily_activities: float
+    streak_days: int
+    days_with_activity: Optional[int] = 0
+    total_days: Optional[int] = 30
+    time_of_day: TimeOfDayDistribution
+    peak_time: Optional[str] = None
+    agent_usage: dict
+    # Enhanced analytics
+    hourly_distribution: List[int]
+    weekday_distribution: List[WeekdayDistributionItem]
+    most_active_weekday: Optional[MostActiveWeekday]
+    weekly_heatmap: List[HeatmapItem]
+    this_week_count: int = 0
+    last_week_count: int = 0
+    wow_change: float = 0
+    trend: str = "stable"
+    engagement_rate: float = 0
+    peak_hour: Optional[int] = None
+    period_start: str
+    period_end: str
+
+
 class CreateActivityRequest(BaseModel):
     """Request model for creating activities"""
     activity_type: str
@@ -148,6 +224,29 @@ async def get_activity_summary(
         return ActivitySummaryResponse(**summary)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching activity summary: {str(e)}")
+
+
+@router.get("/analytics", response_model=UsageAnalyticsResponse)
+async def get_usage_analytics(
+    days_back: int = Query(30, description="Number of days to analyze", ge=1, le=365),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get comprehensive usage analytics for the current user.
+    Returns daily activity counts, activity breakdown by type and source,
+    streak information, and other usage metrics.
+    """
+    try:
+        analytics = ActivityService.get_usage_analytics(
+            db=db,
+            user_id=current_user.id,
+            days_back=days_back
+        )
+
+        return UsageAnalyticsResponse(**analytics)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching usage analytics: {str(e)}")
 
 
 @router.post("/", response_model=ActivityResponse)

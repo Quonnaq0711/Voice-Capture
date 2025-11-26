@@ -7,7 +7,6 @@ import {
   CalendarIcon,
   CheckCircleIcon,
   ExclamationTriangleIcon,
-  ChartBarIcon,
   DocumentTextIcon,
   DocumentArrowUpIcon
 } from '@heroicons/react/24/outline';
@@ -15,8 +14,6 @@ import { Search, Filter, X, FileText, FileType, File } from 'lucide-react';
 import { activities as activitiesAPI, auth as authAPI } from '../../services/api';
 
 export default function Documents({
-  analysisProgress,
-  startGlobalAnalysisStream, // Global stream handler from parent
   onUploadClick // Optional callback when upload is initiated
 }) {
   const [documents, setDocuments] = useState([]);
@@ -260,40 +257,6 @@ export default function Documents({
       ? `/resumes/${document.user_id}/${document.filename}`
       : `${process.env.REACT_APP_BACKEND_URL || 'http://localhost:5000'}/resumes/${document.user_id}/${document.filename}`;
     window.open(documentUrl, '_blank');
-  };
-
-  // Handle document analysis
-  const handleAnalyze = async (document) => {
-    if (analysisProgress?.isAnalyzing) {
-      return;
-    }
-
-    if (!startGlobalAnalysisStream) {
-      showToast('Analysis functionality not available', 'error');
-      return;
-    }
-
-    try {
-      // Track resume analysis activity
-      await activitiesAPI.createActivity({
-        activity_type: 'analysis',
-        activity_source: 'documents',
-        activity_title: `Analyzing ${document.original_filename}`,
-        activity_description: 'Started resume analysis',
-        activity_metadata: {
-          resume_filename: document.original_filename,
-          document_id: document.id,
-          source_type: 'document_history'
-        }
-      });
-
-      showToast('Starting document analysis...', 'success');
-
-      // Call global stream handler - this keeps running even when user switches pages
-      await startGlobalAnalysisStream(document.user_id, document.id, document.original_filename);
-    } catch (error) {
-      showToast('Failed to analyze document: ' + error.message, 'error');
-    }
   };
 
   // Handle document delete

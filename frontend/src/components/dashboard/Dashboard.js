@@ -333,11 +333,6 @@ const Dashboard = () => {
     }
   }, [userData.first_name, user]);
 
-  // Re-fetch activities when showAllActivities changes
-  useEffect(() => {
-    fetchRecentActivities();
-  }, [fetchRecentActivities]);
-
   // Setup timer to update time display dynamically
   useEffect(() => {
     // Simple timer that updates every 10 seconds
@@ -527,6 +522,79 @@ const Dashboard = () => {
     return iconMap[iconName] || BriefcaseIcon; // Default to BriefcaseIcon
   };
 
+  // Agent modules available in the dashboard
+  const agentModules = [
+    {
+      name: 'Career Agent',
+      description: 'Get personalized career advice, resume analysis, and job recommendations.',
+      icon: BriefcaseIcon,
+      color: 'text-blue-500',
+      path: '/agents/career',
+    },
+    {
+      name: 'Money Agent',
+      description: 'Receive insights on financial planning, budgeting, and investment strategies.',
+      icon: CurrencyDollarIcon,
+      color: 'text-green-500',
+      path: '/agents/money',
+    },
+    {
+      name: 'Mind Agent',
+      description: 'Support for mental well-being, stress management, and mindfulness.',
+      icon: HeartIcon,
+      color: 'text-pink-500',
+      path: '/agents/mind',
+    },
+    {
+      name: 'Travel Agent',
+      description: 'Plan your next trip with personalized recommendations and itineraries.',
+      icon: GlobeAltIcon,
+      color: 'text-indigo-500',
+      path: '/agents/travel',
+    },
+    {
+      name: 'Wellness',
+      description: 'Personalized health and fitness guidance for your physical well-being.',
+      icon: SparklesIcon,
+      color: 'text-purple-500',
+      path: '/agents/body',
+    },
+    {
+      name: 'Family Life Agent',
+      description: 'Support and advice for maintaining healthy family relationships and work-life balance.',
+      icon: HomeIcon,
+      color: 'text-yellow-500',
+      path: '/agents/family-life',
+    },
+    {
+      name: 'Hobby Agent',
+      description: 'Discover and develop new interests, skills, and recreational activities.',
+      icon: BookOpenIcon,
+      color: 'text-orange-500',
+      path: '/agents/hobby',
+    },
+    {
+      name: 'Knowledge Agent',
+      description: 'Enhance your learning journey with personalized knowledge management strategies.',
+      icon: AcademicCapIcon,
+      color: 'text-cyan-500',
+      path: '/agents/knowledge',
+    },
+    {
+      name: 'Personal Development Agent',
+      description: 'Achieve personal growth through goal setting and skill development.',
+      icon: FireIcon,
+      color: 'text-red-500',
+      path: '/agents/personal-dev',
+    },
+    {
+      name: 'Spiritual Agent',
+      description: 'Guidance for spiritual growth, meditation, and inner peace.',
+      icon: SunIcon,
+      color: 'text-amber-500',
+      path: '/agents/spiritual',
+    },
+  ];
 
   // Sort agents based on recommendations (memoized to avoid re-sorting on every render)
   const sortedAgents = useMemo(() => {
@@ -582,6 +650,11 @@ const fetchAvatar = async () => {
       dispatch({ type: 'SET_LOADING_ACTIVITIES', payload: false });
     }
   }, [showAllActivities]);
+
+  // Re-fetch activities when showAllActivities changes
+  useEffect(() => {
+    fetchRecentActivities();
+  }, [fetchRecentActivities]);
 
   // Fetch activity summary
   const fetchActivitySummary = async () => {
@@ -729,80 +802,6 @@ const fetchAvatar = async () => {
   const handleTabChange = (tabId) => {
     dispatch({ type: 'SET_ACTIVE_TAB', payload: tabId });
   };
-
-  // Agent modules available in the dashboard
-  const agentModules = [
-    {
-      name: 'Career Agent',
-      description: 'Get personalized career advice, resume analysis, and job recommendations.',
-      icon: BriefcaseIcon,
-      color: 'text-blue-500',
-      path: '/agents/career',
-    },
-    {
-      name: 'Money Agent',
-      description: 'Receive insights on financial planning, budgeting, and investment strategies.',
-      icon: CurrencyDollarIcon,
-      color: 'text-green-500',
-      path: '/agents/money',
-    },
-    {
-      name: 'Mind Agent',
-      description: 'Support for mental well-being, stress management, and mindfulness.',
-      icon: HeartIcon,
-      color: 'text-pink-500',
-      path: '/agents/mind',
-    },
-    {
-      name: 'Travel Agent',
-      description: 'Plan your next trip with personalized recommendations and itineraries.',
-      icon: GlobeAltIcon,
-      color: 'text-indigo-500',
-      path: '/agents/travel',
-    },
-    {
-      name: 'Wellness',
-      description: 'Personalized health and fitness guidance for your physical well-being.',
-      icon: SparklesIcon,
-      color: 'text-purple-500',
-      path: '/agents/body',
-    },
-    {
-      name: 'Family Life Agent',
-      description: 'Support and advice for maintaining healthy family relationships and work-life balance.',
-      icon: HomeIcon,
-      color: 'text-yellow-500',
-      path: '/agents/family-life',
-    },
-    {
-      name: 'Hobby Agent',
-      description: 'Discover and develop new interests, skills, and recreational activities.',
-      icon: BookOpenIcon,
-      color: 'text-orange-500',
-      path: '/agents/hobby',
-    },
-    {
-      name: 'Knowledge Agent',
-      description: 'Enhance your learning journey with personalized knowledge management strategies.',
-      icon: AcademicCapIcon,
-      color: 'text-cyan-500',
-      path: '/agents/knowledge',
-    },
-    {
-      name: 'Personal Development Agent',
-      description: 'Achieve personal growth through goal setting and skill development.',
-      icon: FireIcon,
-      color: 'text-red-500',
-      path: '/agents/personal-dev',
-    },
-    {
-      name: 'Spiritual Agent',
-      description: 'Guidance for spiritual growth, meditation, and inner peace.',
-      icon: SunIcon,
-      color: 'text-amber-500',
-      path: '/agents/spiritual',
-    },
-  ];
 
   // Tab configuration
   const dashboardTabs = [

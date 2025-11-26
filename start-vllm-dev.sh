@@ -49,6 +49,11 @@ else
     echo -e "${YELLOW}⚠️  .env.dev not found, using default configuration${NC}"
 fi
 
+# Set HuggingFace cache directory to /home/idii/data/vllm-cache
+export HF_HOME="/home/idii/data/vllm-cache"
+mkdir -p "$HF_HOME"
+echo -e "${GREEN}📁 HuggingFace cache directory: $HF_HOME${NC}"
+
 # Read configuration (with defaults)
 MODEL=${VLLM_MODEL:-"Qwen/Qwen2.5-3B-Instruct"}
 HOST=${VLLM_HOST:-"0.0.0.0"}

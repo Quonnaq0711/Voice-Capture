@@ -53,10 +53,12 @@ async def create_session(
         )
 
         # Create new session as active
-        cursor = db.execute(
+        # Use RETURNING id for PostgreSQL compatibility (lastrowid only works with SQLite/MySQL)
+        result = db.execute(
             text("""
             INSERT INTO chat_sessions (user_id, session_name, first_message_time, created_at, is_active, unread)
             VALUES (:user_id, :session_name, :first_message_time, :created_at, TRUE, FALSE)
+            RETURNING id
             """),
             {
                 "user_id": current_user.id,
@@ -66,7 +68,7 @@ async def create_session(
             }
         )
 
-        session_id = cursor.lastrowid
+        session_id = result.fetchone()[0]
         db.commit()
 
         return {

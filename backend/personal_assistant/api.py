@@ -105,18 +105,36 @@ class OptimizeQueryResponse(BaseModel):
             }
         }
 
+def verify_internal_api_key(api_key: str = Query(None, alias="api_key")):
+    """
+    Verify internal API key for service-to-service communication.
+
+    This endpoint is internal-only and requires the INTERNAL_API_KEY.
+    """
+    internal_api_key = os.getenv("INTERNAL_API_KEY", "dev-internal-key-change-in-production")
+
+    if not api_key or api_key != internal_api_key:
+        logger.warning("Internal API call rejected: invalid or missing API key")
+        raise HTTPException(
+            status_code=403,
+            detail="Invalid or missing internal API key"
+        )
+    return True
+
+
 @router.post("/message", response_model=ChatResponse)
 async def send_message(
     chat_request: ChatRequest,
     request: Request,
     chat_service: BaseChatService = Depends(get_chat_service),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _: bool = Depends(verify_internal_api_key)
 ):
     """
     Send a message to the AI assistant and get a response.
 
-    Internal service - called by Backend API which handles user authentication.
-    Trusts Backend to validate user permissions.
+    Internal service - protected by internal API key.
+    Only trusted backend services with valid INTERNAL_API_KEY can call this endpoint.
 
     Args:
         chat_request: Chat request containing the user message and user_id

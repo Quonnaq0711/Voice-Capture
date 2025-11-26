@@ -53,7 +53,7 @@ module.exports = {
 
   // Transform node_modules that use ES modules
   transformIgnorePatterns: [
-    'node_modules/(?!(axios)/)',
+    'node_modules/(?!(axios|lucide-react)/)',
   ],
   
   // Module directories

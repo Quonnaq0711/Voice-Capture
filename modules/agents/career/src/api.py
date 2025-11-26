@@ -44,6 +44,7 @@ from fastapi import Request, Query
 @router.post("/message")
 async def send_message(
     chat_request: ChatRequest,
+    current_user: User = Depends(get_current_user),
     chat_service: BaseChatService = Depends(get_chat_service),
     db: Session = Depends(get_db)
 ):
@@ -73,7 +74,9 @@ async def send_message(
     try:
         result = await chat_service.generate_response(
             user_message=chat_request.message,
-            session_id=chat_request.session_id
+            session_id=chat_request.session_id,
+            user_id=current_user.id,
+            db=db
         )
         return result
     except Exception as e:

@@ -52,7 +52,7 @@ services:
       DB_PASSWORD: ${DB_PASSWORD:-postgres}
     depends_on:
       - db-staging
-      - ollama-staging
+      - vllm-server
     networks:
       - staging-network
     volumes:
@@ -124,10 +124,68 @@ services:
       timeout: 5s
       retries: 5
 
+  # ============================================
+  # vLLM Server (High-Performance LLM Inference)
+  # ============================================
+  # Replaces Ollama for production workloads
+  # Benefits: 2-5x faster inference, better GPU utilization
+  vllm-server:
+    image: vllm/vllm-openai:latest
+    container_name: idii-vllm-staging
+    restart: unless-stopped
+    ports:
+      - "8888:8888"
+    environment:
+      HF_TOKEN: "${HF_TOKEN}"
+      HUGGING_FACE_HUB_TOKEN: "${HF_TOKEN}"
+    command:
+      - "--model"
+      - "${VLLM_MODEL:-google/gemma-3-4b-it}"
+      - "--host"
+      - "0.0.0.0"
+      - "--port"
+      - "8888"
+      - "--gpu-memory-utilization"
+      - "${VLLM_GPU_MEMORY_UTILIZATION:-0.85}"
+      - "--max-model-len"
+      - "${VLLM_MAX_MODEL_LEN:-8192}"
+      - "--dtype"
+      - "${VLLM_DTYPE:-bfloat16}"
+      - "--trust-remote-code"
+    volumes:
+      - /home/idii/data/vllm-cache:/root/.cache/huggingface
+    networks:
+      staging-network:
+        aliases:
+          - vllm-server
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+        limits:
+          memory: 12G
+    runtime: nvidia
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8888/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      start_period: 120s
+      retries: 3
+
+  # ============================================
+  # Ollama Services (Legacy - kept for fallback)
+  # ============================================
+  # Note: When LLM_PROVIDER=vllm, these are not started
+  # To use Ollama, set LLM_PROVIDER=ollama in .env.staging
   ollama-staging:
     image: ollama/ollama:latest
     container_name: idii-ollama-staging
     restart: unless-stopped
+    profiles:
+      - ollama  # Only starts with --profile ollama
     ports:
       - "11434:11434"
     environment:
@@ -136,7 +194,7 @@ services:
       NVIDIA_VISIBLE_DEVICES: "all"
       NVIDIA_DRIVER_CAPABILITIES: "compute,utility"
     volumes:
-      - ./data/ollama-staging:/root/.ollama
+      - /home/idii/data/ollama-staging:/root/.ollama
     networks:
       staging-network:
         aliases:
@@ -154,6 +212,8 @@ services:
     image: ollama/ollama:latest
     container_name: idii-ollama2-staging
     restart: unless-stopped
+    profiles:
+      - ollama  # Only starts with --profile ollama
     ports:
       - "11435:11434"
     environment:
@@ -162,7 +222,7 @@ services:
       NVIDIA_VISIBLE_DEVICES: "all"
       NVIDIA_DRIVER_CAPABILITIES: "compute,utility"
     volumes:
-      - ./data/ollama2-staging:/root/.ollama
+      - /home/idii/data/ollama2-staging:/root/.ollama
     networks:
       staging-network:
         aliases:
@@ -187,7 +247,8 @@ services:
     env_file:
       - .env.staging
     environment:
-      CAREER_OLLAMA_URL: "http://ollama2-staging:11434"
+      # vLLM API endpoint (OpenAI-compatible)
+      VLLM_API_BASE: "http://vllm-server:8888/v1"
       DB_TYPE: postgresql
       DB_HOST: db-staging
       DB_PORT: 5432
@@ -196,7 +257,7 @@ services:
       DB_PASSWORD: ${DB_PASSWORD:-postgres}
     depends_on:
       - db-staging
-      - ollama2-staging
+      - vllm-server
     networks:
       - staging-network
     volumes:

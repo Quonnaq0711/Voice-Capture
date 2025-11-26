@@ -1,8 +1,10 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
   MessageSquare,
   Clock,
   TrendingUp,
+  TrendingDown,
+  Minus,
   FileText,
   User,
   Calendar,
@@ -11,255 +13,470 @@ import {
   RefreshCw,
   BarChart3,
   Sparkles,
-  Mail,
   Filter,
   FolderOpen,
   Send,
-  PenLine,
-  X
+  X,
+  Flame,
+  Activity,
+  Award
 } from 'lucide-react';
 import {
   BriefcaseIcon,
   CurrencyDollarIcon,
   HeartIcon,
   MapPinIcon,
-  AcademicCapIcon,
   HomeIcon,
   PuzzlePieceIcon,
-  BookOpenIcon,
-  SparklesIcon,
-  ChartBarIcon,
-  FireIcon,
-  ClockIcon,
-  CalendarIcon
+  SparklesIcon
 } from '@heroicons/react/24/outline';
-import { sessions as sessionsAPI } from '../../services/api';
+import { sessions as sessionsAPI, activities as activitiesAPIService } from '../../services/api';
 import { formatTime as formatTimeUTC } from '../../utils/timeFormatter';
 
-// Usage Analytics Component
-const UsageAnalytics = () => {
-  const [analyticsData, setAnalyticsData] = useState({
-    weeklyUsage: [],
-    agentStats: [],
-    totalSessions: 0,
-    totalMessages: 0,
-    mostUsedAgent: '',
-    loading: true
-  });
+// Animated Counter Component - Fixed: Use ref to track start value and avoid dependency issues
+const AnimatedCounter = ({ value, duration = 1000 }) => {
+  const [displayValue, setDisplayValue] = useState(0);
+  const startValueRef = useRef(0);
 
-  const agentTabs = [
-    { id: 'career', name: 'Career', icon: BriefcaseIcon, color: 'blue' },
-    { id: 'money', name: 'Money', icon: CurrencyDollarIcon, color: 'green' },
-    { id: 'body', name: 'Wellness', icon: HeartIcon, color: 'red' },
-    { id: 'travel', name: 'Travel', icon: MapPinIcon, color: 'purple' },
-    { id: 'mind', name: 'Mind', icon: AcademicCapIcon, color: 'indigo' },
-    { id: 'family', name: 'Family', icon: HomeIcon, color: 'orange' },
-    { id: 'hobby', name: 'Hobby', icon: PuzzlePieceIcon, color: 'pink' },
-    { id: 'knowledge', name: 'Knowledge', icon: BookOpenIcon, color: 'teal' },
-    { id: 'spiritual', name: 'Spiritual', icon: SparklesIcon, color: 'yellow' }
-  ];
+  useEffect(() => {
+    let startTime;
+    let animationFrame;
+    const startValue = startValueRef.current;
+    const endValue = value;
+
+    const animate = (timestamp) => {
+      if (!startTime) startTime = timestamp;
+      const progress = Math.min((timestamp - startTime) / duration, 1);
+      const easeOut = 1 - Math.pow(1 - progress, 3);
+      const newValue = Math.floor(startValue + (endValue - startValue) * easeOut);
+      setDisplayValue(newValue);
+
+      if (progress < 1) {
+        animationFrame = requestAnimationFrame(animate);
+      } else {
+        startValueRef.current = endValue;
+      }
+    };
+
+    animationFrame = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(animationFrame);
+  }, [value, duration]);
+
+  return <span>{displayValue}</span>;
+};
+
+// Progress Ring Component
+const ProgressRing = ({ value, max, size = 80, strokeWidth = 8, color = '#F97316' }) => {
+  const radius = (size - strokeWidth) / 2;
+  const circumference = radius * 2 * Math.PI;
+  const percentage = max > 0 ? Math.min((value / max) * 100, 100) : 0;
+  const offset = circumference - (percentage / 100) * circumference;
+
+  return (
+    <svg width={size} height={size} className="transform -rotate-90">
+      <circle
+        cx={size / 2}
+        cy={size / 2}
+        r={radius}
+        fill="none"
+        stroke="#E5E7EB"
+        strokeWidth={strokeWidth}
+      />
+      <circle
+        cx={size / 2}
+        cy={size / 2}
+        r={radius}
+        fill="none"
+        stroke={color}
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+        strokeDasharray={circumference}
+        strokeDashoffset={offset}
+        className="transition-all duration-1000 ease-out"
+      />
+    </svg>
+  );
+};
+
+// Feature configuration - moved outside component to prevent recreation
+const FEATURE_CONFIG = {
+  'Personal Assistant': { color: '#3B82F6', icon: Sparkles },
+  'Career Agent': { color: '#F97316', icon: BriefcaseIcon },
+  'Documents': { color: '#8B5CF6', icon: FileText },
+  'Travel Agent': { color: '#EC4899', icon: MapPinIcon },
+  'Wellness': { color: '#EF4444', icon: HeartIcon },
+  'Money Agent': { color: '#22C55E', icon: CurrencyDollarIcon },
+  'Hobby Agent': { color: '#F59E0B', icon: PuzzlePieceIcon },
+  'Family': { color: '#06B6D4', icon: HomeIcon },
+  'Spiritual': { color: '#A855F7', icon: SparklesIcon }
+};
+
+// Usage Analytics Component with ref for refresh
+const UsageAnalytics = React.forwardRef((props, ref) => {
+  const [analyticsData, setAnalyticsData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [timeRange, setTimeRange] = useState(7);
+
+  // Memoize fetchAnalyticsData with useCallback
+  const fetchAnalyticsData = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await activitiesAPIService.getUsageAnalytics(timeRange);
+      setAnalyticsData(data);
+    } catch (err) {
+      console.error('Failed to fetch analytics data:', err);
+      setError('Failed to load analytics. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  }, [timeRange]);
 
   useEffect(() => {
     fetchAnalyticsData();
-  }, []);
+  }, [fetchAnalyticsData]);
 
-  const fetchAnalyticsData = async () => {
-    try {
-      // Simulate API call - replace with actual API endpoint
-      await new Promise(resolve => setTimeout(resolve, 1000));
+  // Expose refresh method to parent - Fixed: add fetchAnalyticsData as dependency
+  React.useImperativeHandle(ref, () => ({ refresh: fetchAnalyticsData }), [fetchAnalyticsData]);
 
-      // Mock data for demonstration
-      const mockData = {
-        weeklyUsage: [
-          { day: 'Mon', career: 12, money: 8, body: 5, travel: 3, mind: 15, family: 7, hobby: 4, knowledge: 10, spiritual: 2 },
-          { day: 'Tue', career: 15, money: 12, body: 8, travel: 6, mind: 18, family: 9, hobby: 6, knowledge: 14, spiritual: 4 },
-          { day: 'Wed', career: 18, money: 15, body: 12, travel: 8, mind: 22, family: 11, hobby: 8, knowledge: 16, spiritual: 6 },
-          { day: 'Thu', career: 22, money: 18, body: 15, travel: 12, mind: 25, family: 14, hobby: 10, knowledge: 20, spiritual: 8 },
-          { day: 'Fri', career: 25, money: 20, body: 18, travel: 15, mind: 28, family: 16, hobby: 12, knowledge: 22, spiritual: 10 },
-          { day: 'Sat', career: 20, money: 16, body: 14, travel: 18, mind: 24, family: 20, hobby: 15, knowledge: 18, spiritual: 12 },
-          { day: 'Sun', career: 16, money: 12, body: 10, travel: 14, mind: 20, family: 18, hobby: 14, knowledge: 16, spiritual: 15 }
-        ],
-        agentStats: [
-          { agent: 'mind', usage: 162, sessions: 45, avgDuration: '8.5 min', trend: '+12%', satisfaction: 4.8, efficiency: 92 },
-          { agent: 'career', usage: 128, sessions: 38, avgDuration: '12.3 min', trend: '+8%', satisfaction: 4.6, efficiency: 88 },
-          { agent: 'knowledge', usage: 116, sessions: 35, avgDuration: '10.2 min', trend: '+15%', satisfaction: 4.7, efficiency: 90 },
-          { agent: 'money', usage: 101, sessions: 32, avgDuration: '9.8 min', trend: '+5%', satisfaction: 4.5, efficiency: 85 },
-          { agent: 'family', usage: 95, sessions: 28, avgDuration: '11.5 min', trend: '+18%', satisfaction: 4.9, efficiency: 94 },
-          { agent: 'body', usage: 82, sessions: 25, avgDuration: '7.2 min', trend: '+3%', satisfaction: 4.4, efficiency: 82 },
-          { agent: 'travel', usage: 76, sessions: 22, avgDuration: '13.1 min', trend: '+22%', satisfaction: 4.8, efficiency: 91 },
-          { agent: 'hobby', usage: 69, sessions: 20, avgDuration: '6.8 min', trend: '+7%', satisfaction: 4.3, efficiency: 79 },
-          { agent: 'spiritual', usage: 57, sessions: 18, avgDuration: '14.2 min', trend: '+25%', satisfaction: 4.9, efficiency: 95 }
-        ],
-        totalSessions: 263,
-        totalMessages: 886,
-        mostUsedAgent: 'mind',
-        timeDistribution: {
-          morning: { sessions: 78, percentage: 29.7, peak: '9:00 AM' },
-          afternoon: { sessions: 102, percentage: 38.8, peak: '2:30 PM' },
-          evening: { sessions: 68, percentage: 25.9, peak: '7:00 PM' },
-          night: { sessions: 15, percentage: 5.7, peak: '11:30 PM' }
-        },
-        usagePatterns: {
-          averageSessionLength: '10.2 min',
-          longestSession: '45 min',
-          shortestSession: '2 min',
-          peakUsageDay: 'Friday',
-          quietestDay: 'Sunday',
-          streakDays: 12,
-          weeklyGrowth: '+15.3%'
-        },
-        productivityMetrics: {
-          taskCompletionRate: 87.5,
-          averageResponseTime: '2.3s',
-          userSatisfactionScore: 4.6,
-          goalAchievementRate: 73.2,
-          knowledgeRetentionScore: 82.1
-        },
-        monthlyComparison: [
-          { month: 'Jan', sessions: 180, messages: 620, satisfaction: 4.2 },
-          { month: 'Feb', sessions: 195, messages: 685, satisfaction: 4.3 },
-          { month: 'Mar', sessions: 220, messages: 750, satisfaction: 4.5 },
-          { month: 'Apr', sessions: 245, messages: 820, satisfaction: 4.6 },
-          { month: 'May', sessions: 263, messages: 886, satisfaction: 4.6 }
-        ],
-        insights: [
-          {
-            type: 'peak_performance',
-            title: 'Peak Performance Time',
-            description: 'You are most productive between 2-4 PM with 38.8% of your sessions.',
-            recommendation: 'Schedule important tasks during afternoon hours for optimal results.',
-            impact: 'high'
-          },
-          {
-            type: 'agent_preference',
-            title: 'Learning Focus',
-            description: 'Mind and Career agents account for 55% of your usage, showing strong focus on personal development.',
-            recommendation: 'Consider exploring Wellness and Travel agents for a more balanced lifestyle approach.',
-            impact: 'medium'
-          },
-          {
-            type: 'consistency',
-            title: 'Consistent Usage',
-            description: 'You have maintained a 12-day streak, showing excellent engagement.',
-            recommendation: 'Keep up the momentum! Set daily reminders to maintain your streak.',
-            impact: 'high'
-          },
-          {
-            type: 'efficiency',
-            title: 'Session Efficiency',
-            description: 'Your average session length of 10.2 minutes indicates focused, productive interactions.',
-            recommendation: 'Continue with current session patterns for optimal learning outcomes.',
-            impact: 'medium'
-          }
-        ]
-      };
+  const weekdayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
-      setAnalyticsData({ ...mockData, loading: false });
-    } catch (error) {
-      console.error('Failed to fetch analytics data:', error);
-      setAnalyticsData(prev => ({ ...prev, loading: false }));
-    }
+  // Optimized heatmap lookup - O(1) instead of O(n) per cell
+  const heatmapLookup = useMemo(() => {
+    const map = new Map();
+    let maxCount = 0;
+    analyticsData?.weekly_heatmap?.forEach(h => {
+      map.set(`${h.day}-${h.hour}`, h.count);
+      if (h.count > maxCount) maxCount = h.count;
+    });
+    return { map, maxCount: Math.max(maxCount, 1) };
+  }, [analyticsData?.weekly_heatmap]);
+
+  const getHeatmapColor = (count, maxCount) => {
+    if (count === 0) return 'bg-gray-100';
+    const intensity = maxCount > 0 ? count / maxCount : 0;
+    if (intensity > 0.75) return 'bg-orange-500';
+    if (intensity > 0.5) return 'bg-orange-400';
+    if (intensity > 0.25) return 'bg-orange-300';
+    return 'bg-orange-200';
   };
 
-  const getAgentInfo = (agentId) => {
-    return agentTabs.find(tab => tab.id === agentId) || { name: agentId, icon: ChartBarIcon, color: 'gray' };
+  const getTrendInfo = () => {
+    if (!analyticsData) return { icon: Minus, color: 'text-gray-500', bg: 'bg-gray-100' };
+    if (analyticsData.trend === 'up') return { icon: TrendingUp, color: 'text-green-600', bg: 'bg-green-100' };
+    if (analyticsData.trend === 'down') return { icon: TrendingDown, color: 'text-red-600', bg: 'bg-red-100' };
+    return { icon: Minus, color: 'text-gray-600', bg: 'bg-gray-100' };
   };
 
-  const getColorClasses = (color) => {
-    const colorMap = {
-      blue: 'bg-blue-500 text-blue-100 border-blue-400',
-      green: 'bg-green-500 text-green-100 border-green-400',
-      red: 'bg-red-500 text-red-100 border-red-400',
-      purple: 'bg-purple-500 text-purple-100 border-purple-400',
-      indigo: 'bg-indigo-500 text-indigo-100 border-indigo-400',
-      orange: 'bg-orange-500 text-orange-100 border-orange-400',
-      pink: 'bg-pink-500 text-pink-100 border-pink-400',
-      teal: 'bg-teal-500 text-teal-100 border-teal-400',
-      yellow: 'bg-yellow-500 text-yellow-100 border-yellow-400'
-    };
-    return colorMap[color] || 'bg-gray-500 text-gray-100 border-gray-400';
+  const formatHour = (hour) => {
+    if (hour === 0) return '12AM';
+    if (hour === 12) return '12PM';
+    return hour < 12 ? `${hour}AM` : `${hour - 12}PM`;
   };
 
-  if (analyticsData.loading) {
+  if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-        <span className="ml-3 text-gray-600">Loading analytics data...</span>
+      <div className="flex flex-col items-center justify-center py-16">
+        <div className="relative">
+          <div className="animate-spin rounded-full h-12 w-12 border-4 border-orange-200 border-t-orange-500"></div>
+          <div className="absolute inset-0 flex items-center justify-center">
+            <BarChart3 className="h-5 w-5 text-orange-500" />
+          </div>
+        </div>
+        <p className="text-sm text-gray-500 mt-4">Loading analytics...</p>
       </div>
     );
   }
 
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 px-4">
+        <div className="w-14 h-14 bg-red-100 rounded-full flex items-center justify-center mb-4">
+          <X className="h-7 w-7 text-red-500" />
+        </div>
+        <p className="text-sm text-gray-600 mb-4">{error}</p>
+        <button onClick={fetchAnalyticsData} className="px-4 py-2 bg-orange-500 text-white text-sm font-medium rounded-lg hover:bg-orange-600 transition-colors">
+          Retry
+        </button>
+      </div>
+    );
+  }
+
+  if (!analyticsData || analyticsData.total_activities === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 px-4">
+        <div className="w-20 h-20 bg-gradient-to-br from-gray-100 to-gray-200 rounded-2xl flex items-center justify-center mb-4">
+          <BarChart3 className="h-10 w-10 text-gray-400" />
+        </div>
+        <h3 className="text-lg font-semibold text-gray-900 mb-2">No Activity Yet</h3>
+        <p className="text-sm text-gray-500 text-center max-w-xs">
+          Start using the AI assistants to see your usage analytics here.
+        </p>
+      </div>
+    );
+  }
+
+  const trendInfo = getTrendInfo();
+  const TrendIcon = trendInfo.icon;
+  const hourlyDist = analyticsData.hourly_distribution || Array(24).fill(0);
+  const maxHourly = Math.max(...hourlyDist, 1);
+  const weekdayDist = analyticsData.weekday_distribution || [];
+  const maxWeekday = Math.max(...weekdayDist.map(d => d.count), 1);
+
   return (
-    <div className="space-y-6 p-6">
+    <div className="p-4 space-y-4 overflow-y-auto">
       {/* Header */}
-      <div className="text-center mb-8">
-        <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full mb-4">
-          <ChartBarIcon className="h-8 w-8 text-white" />
+      <div className="flex items-center justify-between">
+        <h3 className="text-lg font-bold text-gray-900">Analytics</h3>
+        <div className="inline-flex bg-gray-100 rounded-lg p-0.5">
+          {[{ value: 7, label: '7D' }, { value: 30, label: '30D' }, { value: 90, label: '90D' }].map((option) => (
+            <button
+              key={option.value}
+              onClick={() => setTimeRange(option.value)}
+              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                timeRange === option.value ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-900'
+              }`}
+            >
+              {option.label}
+            </button>
+          ))}
         </div>
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">Usage Analytics</h2>
-        <p className="text-gray-600">Track your AI assistant usage patterns and insights</p>
       </div>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-6 rounded-xl border border-blue-200">
+      {/* Hero Stats - Blue Gradient */}
+      <div className="bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 rounded-2xl p-5 text-white relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16"></div>
+        <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/10 rounded-full -ml-12 -mb-12"></div>
+        <div className="relative z-10">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-blue-600 text-sm font-medium">Total Sessions</p>
-              <p className="text-2xl font-bold text-blue-900">{analyticsData.totalSessions}</p>
+              <p className="text-indigo-100 text-xs font-medium mb-1">Total Activities</p>
+              <p className="text-4xl font-bold">
+                <AnimatedCounter value={analyticsData.total_activities} />
+              </p>
             </div>
-            <div className="w-12 h-12 bg-blue-500 rounded-lg flex items-center justify-center">
-              <ClockIcon className="h-6 w-6 text-white" />
+            <div className={`${trendInfo.bg} rounded-xl p-2`}>
+              <TrendIcon className={`h-6 w-6 ${trendInfo.color}`} />
             </div>
           </div>
-        </div>
-
-        <div className="bg-gradient-to-br from-green-50 to-green-100 p-6 rounded-xl border border-green-200">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-green-600 text-sm font-medium">Total Messages</p>
-              <p className="text-2xl font-bold text-green-900">{analyticsData.totalMessages}</p>
+          <div className="mt-4 flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center">
+                <Flame className="h-4 w-4" />
+              </div>
+              <div>
+                <p className="text-[10px] text-indigo-100">Streak</p>
+                <p className="text-sm font-bold">{analyticsData.streak_days} days</p>
+              </div>
             </div>
-            <div className="w-12 h-12 bg-green-500 rounded-lg flex items-center justify-center">
-              <ChartBarIcon className="h-6 w-6 text-white" />
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-gradient-to-br from-purple-50 to-purple-100 p-6 rounded-xl border border-purple-200">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-purple-600 text-sm font-medium">Most Used Agent</p>
-              <p className="text-2xl font-bold text-purple-900 capitalize">{getAgentInfo(analyticsData.mostUsedAgent).name}</p>
-            </div>
-            <div className="w-12 h-12 bg-purple-500 rounded-lg flex items-center justify-center">
-              <FireIcon className="h-6 w-6 text-white" />
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-gradient-to-br from-orange-50 to-orange-100 p-6 rounded-xl border border-orange-200">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-orange-600 text-sm font-medium">Avg Session Time</p>
-              <p className="text-2xl font-bold text-orange-900">9.8 min</p>
-            </div>
-            <div className="w-12 h-12 bg-orange-500 rounded-lg flex items-center justify-center">
-              <ClockIcon className="h-6 w-6 text-white" />
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center">
+                <TrendingUp className="h-4 w-4" />
+              </div>
+              <div>
+                <p className="text-[10px] text-indigo-100">vs Last Week</p>
+                <p className="text-sm font-bold">{analyticsData.wow_change > 0 ? '+' : ''}{analyticsData.wow_change}%</p>
+              </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Coming Soon Message */}
-      <div className="bg-gradient-to-r from-blue-50 to-purple-50 p-8 rounded-xl border border-blue-200 text-center">
-        <Sparkles className="h-12 w-12 text-purple-600 mx-auto mb-4" />
-        <h3 className="text-xl font-bold text-gray-900 mb-2">Advanced Analytics Coming Soon</h3>
-        <p className="text-gray-600">Detailed usage patterns, productivity metrics, and AI-powered insights will be available in the next update.</p>
+      {/* Quick Stats Grid */}
+      <div className="grid grid-cols-2 gap-3">
+        {/* Engagement Ring - Green */}
+        <div className="bg-white rounded-xl border border-gray-200 p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-[10px] text-gray-500 uppercase tracking-wide">Engagement</p>
+              <p className="text-2xl font-bold text-gray-900 mt-1">{analyticsData.engagement_rate}%</p>
+              <p className="text-[10px] text-gray-400">{analyticsData.days_with_activity}/{analyticsData.total_days} days</p>
+            </div>
+            <div className="relative">
+              <ProgressRing value={analyticsData.engagement_rate} max={100} size={56} strokeWidth={6} color="#10B981" />
+              <div className="absolute inset-0 flex items-center justify-center">
+                <Award className="h-5 w-5 text-emerald-500" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Peak Hour - Amber */}
+        <div className="bg-white rounded-xl border border-gray-200 p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-[10px] text-gray-500 uppercase tracking-wide">Peak Hour</p>
+              <p className="text-2xl font-bold text-gray-900 mt-1">
+                {analyticsData.peak_hour !== null ? formatHour(analyticsData.peak_hour) : 'N/A'}
+              </p>
+              <p className="text-[10px] text-gray-400">Most active time</p>
+            </div>
+            <div className="w-14 h-14 bg-gradient-to-br from-amber-100 to-amber-200 rounded-xl flex items-center justify-center">
+              <Clock className="h-6 w-6 text-amber-600" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Feature Usage */}
+      <div className="bg-white rounded-xl border border-gray-200 p-4">
+        <h4 className="text-sm font-semibold text-gray-900 mb-3">Feature Usage</h4>
+        {Object.keys(analyticsData.agent_usage || {}).length === 0 ? (
+          <p className="text-xs text-gray-500 text-center py-4">No usage data</p>
+        ) : (
+          <div className="space-y-2">
+            {Object.entries(analyticsData.agent_usage)
+              .sort(([,a], [,b]) => b - a)
+              .slice(0, 5)
+              .map(([feature, count]) => {
+                const config = FEATURE_CONFIG[feature] || { color: '#9CA3AF', icon: Activity };
+                const Icon = config.icon;
+                const percentage = analyticsData.total_activities > 0
+                  ? Math.round((count / analyticsData.total_activities) * 100)
+                  : 0;
+                return (
+                  <div key={feature} className="flex items-center gap-3">
+                    <div
+                      className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+                      style={{ backgroundColor: config.color }}
+                    >
+                      <Icon className="h-4 w-4 text-white" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs font-medium text-gray-900">{feature}</span>
+                        <span className="text-xs text-gray-500">{count} ({percentage}%)</span>
+                      </div>
+                      <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                        <div
+                          className="h-full rounded-full transition-all duration-500"
+                          style={{ width: `${percentage}%`, backgroundColor: config.color }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
+        )}
+      </div>
+
+      {/* Weekly Pattern - Bar Chart (Purple) */}
+      <div className="bg-white rounded-xl border border-gray-200 p-4">
+        <h4 className="text-sm font-semibold text-gray-900 mb-3">Weekly Pattern</h4>
+        <div className="flex items-end justify-between gap-2" style={{ height: '100px' }}>
+          {weekdayDist.map((item, index) => {
+            const barHeight = maxWeekday > 0 ? Math.max((item.count / maxWeekday) * 60, 4) : 4;
+            const isToday = new Date().getDay() === (index + 1) % 7;
+            const isMostActive = analyticsData.most_active_weekday?.day === item.day;
+            return (
+              <div key={item.day} className="flex-1 flex flex-col items-center justify-end">
+                <span className="text-[10px] text-gray-500 mb-1">{item.count}</span>
+                <div
+                  className={`w-full rounded-t-lg transition-all duration-300 ${
+                    isMostActive ? 'bg-gradient-to-t from-violet-600 to-purple-500' :
+                    isToday ? 'bg-violet-400' : 'bg-gray-300'
+                  }`}
+                  style={{ height: `${barHeight}px` }}
+                />
+                <span className={`text-[10px] mt-1 ${isToday ? 'text-violet-600 font-bold' : 'text-gray-500'}`}>
+                  {item.day}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Hourly Activity - Bar Chart (Cyan) */}
+      <div className="bg-white rounded-xl border border-gray-200 p-4">
+        <h4 className="text-sm font-semibold text-gray-900 mb-3">Hourly Activity</h4>
+        <div className="flex items-end gap-[2px]" style={{ height: '80px' }}>
+          {hourlyDist.map((count, hour) => {
+            const barHeight = maxHourly > 0 ? Math.max((count / maxHourly) * 56, 2) : 2;
+            const isCurrentHour = new Date().getHours() === hour;
+            return (
+              <div key={hour} className="flex-1 group" title={`${formatHour(hour)}: ${count}`}>
+                <div
+                  className={`w-full rounded-t transition-all duration-200 ${
+                    isCurrentHour ? 'bg-cyan-500' : count > 0 ? 'bg-cyan-300 group-hover:bg-cyan-400' : 'bg-gray-200'
+                  }`}
+                  style={{ height: `${barHeight}px` }}
+                />
+              </div>
+            );
+          })}
+        </div>
+        <div className="flex justify-between mt-1">
+          <span className="text-[9px] text-gray-400">12AM</span>
+          <span className="text-[9px] text-gray-400">6AM</span>
+          <span className="text-[9px] text-gray-400">12PM</span>
+          <span className="text-[9px] text-gray-400">6PM</span>
+          <span className="text-[9px] text-gray-400">11PM</span>
+        </div>
+      </div>
+
+      {/* Activity Heatmap */}
+      <div className="bg-white rounded-xl border border-gray-200 p-4">
+        <div className="flex items-center justify-between mb-4">
+          <h4 className="text-sm font-semibold text-gray-900">Activity Heatmap</h4>
+          <span className="text-[10px] text-gray-400">Hour × Day</span>
+        </div>
+        <div className="overflow-x-auto">
+          <div className="min-w-[400px]">
+            <div className="flex ml-8 mb-1">
+              {[0, 6, 12, 18].map(h => (
+                <div key={h} className="text-[9px] text-gray-400" style={{ width: '25%' }}>
+                  {formatHour(h)}
+                </div>
+              ))}
+            </div>
+            <div className="space-y-1">
+              {weekdayLabels.map((day, dayIndex) => (
+                <div key={day} className="flex items-center gap-1">
+                  <span className="text-[9px] text-gray-400 w-7">{day}</span>
+                  <div className="flex gap-[2px] flex-1">
+                    {Array.from({ length: 24 }, (_, hour) => {
+                      // Optimized O(1) lookup instead of O(n) find()
+                      const count = heatmapLookup.map.get(`${dayIndex}-${hour}`) || 0;
+                      return (
+                        <div
+                          key={hour}
+                          className={`flex-1 h-3 rounded-sm ${getHeatmapColor(count, heatmapLookup.maxCount)} transition-colors hover:ring-1 hover:ring-orange-400`}
+                          title={`${day} ${formatHour(hour)}: ${count} activities`}
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="flex items-center justify-end gap-1 mt-2">
+              <span className="text-[9px] text-gray-400 mr-1">Less</span>
+              <div className="w-3 h-3 rounded-sm bg-gray-100"></div>
+              <div className="w-3 h-3 rounded-sm bg-orange-200"></div>
+              <div className="w-3 h-3 rounded-sm bg-orange-300"></div>
+              <div className="w-3 h-3 rounded-sm bg-orange-400"></div>
+              <div className="w-3 h-3 rounded-sm bg-orange-500"></div>
+              <span className="text-[9px] text-gray-400 ml-1">More</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Footer */}
+      <div className="bg-gray-50 rounded-xl p-3 text-center">
+        <p className="text-[10px] text-gray-400">
+          {new Date(analyticsData.period_start).toLocaleDateString()} - {new Date(analyticsData.period_end).toLocaleDateString()}
+        </p>
       </div>
     </div>
   );
-};
+});
+
+// Add displayName for React DevTools
+UsageAnalytics.displayName = 'UsageAnalytics';
 
 export default function ChatHistoryActivities({ activitiesAPI, onTrackActivity, onChatClick }) {
   const [activeTab, setActiveTab] = useState('activity'); // 'activity', 'history', or 'analytics'
@@ -280,6 +497,9 @@ export default function ChatHistoryActivities({ activitiesAPI, onTrackActivity, 
   const [activitySearchQuery, setActivitySearchQuery] = useState('');
   const [activityDateFilter, setActivityDateFilter] = useState('all'); // 'today', 'week', 'month', 'all'
   const [activityTypeFilter, setActivityTypeFilter] = useState('all'); // 'all', 'sessions', 'messages', 'analysis', 'documents'
+
+  // Ref for analytics component refresh
+  const analyticsRef = useRef(null);
 
   // Fetch chat history
   const fetchChatHistory = async () => {
@@ -424,8 +644,8 @@ export default function ChatHistoryActivities({ activitiesAPI, onTrackActivity, 
     }
   };
 
-  // Filter chat history by search query and date
-  const getFilteredChatHistory = () => {
+  // Memoized filtered chat history to avoid repeated filtering
+  const filteredChatHistory = useMemo(() => {
     let filtered = [...(chatHistory || [])];
 
     // Apply search filter
@@ -462,21 +682,19 @@ export default function ChatHistoryActivities({ activitiesAPI, onTrackActivity, 
     }
 
     return filtered;
-  };
+  }, [chatHistory, searchQuery, dateFilter]);
 
-  // Get paginated chat history
-  const getPaginatedChatHistory = () => {
-    const filtered = getFilteredChatHistory();
+  // Memoized total pages calculation
+  const totalPages = useMemo(() => {
+    return Math.ceil(filteredChatHistory.length / itemsPerPage);
+  }, [filteredChatHistory, itemsPerPage]);
+
+  // Memoized paginated chat history
+  const paginatedChatHistory = useMemo(() => {
     const startIndex = (currentPage - 1) * itemsPerPage;
     const endIndex = startIndex + itemsPerPage;
-    return filtered.slice(startIndex, endIndex);
-  };
-
-  // Calculate total pages for chat history
-  const getTotalPages = () => {
-    const filtered = getFilteredChatHistory();
-    return Math.ceil(filtered.length / itemsPerPage);
-  };
+    return filteredChatHistory.slice(startIndex, endIndex);
+  }, [filteredChatHistory, currentPage, itemsPerPage]);
 
   // Handle page change
   const handlePageChange = (pageNumber) => {
@@ -561,8 +779,8 @@ export default function ChatHistoryActivities({ activitiesAPI, onTrackActivity, 
     return title.trim();
   };
 
-  // Filter activities by type
-  const getFilteredActivities = () => {
+  // Memoized filtered activities to avoid repeated filtering
+  const filteredActivities = useMemo(() => {
     // Only show key activity types: analysis (Resume Analysis) and chat (Dashboard Chat, Career Chat)
     let filtered = recentActivities.filter(a =>
       a.activity_type === 'analysis' ||
@@ -630,21 +848,19 @@ export default function ChatHistoryActivities({ activitiesAPI, onTrackActivity, 
     }
 
     return filtered;
-  };
+  }, [recentActivities, activityTypeFilter, activitySearchQuery, activityDateFilter]);
 
-  // Get paginated activities
-  const getPaginatedActivities = () => {
-    const filtered = getFilteredActivities();
+  // Memoized total pages for activities
+  const activityTotalPages = useMemo(() => {
+    return Math.ceil(filteredActivities.length / activityItemsPerPage);
+  }, [filteredActivities, activityItemsPerPage]);
+
+  // Memoized paginated activities
+  const paginatedActivities = useMemo(() => {
     const startIndex = (activityPage - 1) * activityItemsPerPage;
     const endIndex = startIndex + activityItemsPerPage;
-    return filtered.slice(startIndex, endIndex);
-  };
-
-  // Calculate total pages for activities
-  const getActivityTotalPages = () => {
-    const filtered = getFilteredActivities();
-    return Math.ceil(filtered.length / activityItemsPerPage);
-  };
+    return filteredActivities.slice(startIndex, endIndex);
+  }, [filteredActivities, activityPage, activityItemsPerPage]);
 
   // Handle activity page change
   const handleActivityPageChange = (pageNumber) => {
@@ -744,16 +960,37 @@ export default function ChatHistoryActivities({ activitiesAPI, onTrackActivity, 
     return formatTimeUTC(dateString);
   };
 
+  // Initial data load with cleanup to prevent memory leaks
   useEffect(() => {
-    fetchChatHistory();
-    fetchRecentActivities();
+    let isMounted = true;
+
+    const loadInitialData = async () => {
+      if (isMounted) {
+        await fetchChatHistory();
+      }
+      if (isMounted) {
+        await fetchRecentActivities();
+      }
+    };
+
+    loadInitialData();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   // Auto-refresh activities when switching to Activity tab
   useEffect(() => {
-    if (activeTab === 'activity') {
+    let isMounted = true;
+
+    if (activeTab === 'activity' && isMounted) {
       fetchRecentActivities();
     }
+
+    return () => {
+      isMounted = false;
+    };
   }, [activeTab]);
 
   return (
@@ -785,14 +1022,15 @@ export default function ChatHistoryActivities({ activitiesAPI, onTrackActivity, 
               Session History
             </button>
             <button
-              disabled
-              className="px-4 sm:px-6 py-3 sm:py-4 font-medium text-xs sm:text-sm transition-colors relative flex-1 sm:flex-initial text-gray-300 cursor-not-allowed"
+              onClick={() => setActiveTab('analytics')}
+              className={`px-4 sm:px-6 py-3 sm:py-4 font-medium text-xs sm:text-sm transition-colors relative flex-1 sm:flex-initial ${
+                activeTab === 'analytics'
+                  ? 'text-gray-900 border-b-2 border-orange-500'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
             >
               <BarChart3 className="h-4 w-4 inline mr-2" />
               Usage Analytics
-              <span className="ml-2 px-1.5 py-0.5 bg-gray-100 text-gray-400 text-xs font-medium rounded">
-                Coming Soon
-              </span>
             </button>
           </div>
           
@@ -803,8 +1041,9 @@ export default function ChatHistoryActivities({ activitiesAPI, onTrackActivity, 
                 fetchChatHistory();
               } else if (activeTab === 'activity') {
                 fetchRecentActivities();
+              } else if (activeTab === 'analytics') {
+                analyticsRef.current?.refresh();
               }
-              // Analytics tab doesn't need refresh (it auto-loads on mount)
             }}
             className="mr-4 p-2 hover:bg-gray-100 rounded-lg transition-colors"
             title="Refresh"
@@ -917,7 +1156,7 @@ export default function ChatHistoryActivities({ activitiesAPI, onTrackActivity, 
                   <p className="text-sm text-gray-500 font-medium">No sessions yet</p>
                   <p className="text-xs text-gray-400 mt-1 text-center">Start a conversation to create your first session</p>
                 </div>
-              ) : getFilteredChatHistory().length === 0 ? (
+              ) : filteredChatHistory.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 px-4">
                   <Search className="h-12 w-12 text-gray-300 mb-3" />
                   <p className="text-sm text-gray-500 font-medium">No matching sessions</p>
@@ -938,7 +1177,7 @@ export default function ChatHistoryActivities({ activitiesAPI, onTrackActivity, 
               ) : (
                 <>
                   <div className="space-y-2 mb-4">
-                    {getPaginatedChatHistory().map((chat) => (
+                    {paginatedChatHistory.map((chat) => (
                       <div
                         key={chat.id}
                         onClick={() => handleChatClick(chat)}
@@ -985,7 +1224,7 @@ export default function ChatHistoryActivities({ activitiesAPI, onTrackActivity, 
                   </div>
 
                   {/* Pagination Controls */}
-                  {getTotalPages() > 1 && (
+                  {totalPages > 1 && (
                     <div className="flex items-center justify-center space-x-2 pt-4 border-t border-gray-100">
                       {/* Previous Button */}
                       <button
@@ -1002,20 +1241,20 @@ export default function ChatHistoryActivities({ activitiesAPI, onTrackActivity, 
 
                       {/* Page Numbers */}
                       <div className="flex items-center space-x-1">
-                        {Array.from({ length: getTotalPages() }, (_, i) => i + 1).map((pageNum) => {
+                        {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => {
                           // Show first page, last page, current page, and pages around current page
                           const showPage =
                             pageNum === 1 ||
-                            pageNum === getTotalPages() ||
+                            pageNum === totalPages ||
                             Math.abs(pageNum - currentPage) <= 1;
 
                           // Show ellipsis
                           const showEllipsisBefore = pageNum === currentPage - 2 && currentPage > 3;
-                          const showEllipsisAfter = pageNum === currentPage + 2 && currentPage < getTotalPages() - 2;
+                          const showEllipsisAfter = pageNum === currentPage + 2 && currentPage < totalPages - 2;
 
                           if (showEllipsisBefore || showEllipsisAfter) {
                             return (
-                              <span key={pageNum} className="px-2 text-gray-400">
+                              <span key={`ellipsis-${pageNum}`} className="px-2 text-gray-400">
                                 ...
                               </span>
                             );
@@ -1042,9 +1281,9 @@ export default function ChatHistoryActivities({ activitiesAPI, onTrackActivity, 
                       {/* Next Button */}
                       <button
                         onClick={() => handlePageChange(currentPage + 1)}
-                        disabled={currentPage === getTotalPages()}
+                        disabled={currentPage === totalPages}
                         className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                          currentPage === getTotalPages()
+                          currentPage === totalPages
                             ? 'text-gray-300 cursor-not-allowed'
                             : 'text-gray-700 hover:bg-gray-100'
                         }`}
@@ -1059,7 +1298,7 @@ export default function ChatHistoryActivities({ activitiesAPI, onTrackActivity, 
           </div>
         ) : activeTab === 'analytics' ? (
           // Usage Analytics View
-          <UsageAnalytics />
+          <UsageAnalytics ref={analyticsRef} />
         ) : (
           // Recent Activities View
           <div className="flex-1 overflow-y-auto">
@@ -1201,7 +1440,7 @@ export default function ChatHistoryActivities({ activitiesAPI, onTrackActivity, 
                 <div className="flex items-center justify-center py-8">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500"></div>
                 </div>
-              ) : getFilteredActivities().length === 0 ? (
+              ) : filteredActivities.length === 0 ? (
                 <div className="text-center py-8 text-gray-500">
                   <Clock className="h-12 w-12 mx-auto mb-3 text-gray-300" />
                   <p className="text-sm">
@@ -1227,7 +1466,7 @@ export default function ChatHistoryActivities({ activitiesAPI, onTrackActivity, 
                 <>
                   {/* Activity Cards */}
                   <div className="space-y-2 mb-4">
-                    {getPaginatedActivities().map((activity) => (
+                    {paginatedActivities.map((activity) => (
                       <div
                         key={activity.id}
                         className="relative bg-white border border-gray-200 rounded-lg p-3 hover:border-orange-300 hover:shadow-md transition-all duration-200"
@@ -1276,7 +1515,7 @@ export default function ChatHistoryActivities({ activitiesAPI, onTrackActivity, 
                   </div>
 
                   {/* Pagination Controls */}
-                  {getActivityTotalPages() > 1 && (
+                  {activityTotalPages > 1 && (
                     <div className="flex items-center justify-center space-x-2 pt-4 border-t border-gray-100">
                       {/* Previous Button */}
                       <button
@@ -1293,20 +1532,20 @@ export default function ChatHistoryActivities({ activitiesAPI, onTrackActivity, 
 
                       {/* Page Numbers */}
                       <div className="flex items-center space-x-1">
-                        {Array.from({ length: getActivityTotalPages() }, (_, i) => i + 1).map((pageNum) => {
+                        {Array.from({ length: activityTotalPages }, (_, i) => i + 1).map((pageNum) => {
                           // Show first page, last page, current page, and pages around current page
                           const showPage =
                             pageNum === 1 ||
-                            pageNum === getActivityTotalPages() ||
+                            pageNum === activityTotalPages ||
                             Math.abs(pageNum - activityPage) <= 1;
 
                           // Show ellipsis
                           const showEllipsisBefore = pageNum === activityPage - 2 && activityPage > 3;
-                          const showEllipsisAfter = pageNum === activityPage + 2 && activityPage < getActivityTotalPages() - 2;
+                          const showEllipsisAfter = pageNum === activityPage + 2 && activityPage < activityTotalPages - 2;
 
                           if (showEllipsisBefore || showEllipsisAfter) {
                             return (
-                              <span key={pageNum} className="px-2 text-gray-400">
+                              <span key={`ellipsis-${pageNum}`} className="px-2 text-gray-400">
                                 ...
                               </span>
                             );
@@ -1333,9 +1572,9 @@ export default function ChatHistoryActivities({ activitiesAPI, onTrackActivity, 
                       {/* Next Button */}
                       <button
                         onClick={() => handleActivityPageChange(activityPage + 1)}
-                        disabled={activityPage === getActivityTotalPages()}
+                        disabled={activityPage === activityTotalPages}
                         className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                          activityPage === getActivityTotalPages()
+                          activityPage === activityTotalPages
                             ? 'text-gray-300 cursor-not-allowed'
                             : 'text-gray-700 hover:bg-gray-100'
                         }`}

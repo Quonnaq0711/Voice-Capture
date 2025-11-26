@@ -11,16 +11,17 @@ from datetime import datetime
 # Import the streaming API module
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', 'src'))
 from streaming_api import (
-    router, start_streaming_analysis, run_streaming_analysis,
+    router, analyze_resume_streaming, run_streaming_analysis,
     get_analysis_progress, stream_analysis_updates, cancel_analysis,
-    AnalysisRequest, AnalysisResponse
+    cancel_analysis_session, AnalysisRequest, AnalysisResponse
 )
+from streaming_analyzer import StreamingResumeAnalyzer
 
-class TestStartStreamingAnalysis:
+class TestAnalyzeResumeStreaming:
     """Test cases for the /analyze/stream endpoint."""
-    
+
     @pytest.mark.asyncio
-    async def test_start_streaming_analysis_success(self, mock_streaming_analyzer, mock_notification_service):
+    async def test_analyze_resume_streaming_success(self, mock_streaming_analyzer):
         """Test successful start of streaming analysis."""
         # Arrange
         request = AnalysisRequest(
@@ -28,25 +29,25 @@ class TestStartStreamingAnalysis:
             session_id="test_session_123",
             force_reanalysis=False
         )
-        background_tasks = BackgroundTasks()
-        
-        with patch('streaming_api.StreamingResumeAnalyzer', return_value=mock_streaming_analyzer), \
-             patch('streaming_api.notification_service', mock_notification_service):
-            
+
+        # Mock the streaming analyzer to yield results
+        async def mock_generator(*args, **kwargs):
+            yield {"type": "status", "message": "Starting"}
+            yield {"type": "complete", "success": True}
+
+        mock_streaming_analyzer.analyze_resume_streaming = Mock(return_value=mock_generator())
+
+        with patch('streaming_api.StreamingResumeAnalyzer', return_value=mock_streaming_analyzer):
             # Act
-            response = await start_streaming_analysis(request, background_tasks)
-            
-            # Assert
-            assert response.success is True
-            assert response.message == "Analysis started successfully"
-            assert response.session_id == "test_session_123"
-            assert response.error is None
-            mock_notification_service.register_session.assert_called_once_with(
-                "test_session_123", "123"
-            )
-    
+            response = await analyze_resume_streaming(request)
+
+            # Assert - returns StreamingResponse
+            from fastapi.responses import StreamingResponse
+            assert isinstance(response, StreamingResponse)
+            assert response.headers.get("X-Analysis-Session-ID") == "test_session_123"
+
     @pytest.mark.asyncio
-    async def test_start_streaming_analysis_auto_session_id(self, mock_streaming_analyzer, mock_notification_service):
+    async def test_analyze_resume_streaming_auto_session_id(self, mock_streaming_analyzer):
         """Test streaming analysis with auto-generated session ID."""
         # Arrange
         request = AnalysisRequest(
@@ -54,58 +55,61 @@ class TestStartStreamingAnalysis:
             session_id=None,  # No session ID provided
             force_reanalysis=True
         )
-        background_tasks = BackgroundTasks()
-        
-        with patch('streaming_api.StreamingResumeAnalyzer', return_value=mock_streaming_analyzer), \
-             patch('streaming_api.notification_service', mock_notification_service):
-            
+
+        async def mock_generator(*args, **kwargs):
+            yield {"type": "complete", "success": True}
+
+        mock_streaming_analyzer.analyze_resume_streaming = Mock(return_value=mock_generator())
+
+        with patch('streaming_api.StreamingResumeAnalyzer', return_value=mock_streaming_analyzer):
             # Act
-            response = await start_streaming_analysis(request, background_tasks)
-            
+            response = await analyze_resume_streaming(request)
+
             # Assert
-            assert response.success is True
-            assert response.session_id is not None
-            assert response.session_id.startswith("analysis_123_")
-    
+            from fastapi.responses import StreamingResponse
+            assert isinstance(response, StreamingResponse)
+            session_id = response.headers.get("X-Analysis-Session-ID")
+            assert session_id is not None
+            assert session_id.startswith("analysis_123_")
+
     @pytest.mark.asyncio
-    async def test_start_streaming_analysis_service_error(self):
-        """Test handling of service errors during analysis start."""
+    async def test_analyze_resume_streaming_returns_streaming_response(self):
+        """Test that endpoint returns StreamingResponse."""
         # Arrange
         request = AnalysisRequest(
             user_id="123",
             session_id="test_session_123"
         )
-        background_tasks = BackgroundTasks()
-        
-        with patch('streaming_api.StreamingResumeAnalyzer', side_effect=Exception("Service unavailable")):
-            
-            # Act & Assert
-            with pytest.raises(HTTPException) as exc_info:
-                await start_streaming_analysis(request, background_tasks)
-            
-            assert exc_info.value.status_code == 500
-            assert "Failed to start analysis" in str(exc_info.value.detail)
-    
+
+        # Act
+        response = await analyze_resume_streaming(request)
+
+        # Assert - should return StreamingResponse even if analyzer fails internally
+        from fastapi.responses import StreamingResponse
+        assert isinstance(response, StreamingResponse)
+
     @pytest.mark.asyncio
-    async def test_start_streaming_analysis_invalid_user_id(self, mock_streaming_analyzer, mock_notification_service):
-        """Test handling of invalid user ID."""
+    async def test_analyze_resume_streaming_headers(self, mock_streaming_analyzer):
+        """Test correct headers are set on streaming response."""
         # Arrange
         request = AnalysisRequest(
-            user_id="",  # Empty user ID
+            user_id="123",
             session_id="test_session_123"
         )
-        background_tasks = BackgroundTasks()
-        
-        # Mock StreamingResumeAnalyzer constructor to raise an exception
-        with patch('streaming_api.StreamingResumeAnalyzer', side_effect=Exception("Invalid user_id")), \
-             patch('streaming_api.notification_service', mock_notification_service):
-            
-            # Act & Assert
-            with pytest.raises(HTTPException) as exc_info:
-                await start_streaming_analysis(request, background_tasks)
-            
-            assert exc_info.value.status_code == 500
-            assert "Failed to start analysis" in str(exc_info.value.detail)
+
+        async def mock_generator(*args, **kwargs):
+            yield {"type": "complete", "success": True}
+
+        mock_streaming_analyzer.analyze_resume_streaming = Mock(return_value=mock_generator())
+
+        with patch('streaming_api.StreamingResumeAnalyzer', return_value=mock_streaming_analyzer):
+            # Act
+            response = await analyze_resume_streaming(request)
+
+            # Assert headers
+            assert response.headers.get("Cache-Control") == "no-cache"
+            assert response.headers.get("Connection") == "keep-alive"
+            assert response.headers.get("Access-Control-Allow-Origin") == "*"
 
 class TestRunStreamingAnalysis:
     """Test cases for the background streaming analysis task."""
@@ -321,56 +325,86 @@ class TestStreamAnalysisUpdates:
             mock_notification_service.session_exists.assert_called_once_with(session_id)
 
 class TestCancelAnalysis:
-    """Test cases for the DELETE /analyze/session/{session_id} endpoint."""
-    
+    """Test cases for the DELETE /analyze/cancel/{session_id} endpoint."""
+
+    def setup_method(self):
+        """Clean up class-level state before each test."""
+        StreamingResumeAnalyzer._cancellation_tokens.clear()
+        StreamingResumeAnalyzer._active_user_sessions.clear()
+
+    def teardown_method(self):
+        """Clean up class-level state after each test."""
+        StreamingResumeAnalyzer._cancellation_tokens.clear()
+        StreamingResumeAnalyzer._active_user_sessions.clear()
+
     @pytest.mark.asyncio
-    async def test_cancel_analysis_success(self, mock_notification_service):
-        """Test successful cancellation of analysis."""
-        # Arrange
+    async def test_cancel_analysis_success(self):
+        """Test successful cancellation via token mechanism."""
         session_id = "test_session_123"
-        mock_notification_service.cancel_session.return_value = True
-        
-        with patch('streaming_api.notification_service', mock_notification_service):
-            
-            # Act
-            response = await cancel_analysis(session_id)
-            
-            # Assert
-            assert response["success"] is True
-            assert response["message"] == "Analysis cancelled successfully"
-            mock_notification_service.cancel_session.assert_called_once_with(session_id)
-    
+        # Register a token
+        StreamingResumeAnalyzer._cancellation_tokens[session_id] = asyncio.Event()
+
+        # Act
+        response = await cancel_analysis(session_id)
+
+        # Assert
+        assert response["success"] is True
+        assert response["message"] == "Analysis cancelled successfully"
+        assert response["session_id"] == session_id
+
     @pytest.mark.asyncio
-    async def test_cancel_analysis_not_found(self, mock_notification_service):
-        """Test handling of non-existent session for cancellation."""
-        # Arrange
+    async def test_cancel_analysis_not_found(self):
+        """Test cancellation of non-existent session returns success=False."""
         session_id = "non_existent_session"
-        mock_notification_service.cancel_session.return_value = False
-        
-        with patch('streaming_api.notification_service', mock_notification_service):
-            
-            # Act & Assert
-            with pytest.raises(HTTPException) as exc_info:
-                await cancel_analysis(session_id)
-            
-            assert exc_info.value.status_code == 404
-            assert "Session not found" in str(exc_info.value.detail)
-    
+
+        # Act - Note: new endpoint doesn't raise HTTPException, returns success=False
+        response = await cancel_analysis(session_id)
+
+        # Assert
+        assert response["success"] is False
+        assert "not found" in response["message"].lower() or "completed" in response["message"].lower()
+        assert response["session_id"] == session_id
+
     @pytest.mark.asyncio
-    async def test_cancel_analysis_service_error(self, mock_notification_service):
+    async def test_cancel_analysis_service_error(self):
         """Test handling of service errors during cancellation."""
-        # Arrange
         session_id = "test_session_123"
-        mock_notification_service.cancel_session.side_effect = Exception("Service error")
-        
-        with patch('streaming_api.notification_service', mock_notification_service):
-            
+
+        with patch.object(StreamingResumeAnalyzer, 'cancel_analysis', side_effect=Exception("Service error")):
             # Act & Assert
             with pytest.raises(HTTPException) as exc_info:
                 await cancel_analysis(session_id)
-            
+
             assert exc_info.value.status_code == 500
             assert "Failed to cancel analysis" in str(exc_info.value.detail)
+
+
+class TestCancelAnalysisSession:
+    """Test cases for the legacy DELETE /analyze/session/{session_id} endpoint."""
+
+    @pytest.mark.asyncio
+    async def test_cancel_session_success(self, mock_notification_service):
+        """Test successful cancellation via notification service."""
+        session_id = "test_session_123"
+        mock_notification_service.cancel_session.return_value = True
+
+        with patch('streaming_api.notification_service', mock_notification_service):
+            response = await cancel_analysis_session(session_id)
+
+            assert response["success"] is True
+            mock_notification_service.cancel_session.assert_called_once_with(session_id)
+
+    @pytest.mark.asyncio
+    async def test_cancel_session_not_found(self, mock_notification_service):
+        """Test handling of non-existent session."""
+        session_id = "non_existent_session"
+        mock_notification_service.cancel_session.return_value = False
+
+        with patch('streaming_api.notification_service', mock_notification_service):
+            with pytest.raises(HTTPException) as exc_info:
+                await cancel_analysis_session(session_id)
+
+            assert exc_info.value.status_code == 404
 
 class TestAnalysisRequest:
     """Test cases for AnalysisRequest model validation."""
@@ -442,49 +476,48 @@ class TestAnalysisResponse:
 
 class TestStreamingAPIIntegration:
     """Integration tests for streaming API endpoints."""
-    
+
     @pytest.mark.asyncio
     async def test_full_streaming_workflow(self, mock_streaming_analyzer, mock_notification_service):
         """Test the complete streaming analysis workflow."""
         # Arrange
         user_id = "123"
         session_id = "test_session_123"
-        background_tasks = BackgroundTasks()
-        
+
         # Mock streaming analysis generator
-        async def mock_analysis_generator():
+        async def mock_analysis_generator(*args, **kwargs):
             yield {"type": "status", "message": "Starting analysis", "progress": 0}
-            yield {"type": "section_start", "section": "professionalIdentity", "progress": 10}
             yield {"type": "section_complete", "section": "professionalIdentity", "progress": 20}
             yield {"type": "analysis_complete", "success": True, "progress": 100}
-        
-        mock_streaming_analyzer.analyze_resume_streaming.return_value = mock_analysis_generator()
+
+        mock_streaming_analyzer.analyze_resume_streaming = Mock(return_value=mock_analysis_generator())
         mock_notification_service.get_progress.return_value = {
             "current_section": "completed",
             "progress_percentage": 100.0,
             "status": "completed"
         }
-        mock_notification_service.cancel_session.return_value = True
-        
+
+        # Register cancellation token for cancel test
+        StreamingResumeAnalyzer._cancellation_tokens[session_id] = asyncio.Event()
+
         with patch('streaming_api.StreamingResumeAnalyzer', return_value=mock_streaming_analyzer), \
              patch('streaming_api.notification_service', mock_notification_service):
-            
-            # Act - Start analysis
+
+            # Act - Start analysis (returns StreamingResponse)
             start_request = AnalysisRequest(user_id=user_id, session_id=session_id)
-            start_response = await start_streaming_analysis(start_request, background_tasks)
-            
+            start_response = await analyze_resume_streaming(start_request)
+
+            # Assert - StreamingResponse with correct session_id header
+            from fastapi.responses import StreamingResponse
+            assert isinstance(start_response, StreamingResponse)
+            assert start_response.headers.get("X-Analysis-Session-ID") == session_id
+
             # Act - Get progress
             progress_response = await get_analysis_progress(session_id)
-            
-            # Act - Cancel analysis
-            cancel_response = await cancel_analysis(session_id)
-            
-            # Assert
-            assert start_response.success is True
-            assert start_response.session_id == session_id
-            
             assert progress_response["status"] == "completed"
             assert progress_response["progress_percentage"] == 100.0
-            
+
+            # Act - Cancel analysis
+            cancel_response = await cancel_analysis(session_id)
             assert cancel_response["success"] is True
-            assert "cancelled successfully" in cancel_response["message"]
+            assert cancel_response["session_id"] == session_id

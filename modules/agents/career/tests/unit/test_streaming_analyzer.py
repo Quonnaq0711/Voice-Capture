@@ -14,35 +14,42 @@ from streaming_analyzer import StreamingResumeAnalyzer
 
 class TestStreamingResumeAnalyzerInitialization:
     """Test cases for StreamingResumeAnalyzer initialization."""
-    
+
     def test_streaming_analyzer_init_default(self):
         """Test StreamingResumeAnalyzer initialization with default parameters."""
-        # Act
-        analyzer = StreamingResumeAnalyzer()
-        
-        # Assert
-        assert analyzer is not None
-        assert hasattr(analyzer, 'workflow')
-        assert hasattr(analyzer, 'notification_service_url')
-        assert hasattr(analyzer, 'resume_analyzer')
-        assert hasattr(analyzer, 'chat_service')
-        assert analyzer.notification_service_url == "http://localhost:8001"
-        assert analyzer.enable_parallel is False
-    
+        # Mock the factory function to avoid real service initialization
+        with patch('streaming_analyzer.get_resume_analyzer') as mock_get_analyzer:
+            mock_get_analyzer.return_value = Mock()
+
+            # Act
+            analyzer = StreamingResumeAnalyzer()
+
+            # Assert
+            assert analyzer is not None
+            assert hasattr(analyzer, 'workflow')
+            assert hasattr(analyzer, 'notification_service_url')
+            assert hasattr(analyzer, 'resume_analyzer')
+            assert analyzer.notification_service_url == "http://localhost:8001"
+            assert analyzer.enable_parallel is False
+
     def test_streaming_analyzer_init_with_config(self):
         """Test StreamingResumeAnalyzer initialization with custom configuration."""
         # Arrange
         notification_url = "http://localhost:8002"
-        
-        # Act
-        analyzer = StreamingResumeAnalyzer(
-            notification_service_url=notification_url,
-            enable_parallel=True
-        )
-        
-        # Assert
-        assert analyzer.notification_service_url == notification_url
-        assert analyzer.enable_parallel == True
+
+        # Mock the factory function to avoid real service initialization
+        with patch('streaming_analyzer.get_resume_analyzer') as mock_get_analyzer:
+            mock_get_analyzer.return_value = Mock()
+
+            # Act
+            analyzer = StreamingResumeAnalyzer(
+                notification_service_url=notification_url,
+                enable_parallel=True
+            )
+
+            # Assert
+            assert analyzer.notification_service_url == notification_url
+            assert analyzer.enable_parallel is True
 
 class TestAnalyzeResumeStreaming:
     """Test cases for the analyze_resume_streaming method."""
@@ -673,12 +680,86 @@ class TestStreamingAnalyzerIntegration:
             yield {"type": "analysis_complete", "success": True, "progress": 100}
         
         mock_streaming_analyzer.analyze_resume_streaming = AsyncMock(return_value=mock_error_recovery_stream())
-        
+
         # Act
         stream = await mock_streaming_analyzer.analyze_resume_streaming(
             user_id, sample_resume_data, session_id
         )
-        
+
         # Assert
         assert stream is not None
         mock_streaming_analyzer.analyze_resume_streaming.assert_called_once()
+
+
+class TestCancellationTokens:
+    """Test cases for cancellation token mechanism."""
+
+    def setup_method(self):
+        """Clean up class-level state before each test."""
+        StreamingResumeAnalyzer._cancellation_tokens.clear()
+        StreamingResumeAnalyzer._active_user_sessions.clear()
+
+    def teardown_method(self):
+        """Clean up class-level state after each test."""
+        StreamingResumeAnalyzer._cancellation_tokens.clear()
+        StreamingResumeAnalyzer._active_user_sessions.clear()
+
+    def test_cancel_analysis_success(self):
+        """Test cancelling an active analysis session."""
+        session_id = "test_session_123"
+        # Register a token
+        StreamingResumeAnalyzer._cancellation_tokens[session_id] = asyncio.Event()
+
+        # Cancel
+        result = StreamingResumeAnalyzer.cancel_analysis(session_id)
+
+        assert result is True
+        assert StreamingResumeAnalyzer._cancellation_tokens[session_id].is_set()
+
+    def test_cancel_analysis_not_found(self):
+        """Test cancelling a non-existent session."""
+        result = StreamingResumeAnalyzer.cancel_analysis("non_existent_session")
+
+        assert result is False
+
+    def test_is_cancelled_true(self):
+        """Test is_cancelled returns True for cancelled sessions."""
+        session_id = "test_session_123"
+        event = asyncio.Event()
+        event.set()  # Mark as cancelled
+        StreamingResumeAnalyzer._cancellation_tokens[session_id] = event
+
+        assert StreamingResumeAnalyzer.is_cancelled(session_id) is True
+
+    def test_is_cancelled_false(self):
+        """Test is_cancelled returns False for active sessions."""
+        session_id = "test_session_123"
+        StreamingResumeAnalyzer._cancellation_tokens[session_id] = asyncio.Event()
+
+        assert StreamingResumeAnalyzer.is_cancelled(session_id) is False
+
+    def test_is_cancelled_not_found(self):
+        """Test is_cancelled returns False for non-existent sessions."""
+        assert StreamingResumeAnalyzer.is_cancelled("non_existent") is False
+
+    def test_cancel_user_analysis_success(self):
+        """Test cancelling a user's active analysis."""
+        user_id = 123
+        session_id = "analysis_123_1234567890"
+
+        # Register session
+        StreamingResumeAnalyzer._active_user_sessions[user_id] = session_id
+        StreamingResumeAnalyzer._cancellation_tokens[session_id] = asyncio.Event()
+
+        # Cancel user's analysis
+        result = StreamingResumeAnalyzer.cancel_user_analysis(user_id)
+
+        assert result == session_id
+        assert StreamingResumeAnalyzer._cancellation_tokens[session_id].is_set()
+        assert user_id not in StreamingResumeAnalyzer._active_user_sessions
+
+    def test_cancel_user_analysis_no_active_session(self):
+        """Test cancelling when user has no active analysis."""
+        result = StreamingResumeAnalyzer.cancel_user_analysis(999)
+
+        assert result is None

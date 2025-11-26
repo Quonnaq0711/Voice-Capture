@@ -601,6 +601,12 @@ export const activities = {
     return response.data;
   },
 
+  // Get comprehensive usage analytics
+  getUsageAnalytics: async (daysBack = 30) => {
+    const response = await api.get(`/activities/analytics?days_back=${encodeURIComponent(daysBack)}`);
+    return response.data;
+  },
+
   // Create a new activity
   createActivity: async (activityData) => {
     const response = await api.post('/activities/', activityData);

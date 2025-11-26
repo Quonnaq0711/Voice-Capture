@@ -9,6 +9,8 @@ jest.mock('../src/services/api', () => ({
     login: jest.fn(),
     register: jest.fn(),
     logout: jest.fn(),
+    getProfile: jest.fn(),
+    refreshToken: jest.fn(),
   },
 }));
 
@@ -23,7 +25,7 @@ const TestComponent = () => {
       <button onClick={() => login('test@example.com', 'password')} data-testid="login-btn">
         Login
       </button>
-      <button onClick={() => register('testuser', 'test@example.com', 'password')} data-testid="register-btn">
+      <button onClick={() => register('Test', 'User', 'test@example.com', 'password')} data-testid="register-btn">
         Register
       </button>
       <button onClick={logout} data-testid="logout-btn">
@@ -43,6 +45,8 @@ describe('AuthContext', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     localStorage.clear();
+    // Reset localStorage.getItem to return null by default
+    localStorage.getItem.mockReturnValue(null);
   });
 
   describe('AuthProvider', () => {
@@ -57,8 +61,19 @@ describe('AuthContext', () => {
       expect(screen.getByTestId('user')).toHaveTextContent('not-authenticated');
     });
 
-    it('should initialize user from localStorage token', () => {
-      localStorage.setItem('token', 'existing-token');
+    it('should initialize user from localStorage token', async () => {
+      const mockProfile = {
+        id: 1,
+        first_name: 'Test',
+        last_name: 'User',
+        email: 'test@example.com',
+      };
+      auth.getProfile.mockResolvedValue(mockProfile);
+      // Mock localStorage.getItem to return the token
+      localStorage.getItem.mockImplementation((key) => {
+        if (key === 'token') return 'existing-token';
+        return null;
+      });
 
       render(
         <AuthProvider>
@@ -66,7 +81,10 @@ describe('AuthContext', () => {
         </AuthProvider>
       );
 
-      expect(screen.getByTestId('user')).toHaveTextContent('authenticated');
+      await waitFor(() => {
+        expect(auth.getProfile).toHaveBeenCalledWith('existing-token');
+        expect(screen.getByTestId('user')).toHaveTextContent('authenticated');
+      });
     });
 
     it('should handle login successfully', async () => {
@@ -74,7 +92,14 @@ describe('AuthContext', () => {
         access_token: 'new-token',
         token_type: 'bearer',
       };
+      const mockProfile = {
+        id: 1,
+        first_name: 'Test',
+        last_name: 'User',
+        email: 'test@example.com',
+      };
       auth.login.mockResolvedValue(mockLoginResponse);
+      auth.getProfile.mockResolvedValue(mockProfile);
 
       render(
         <AuthProvider>
@@ -83,13 +108,14 @@ describe('AuthContext', () => {
       );
 
       const loginButton = screen.getByTestId('login-btn');
-      
+
       await act(async () => {
         loginButton.click();
       });
 
       await waitFor(() => {
         expect(auth.login).toHaveBeenCalledWith('test@example.com', 'password');
+        expect(auth.getProfile).toHaveBeenCalledWith('new-token');
         expect(screen.getByTestId('user')).toHaveTextContent('authenticated');
       });
     });
@@ -166,7 +192,7 @@ describe('AuthContext', () => {
       });
 
       await waitFor(() => {
-        expect(auth.register).toHaveBeenCalledWith('testuser', 'test@example.com', 'password');
+        expect(auth.register).toHaveBeenCalledWith('Test', 'User', 'test@example.com', 'password');
       });
     });
 
@@ -184,7 +210,7 @@ describe('AuthContext', () => {
         
         const handleRegister = async () => {
           try {
-            await register('testuser', 'test@example.com', 'password');
+            await register('Test', 'User', 'test@example.com', 'password');
           } catch (error) {
             // Silently handle error
           }
@@ -214,15 +240,26 @@ describe('AuthContext', () => {
       });
 
       await waitFor(() => {
-        expect(auth.register).toHaveBeenCalledWith('testuser', 'test@example.com', 'password');
+        expect(auth.register).toHaveBeenCalledWith('Test', 'User', 'test@example.com', 'password');
       });
 
       // Restore console.error
       console.error = originalError;
     });
 
-    it('should handle logout', () => {
-      localStorage.setItem('token', 'existing-token');
+    it('should handle logout', async () => {
+      const mockProfile = {
+        id: 1,
+        first_name: 'Test',
+        last_name: 'User',
+        email: 'test@example.com',
+      };
+      auth.getProfile.mockResolvedValue(mockProfile);
+      // Mock localStorage.getItem to return the token
+      localStorage.getItem.mockImplementation((key) => {
+        if (key === 'token') return 'existing-token';
+        return null;
+      });
 
       render(
         <AuthProvider>
@@ -230,17 +267,21 @@ describe('AuthContext', () => {
         </AuthProvider>
       );
 
-      // Initially authenticated
-      expect(screen.getByTestId('user')).toHaveTextContent('authenticated');
+      // Wait for initial authentication
+      await waitFor(() => {
+        expect(screen.getByTestId('user')).toHaveTextContent('authenticated');
+      });
 
       const logoutButton = screen.getByTestId('logout-btn');
-      
-      act(() => {
+
+      await act(async () => {
         logoutButton.click();
       });
 
-      expect(auth.logout).toHaveBeenCalled();
-      expect(screen.getByTestId('user')).toHaveTextContent('not-authenticated');
+      await waitFor(() => {
+        expect(auth.logout).toHaveBeenCalled();
+        expect(screen.getByTestId('user')).toHaveTextContent('not-authenticated');
+      });
     });
 
     it('should show loading state initially', () => {

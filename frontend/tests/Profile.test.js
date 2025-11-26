@@ -2,7 +2,7 @@ import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { BrowserRouter } from 'react-router-dom';
-import Profile from '../src/components/Profile';
+import Profile from '../src/components/profile/Profile';
 import { useAuth } from '../src/contexts/AuthContext';
 import { profile as profileAPI, auth } from '../src/services/api';
 
@@ -55,12 +55,14 @@ const ProfileWrapper = ({ children }) => (
 
 describe('Profile Component', () => {
   const mockUser = {
-    username: 'testuser',
+    first_name: 'Test',
+    last_name: 'User',
     email: 'test@example.com',
   };
 
   const mockProfileData = {
-    username: 'testuser',
+    first_name: 'Test',
+    last_name: 'User',
     email: 'test@example.com',
     full_name: 'Test User',
     bio: 'Test bio',
@@ -129,8 +131,6 @@ describe('Profile Component', () => {
   });
 
   it('should load and display user profile data', async () => {
-    const user = userEvent.setup();
-    
     render(
       <ProfileWrapper>
         <Profile />
@@ -138,7 +138,7 @@ describe('Profile Component', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByDisplayValue('testuser')).toBeInTheDocument();
+      expect(screen.getByDisplayValue('Test')).toBeInTheDocument();
       expect(screen.getByDisplayValue('test@example.com')).toBeInTheDocument();
       expect(profileAPI.getCurrentUser).toHaveBeenCalled();
     });
@@ -147,7 +147,7 @@ describe('Profile Component', () => {
   it('should handle profile form submission', async () => {
     const user = userEvent.setup();
     profileAPI.updateProfile.mockResolvedValue({ message: 'Profile updated successfully' });
-    
+
     render(
       <ProfileWrapper>
         <Profile />
@@ -156,7 +156,7 @@ describe('Profile Component', () => {
 
     // Wait for form to load
     await waitFor(() => {
-      expect(screen.getByDisplayValue('testuser')).toBeInTheDocument();
+      expect(screen.getByDisplayValue('Test')).toBeInTheDocument();
     });
 
     // Switch to Personal Profile tab to access editable fields
@@ -364,7 +364,7 @@ describe('Profile Component', () => {
 
     // Wait for form to load
     await waitFor(() => {
-      expect(screen.getByDisplayValue('testuser')).toBeInTheDocument();
+      expect(screen.getByDisplayValue('Test')).toBeInTheDocument();
     });
 
     // Try to submit with invalid email
@@ -390,7 +390,7 @@ describe('Profile Component', () => {
 
     // Wait for form to load
     await waitFor(() => {
-      expect(screen.getByDisplayValue('testuser')).toBeInTheDocument();
+      expect(screen.getByDisplayValue('Test')).toBeInTheDocument();
     });
 
     // Submit form - look for any save/update button
@@ -419,7 +419,7 @@ describe('Profile Component', () => {
 
     // Wait for form to load
     await waitFor(() => {
-      expect(screen.getByDisplayValue('testuser')).toBeInTheDocument();
+      expect(screen.getByDisplayValue('Test')).toBeInTheDocument();
     });
 
     // Look for notification checkboxes

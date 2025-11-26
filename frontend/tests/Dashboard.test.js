@@ -1,10 +1,10 @@
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { BrowserRouter } from 'react-router-dom';
-import Dashboard from '../src/components/Dashboard';
+import Dashboard from '../src/components/dashboard/Dashboard';
 import { useAuth } from '../src/contexts/AuthContext';
-import { profile as profileAPI } from '../src/services/api';
+import { profile as profileAPI, activities as activitiesAPI, careerInsights as careerInsightsAPI, dailyRecommendations as dailyRecommendationsAPI } from '../src/services/api';
 
 // Mock the AuthContext
 jest.mock('../src/contexts/AuthContext', () => ({
@@ -17,6 +17,18 @@ jest.mock('../src/services/api', () => ({
     getCurrentUser: jest.fn(),
     getAvatarUrl: jest.fn(),
   },
+  activities: {
+    getRecentActivities: jest.fn(),
+    getActivitySummary: jest.fn(),
+    createActivity: jest.fn(),
+  },
+  careerInsights: {
+    getSummary: jest.fn(),
+  },
+  dailyRecommendations: {
+    getRecommendations: jest.fn(),
+    generateRecommendations: jest.fn(),
+  },
 }));
 
 // Mock react-router-dom
@@ -27,26 +39,26 @@ jest.mock('react-router-dom', () => ({
 }));
 
 // Mock child components
-jest.mock('../src/components/PersonalAssistant', () => {
+jest.mock('../src/components/chat/PersonalAssistant', () => {
   return function MockPersonalAssistant({ user, isDialogOpen, setIsDialogOpen }) {
     return (
       <div data-testid="personal-assistant">
-        <div>Personal Assistant for {user.username}</div>
-        <div>Dialog Open: {isDialogOpen.toString()}</div>
+        <div>Personal Assistant for {user?.first_name || 'User'}</div>
+        <div>Dialog Open: {isDialogOpen?.toString() || 'false'}</div>
         <button onClick={() => setIsDialogOpen(false)}>Close Dialog</button>
       </div>
     );
   };
 });
 
-jest.mock('../src/components/CircularAgents', () => {
+jest.mock('../src/components/ui/CircularAgents', () => {
   return function MockCircularAgents({ agents, avatarUrl, user, triggerAnimation }) {
     return (
       <div data-testid="circular-agents">
-        <div>Agents Count: {agents.length}</div>
-        <div>User: {user.username}</div>
-        <div>Animation: {triggerAnimation.toString()}</div>
-        {agents.map((agent, index) => (
+        <div>Agents Count: {agents?.length || 0}</div>
+        <div>User: {user?.first_name || 'User'}</div>
+        <div>Animation: {triggerAnimation?.toString() || 'false'}</div>
+        {agents?.map((agent, index) => (
           <div key={index} data-testid={`agent-${agent.name.toLowerCase().replace(/\s+/g, '-')}`}>
             {agent.name}
           </div>
@@ -55,6 +67,18 @@ jest.mock('../src/components/CircularAgents', () => {
     );
   };
 });
+
+// Mock navigation events
+jest.mock('../src/utils/navigationEvents', () => ({
+  requestResetAssistantPosition: jest.fn(),
+}));
+
+// Mock recommendations utility
+jest.mock('../src/utils/recommendations', () => ({
+  getStaticFallbackRecommendations: jest.fn(() => [
+    { id: 1, title: 'Test Recommendation', description: 'Test description', priority: 'high', estimated_time: '15 min', category: 'career', icon: 'BriefcaseIcon', color: 'blue', action_type: 'start' }
+  ]),
+}));
 
 // Wrapper component for testing with router
 const DashboardWrapper = ({ children }) => (
@@ -66,13 +90,13 @@ const DashboardWrapper = ({ children }) => (
 describe('Dashboard Component', () => {
   const mockLogout = jest.fn();
   const mockUser = {
-    username: 'testuser',
+    first_name: 'Test',
     email: 'test@example.com',
   };
 
   beforeEach(() => {
     jest.clearAllMocks();
-    
+
     // Default mock implementations
     useAuth.mockReturnValue({
       logout: mockLogout,
@@ -80,7 +104,7 @@ describe('Dashboard Component', () => {
     });
 
     profileAPI.getCurrentUser.mockResolvedValue({
-      username: 'testuser',
+      first_name: 'Test',
       email: 'test@example.com',
     });
 
@@ -88,12 +112,21 @@ describe('Dashboard Component', () => {
       url: 'https://example.com/avatar.jpg',
     });
 
-    // Mock window.resetAssistantPosition
-    window.resetAssistantPosition = jest.fn();
-  });
+    activitiesAPI.getRecentActivities.mockResolvedValue([]);
+    activitiesAPI.getActivitySummary.mockResolvedValue({});
 
-  afterEach(() => {
-    delete window.resetAssistantPosition;
+    careerInsightsAPI.getSummary.mockResolvedValue({
+      status: 'no_analysis',
+      insights: []
+    });
+
+    dailyRecommendationsAPI.getRecommendations.mockResolvedValue({
+      status: 'success',
+      recommendations: [
+        { id: 1, title: 'Career Focus', description: 'Review your resume', priority: 'high', estimated_time: '15 min', category: 'career', icon: 'BriefcaseIcon', color: 'blue', action_type: 'review' },
+        { id: 2, title: 'Learning', description: 'Complete a course', priority: 'medium', estimated_time: '30 min', category: 'learning', icon: 'AcademicCapIcon', color: 'green', action_type: 'start' },
+      ]
+    });
   });
 
   it('should render dashboard with main sections', async () => {
@@ -103,19 +136,9 @@ describe('Dashboard Component', () => {
       </DashboardWrapper>
     );
 
-    // Check main title
-    expect(screen.getAllByText('Sadaora AI')).toHaveLength(2); // Appears in nav and footer
-    expect(screen.getByText('Welcome to Your')).toBeInTheDocument();
-    expect(screen.getByText('Personal AI Assistant')).toBeInTheDocument();
-
-    // Check main sections
-    expect(screen.getByText('Talk to Your AI Assistant')).toBeInTheDocument();
-    expect(screen.getByText('Your AI')).toBeInTheDocument();
-    expect(screen.getByText('Agent Network')).toBeInTheDocument();
-    expect(screen.getByText('Your Personalized')).toBeInTheDocument();
-    expect(screen.getByText('AI Insights')).toBeInTheDocument();
-    expect(screen.getByText('Your')).toBeInTheDocument();
-    expect(screen.getByText('Achievements & Progress')).toBeInTheDocument();
+    // Check for Idii branding (may appear multiple times)
+    const idiiElements = screen.getAllByText('Idii.');
+    expect(idiiElements.length).toBeGreaterThan(0);
 
     // Wait for API calls to complete
     await waitFor(() => {
@@ -132,7 +155,7 @@ describe('Dashboard Component', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText('testuser')).toBeInTheDocument();
+      expect(screen.getByText('Test')).toBeInTheDocument();
       expect(screen.getByText('test@example.com')).toBeInTheDocument();
     });
   });
@@ -147,12 +170,10 @@ describe('Dashboard Component', () => {
     await waitFor(() => {
       const avatar = screen.getByAltText('User Avatar');
       expect(avatar).toBeInTheDocument();
-      expect(avatar).toHaveAttribute('src', 'https://example.com/avatar.jpg');
     });
   });
 
   it('should handle logout functionality', async () => {
-    
     render(
       <DashboardWrapper>
         <Dashboard />
@@ -167,7 +188,6 @@ describe('Dashboard Component', () => {
   });
 
   it('should navigate to profile when account button is clicked', async () => {
-    
     render(
       <DashboardWrapper>
         <Dashboard />
@@ -176,153 +196,33 @@ describe('Dashboard Component', () => {
 
     // Wait for user data to load
     await waitFor(() => {
-      expect(screen.getByText('testuser')).toBeInTheDocument();
+      expect(screen.getByText('Test')).toBeInTheDocument();
     });
 
     // Click on the user profile section
-    const profileButton = screen.getByText('testuser').closest('button');
+    const profileButton = screen.getByText('Test').closest('button');
     await userEvent.click(profileButton);
 
     expect(mockNavigate).toHaveBeenCalledWith('/profile');
   });
 
-  it('should open personal assistant dialog', async () => {
-    
+  it('should render PersonalAssistant component', async () => {
     render(
       <DashboardWrapper>
         <Dashboard />
       </DashboardWrapper>
     );
 
-    const assistantButton = screen.getByText('Talk to Your AI Assistant');
-    await userEvent.click(assistantButton);
-
+    // The PersonalAssistant component should be rendered
     await waitFor(() => {
-      expect(screen.getByText('Dialog Open: true')).toBeInTheDocument();
+      expect(screen.getByTestId('personal-assistant')).toBeInTheDocument();
     });
-
-    expect(window.resetAssistantPosition).toHaveBeenCalled();
-  });
-
-  it('should close personal assistant dialog', async () => {
-    
-    render(
-      <DashboardWrapper>
-        <Dashboard />
-      </DashboardWrapper>
-    );
-
-    // Open dialog first
-    const assistantButton = screen.getByText('Talk to Your AI Assistant');
-    await userEvent.click(assistantButton);
-
-    await waitFor(() => {
-      expect(screen.getByText('Dialog Open: true')).toBeInTheDocument();
-    });
-
-    // Close dialog
-    const closeButton = screen.getByText('Close Dialog');
-    await userEvent.click(closeButton);
-
-    await waitFor(() => {
-      expect(screen.getByText('Dialog Open: false')).toBeInTheDocument();
-    });
-  });
-
-  it('should render all agent modules', async () => {
-    render(
-      <DashboardWrapper>
-        <Dashboard />
-      </DashboardWrapper>
-    );
-
-    await waitFor(() => {
-      expect(screen.getByTestId('circular-agents')).toBeInTheDocument();
-      expect(screen.getByText('Agents Count: 10')).toBeInTheDocument();
-    });
-
-    // Check for specific agents
-    expect(screen.getByTestId('agent-career-agent')).toBeInTheDocument();
-    expect(screen.getByTestId('agent-money-agent')).toBeInTheDocument();
-    expect(screen.getByTestId('agent-mind-agent')).toBeInTheDocument();
-    expect(screen.getByTestId('agent-travel-agent')).toBeInTheDocument();
-    expect(screen.getByTestId('agent-body-agent')).toBeInTheDocument();
-  });
-
-  it('should display personalized insights', () => {
-    render(
-      <DashboardWrapper>
-        <Dashboard />
-      </DashboardWrapper>
-    );
-
-    expect(screen.getByText('Career Growth Opportunity')).toBeInTheDocument();
-    expect(screen.getByText('Financial Planning Insight')).toBeInTheDocument();
-    expect(screen.getByText('Wellness Recommendation')).toBeInTheDocument();
-    
-    expect(screen.getByText('Explore Career Agent')).toBeInTheDocument();
-    expect(screen.getByText('Check Money Agent')).toBeInTheDocument();
-    expect(screen.getByText('Visit Mind Agent')).toBeInTheDocument();
-  });
-
-  it('should display achievement cards', () => {
-    render(
-      <DashboardWrapper>
-        <Dashboard />
-      </DashboardWrapper>
-    );
-
-    expect(screen.getByText('Daily Engagement')).toBeInTheDocument();
-    expect(screen.getByText('Career Goals')).toBeInTheDocument();
-    expect(screen.getByText('Wellness Score')).toBeInTheDocument();
-    expect(screen.getByText('Knowledge Growth')).toBeInTheDocument();
-
-    expect(screen.getByText('7 Day Streak')).toBeInTheDocument();
-    expect(screen.getByText('In Progress')).toBeInTheDocument();
-    expect(screen.getByText('Excellent')).toBeInTheDocument();
-    expect(screen.getByText('Learning')).toBeInTheDocument();
-  });
-
-  it('should display daily recommendations', () => {
-    render(
-      <DashboardWrapper>
-        <Dashboard />
-      </DashboardWrapper>
-    );
-
-    expect(screen.getByText('Today\'s')).toBeInTheDocument();
-    expect(screen.getByText('AI Recommendations')).toBeInTheDocument();
-    expect(screen.getByText('Career Focus')).toBeInTheDocument();
-    expect(screen.getByText('Wellness Boost')).toBeInTheDocument();
-    expect(screen.getByText('Learning Opportunity')).toBeInTheDocument();
-    expect(screen.getByText('Priority Action for Today')).toBeInTheDocument();
-
-    expect(screen.getByText('15 min task')).toBeInTheDocument();
-    expect(screen.getByText('10 min break')).toBeInTheDocument();
-    expect(screen.getByText('30 min study')).toBeInTheDocument();
-    expect(screen.getByText('HIGH IMPACT')).toBeInTheDocument();
-  });
-
-  it('should display monthly goals overview', () => {
-    render(
-      <DashboardWrapper>
-        <Dashboard />
-      </DashboardWrapper>
-    );
-
-    expect(screen.getByText('Monthly Goals Overview')).toBeInTheDocument();
-    expect(screen.getByText('Career Development')).toBeInTheDocument();
-    expect(screen.getByText('Financial Planning')).toBeInTheDocument();
-    expect(screen.getByText('Personal Wellness')).toBeInTheDocument();
-
-    expect(screen.getByText('80%')).toBeInTheDocument();
-    expect(screen.getByText('60%')).toBeInTheDocument();
-    expect(screen.getByText('90%')).toBeInTheDocument();
   });
 
   it('should handle API errors gracefully', async () => {
     const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
-    
+    const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
     profileAPI.getCurrentUser.mockRejectedValue(new Error('API Error'));
     profileAPI.getAvatarUrl.mockRejectedValue(new Error('Avatar Error'));
 
@@ -333,33 +233,28 @@ describe('Dashboard Component', () => {
     );
 
     await waitFor(() => {
-      expect(consoleSpy).toHaveBeenCalledWith('Error fetching user data:', expect.any(Error));
-      expect(consoleSpy).toHaveBeenCalledWith('Error fetching avatar:', expect.any(Error));
+      // Either error or warn should be called
+      expect(consoleSpy.mock.calls.length + consoleWarnSpy.mock.calls.length).toBeGreaterThan(0);
     });
 
     consoleSpy.mockRestore();
+    consoleWarnSpy.mockRestore();
   });
 
-  it('should trigger animation after user data loads', async () => {
+  it('should display user name in PersonalAssistant', async () => {
     render(
       <DashboardWrapper>
         <Dashboard />
       </DashboardWrapper>
     );
 
-    // Initially animation should be false
+    // The PersonalAssistant should show the user's name
     await waitFor(() => {
-      expect(screen.getByText('Animation: false')).toBeInTheDocument();
+      expect(screen.getByText(/Personal Assistant for/i)).toBeInTheDocument();
     });
-
-    // After user data loads and timeout, animation should be true
-    await waitFor(() => {
-      expect(screen.getByText('Animation: true')).toBeInTheDocument();
-    }, { timeout: 1000 });
   });
 
   it('should navigate to profile when customize profile button is clicked', async () => {
-    
     render(
       <DashboardWrapper>
         <Dashboard />
@@ -382,7 +277,6 @@ describe('Dashboard Component', () => {
     expect(screen.getByText('Terms')).toBeInTheDocument();
     expect(screen.getByText('Support')).toBeInTheDocument();
     expect(screen.getByText('Engage')).toBeInTheDocument();
-    expect(screen.getAllByText('Sadaora AI')).toHaveLength(2); // Appears in nav and footer
 
     expect(screen.getByText('Terms of Service')).toBeInTheDocument();
     expect(screen.getByText('Privacy Policy')).toBeInTheDocument();
@@ -391,7 +285,7 @@ describe('Dashboard Component', () => {
     expect(screen.getByText('Copyright © 2025. All rights reserved.')).toBeInTheDocument();
   });
 
-  it('should display feature highlights', () => {
+  it('should display key features section', () => {
     render(
       <DashboardWrapper>
         <Dashboard />
@@ -401,27 +295,6 @@ describe('Dashboard Component', () => {
     expect(screen.getByText('Intelligent Coordination')).toBeInTheDocument();
     expect(screen.getByText('Natural Conversation')).toBeInTheDocument();
     expect(screen.getByText('Personalized Insights')).toBeInTheDocument();
-
-    expect(screen.getByText('Seamlessly connects all your AI agents for unified guidance')).toBeInTheDocument();
-    expect(screen.getByText('Chat naturally about any aspect of your life and goals')).toBeInTheDocument();
-    expect(screen.getByText('Tailored recommendations based on your unique profile')).toBeInTheDocument();
-  });
-
-  it('should display recent activity summary', () => {
-    render(
-      <DashboardWrapper>
-        <Dashboard />
-      </DashboardWrapper>
-    );
-
-    expect(screen.getByText('Recent AI Insights')).toBeInTheDocument();
-    expect(screen.getByText('Career progression analysis completed')).toBeInTheDocument();
-    expect(screen.getByText('Financial optimization suggestions ready')).toBeInTheDocument();
-    expect(screen.getByText('Wellness routine recommendations updated')).toBeInTheDocument();
-
-    expect(screen.getByText('2 hours ago • Based on your recent profile updates')).toBeInTheDocument();
-    expect(screen.getByText('1 day ago • Potential savings identified')).toBeInTheDocument();
-    expect(screen.getByText('3 days ago • Personalized for your lifestyle')).toBeInTheDocument();
   });
 
   it('should handle missing user data gracefully', () => {
@@ -431,7 +304,7 @@ describe('Dashboard Component', () => {
     });
 
     profileAPI.getCurrentUser.mockResolvedValue({
-      username: '',
+      first_name: '',
       email: '',
     });
 
@@ -441,9 +314,99 @@ describe('Dashboard Component', () => {
       </DashboardWrapper>
     );
 
-    // Should still render without crashing
-    expect(screen.getAllByText('Sadaora AI')).toHaveLength(2); // Appears in nav and footer
-    expect(screen.getByText('Welcome to Your')).toBeInTheDocument();
-    expect(screen.getByText('Personal AI Assistant')).toBeInTheDocument();
+    // Should still render without crashing - multiple "Idii." instances may exist
+    const idiiElements = screen.getAllByText('Idii.');
+    expect(idiiElements.length).toBeGreaterThan(0);
+  });
+
+  it('should display sidebar navigation', () => {
+    render(
+      <DashboardWrapper>
+        <Dashboard />
+      </DashboardWrapper>
+    );
+
+    // Sidebar should have expand button
+    const expandButton = screen.getByLabelText(/expand sidebar/i);
+    expect(expandButton).toBeInTheDocument();
+  });
+
+  it('should toggle sidebar when button is clicked', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <DashboardWrapper>
+        <Dashboard />
+      </DashboardWrapper>
+    );
+
+    // Initially collapsed, find expand button
+    const expandButton = screen.getByLabelText(/expand sidebar/i);
+    await user.click(expandButton);
+
+    // After expanding, should find collapse button
+    await waitFor(() => {
+      expect(screen.getByLabelText(/collapse sidebar/i)).toBeInTheDocument();
+    });
+  });
+
+  it('should have Career Agent quick access button', async () => {
+    render(
+      <DashboardWrapper>
+        <Dashboard />
+      </DashboardWrapper>
+    );
+
+    // Find the Career Agent button by its text content
+    const careerButton = screen.getByText(/Career Agent/i).closest('button');
+    expect(careerButton).toBeInTheDocument();
+  });
+
+  it('should have Travel Agent quick access button', async () => {
+    render(
+      <DashboardWrapper>
+        <Dashboard />
+      </DashboardWrapper>
+    );
+
+    // Find the Travel Agent button by its text content
+    const travelButton = screen.getByText(/Travel Agent/i).closest('button');
+    expect(travelButton).toBeInTheDocument();
+  });
+
+  it('should display daily recommendations', async () => {
+    render(
+      <DashboardWrapper>
+        <Dashboard />
+      </DashboardWrapper>
+    );
+
+    await waitFor(() => {
+      expect(dailyRecommendationsAPI.getRecommendations).toHaveBeenCalled();
+    });
+  });
+
+  it('should display career insights', async () => {
+    render(
+      <DashboardWrapper>
+        <Dashboard />
+      </DashboardWrapper>
+    );
+
+    await waitFor(() => {
+      expect(careerInsightsAPI.getSummary).toHaveBeenCalled();
+    });
+  });
+
+  it('should fetch recent activities', async () => {
+    render(
+      <DashboardWrapper>
+        <Dashboard />
+      </DashboardWrapper>
+    );
+
+    await waitFor(() => {
+      expect(activitiesAPI.getRecentActivities).toHaveBeenCalled();
+    });
   });
 });

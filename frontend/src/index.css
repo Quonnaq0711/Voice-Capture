@@ -15,3 +15,13 @@ code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
 }
+
+/* Firefox-specific fix for textarea button positioning */
+/* Firefox calculates textarea container height differently than Chrome/Edge */
+/* Firefox renders buttons TOO HIGH, so we DECREASE bottom to move them DOWN */
+@-moz-document url-prefix() {
+  .chat-input-buttons {
+    /* Move buttons DOWN in Firefox by reducing bottom value */
+    bottom: 0.25rem !important; /* 4px instead of 8px (bottom-2) */
+  }
+}
