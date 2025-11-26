@@ -1,10 +1,19 @@
 #!/bin/bash
 
-set -e 
+# Exit on error, fail on undefined variables, fail on pipe errors
+set -euo pipefail
 
-echo "🚀 Deloying Idii Staging Platform..."
+echo "🚀 Deploying Idii Staging Platform..."
 
-source .env.staging
+# Safely source environment file (set -a exports all variables)
+if [[ -f .env.staging ]]; then
+    set -a
+    source .env.staging
+    set +a
+else
+    echo "❌ .env.staging not found"
+    exit 1
+fi
 
 # Verify GPU is available
 echo "🔍 Checking GPU availability..."

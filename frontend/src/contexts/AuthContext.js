@@ -1,4 +1,4 @@
-import { createContext, useState, useContext, useEffect } from 'react';
+import { createContext, useState, useContext, useEffect, useCallback } from 'react';
 import { auth } from '../services/api';
 
 const AuthContext = createContext(null);
@@ -7,7 +7,8 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  const logout = async () => {
+  // Stable logout function - wrapped in useCallback to prevent unnecessary re-renders
+  const logout = useCallback(async () => {
     try {
       await auth.logout();
     } catch (error) {
@@ -16,7 +17,7 @@ export const AuthProvider = ({ children }) => {
     } finally {
       setUser(null);
     }
-  };
+  }, []);
 
   // Listen for storage events (cross-tab synchronization)
   // Using useEffect without dependencies to avoid re-registering listener
@@ -24,13 +25,13 @@ export const AuthProvider = ({ children }) => {
     const handleStorageChange = (e) => {
       // If token was removed in another tab, logout this tab too
       if (e.key === 'token' && !e.newValue) {
-        console.log('Token removed in another tab, logging out...');
+        if (process.env.NODE_ENV === 'development') console.log('Token removed in another tab, logging out...');
         setUser(null);
         window.location.href = '/login';
       }
       // If token was updated in another tab, update user state
       else if (e.key === 'token' && e.newValue) {
-        console.log('Token updated in another tab, syncing...');
+        if (process.env.NODE_ENV === 'development') console.log('Token updated in another tab, syncing...');
         // Update token using setUser with callback to access latest state
         setUser(prevUser => {
           if (prevUser) {
@@ -49,8 +50,16 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     const checkUser = async () => {
-      const token = localStorage.getItem('token');
-      const refreshToken = localStorage.getItem('refresh_token');
+      // Wrap localStorage access in try-catch for private browsing mode compatibility
+      let token, refreshToken;
+      try {
+        token = localStorage.getItem('token');
+        refreshToken = localStorage.getItem('refresh_token');
+      } catch (e) {
+        console.warn('localStorage access denied (private browsing mode?):', e);
+        setLoading(false);
+        return;
+      }
 
       if (token) {
         try {
@@ -61,7 +70,7 @@ export const AuthProvider = ({ children }) => {
           // If access token is expired, try to refresh it
           if (error.response && error.response.status === 401 && refreshToken) {
             try {
-              console.log('Access token expired, attempting to refresh...');
+              if (process.env.NODE_ENV === 'development') console.log('Access token expired, attempting to refresh...');
               const data = await auth.refreshToken();
               // Retry getting profile with new token
               const profile = await auth.getProfile(data.access_token);
@@ -81,8 +90,7 @@ export const AuthProvider = ({ children }) => {
       setLoading(false);
     };
     checkUser();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // logout is stable, no need to include in deps
+  }, [logout]); // logout is now stable via useCallback
 
   const login = async (email, password) => {
     try {

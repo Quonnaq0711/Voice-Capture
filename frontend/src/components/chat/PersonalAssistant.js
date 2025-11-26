@@ -1,6 +1,16 @@
-import { useState, useEffect, useRef, useCallback, useReducer } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useReducer, useMemo, memo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import ChatDialog from './ChatDialog';
+
+// ==================== TIMING CONSTANTS ====================
+const NOTIFICATION_DISMISS_MS = 5000;      // Auto-dismiss notification after 5s
+const WELCOME_MESSAGE_TIMEOUT_MS = 10000;  // Auto-hide welcome message after 10s
+const NAVIGATION_COUNTDOWN_MS = 1000;      // Countdown tick interval (1s)
+const AGENT_WELCOME_DISPLAY_MS = 5000;     // Show agent welcome for 5s
+const NAVIGATION_DELAY_MS = 500;           // Delay before navigation actions
+const STATE_REQUEST_TIMEOUT_MS = 1000;     // Timeout for state requests
+const ASSISTANT_SIZE_PX = 120;             // Approximate size of assistant avatar
+const ASSISTANT_PADDING_PX = 20;           // Padding from screen edges
 
 // Create a custom event system to replace window object pollution
 const dispatchNavigationEvent = (eventName, detail) => {
@@ -12,6 +22,11 @@ const subscribeToNavigationEvent = (eventName, handler) => {
   const eventType = `assistant:${eventName}`;
   document.addEventListener(eventType, handler);
   return () => document.removeEventListener(eventType, handler);
+};
+
+// Helper to dispatch chat events (replaces window.updateCountdownMessage etc.)
+const dispatchChatEvent = (type, payload) => {
+  document.dispatchEvent(new CustomEvent(`chat:${type}`, { detail: payload }));
 };
 
 // ==================== NAVIGATION STATE MACHINE ====================
@@ -108,7 +123,94 @@ const navigationReducer = (state, action) => {
   }
 };
 
-const PersonalAssistant = ({ user, isDialogOpen: externalIsDialogOpen, setIsDialogOpen: externalSetIsDialogOpen, onDialogClose, onUnreadCountChange, onOpenAgentModal }) => {
+// Memoized bubble components to prevent unnecessary re-renders
+const WelcomeBubble = memo(({ user, onClose }) => (
+  <div className="absolute bottom-full mb-2 w-64 bg-white p-4 rounded-lg shadow-lg right-0 transform transition-all duration-300 ease-in-out origin-bottom-right scale-100">
+    <button
+      onClick={onClose}
+      className="absolute top-2 right-2 text-gray-400 hover:text-gray-600 transition-colors"
+      aria-label="Close welcome message"
+    >
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+      </svg>
+    </button>
+    <h3 className="text-lg font-bold text-gray-800 pr-6">Welcome, {user?.first_name || 'User'}!</h3>
+    <p className="text-sm text-gray-600 mt-1">Your personal AI assistant for a better life. What can I help you with today?</p>
+    <div className="absolute right-4 -bottom-2 w-4 h-4 bg-white transform rotate-45"></div>
+  </div>
+));
+
+const getBubbleColor = (type) => {
+  switch (type) {
+    case 'success':
+    case 'complete':
+      return 'bg-green-500';
+    case 'error':
+      return 'bg-red-500';
+    default:
+      return 'bg-blue-500';
+  }
+};
+
+const NotificationBubble = memo(({ notification, onClose }) => {
+  if (!notification) return null;
+
+  const color = getBubbleColor(notification.type);
+
+  return (
+    <div className={`absolute bottom-full mb-2 w-72 ${color} text-white p-4 rounded-lg shadow-lg right-0 transform transition-all duration-300 ease-in-out origin-bottom-right scale-100`}>
+      <button
+        onClick={onClose}
+        className="absolute top-2 right-2 text-white hover:text-gray-200 transition-colors"
+        aria-label="Close notification"
+      >
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+      {notification.title && (
+        <h3 className="text-sm font-bold pr-6 mb-1">{notification.title}</h3>
+      )}
+      <p className="text-sm opacity-95">{notification.message}</p>
+      {notification.type === 'progress' && notification.progress !== undefined && (
+        <div className="mt-2">
+          <div className="flex items-center justify-between text-xs mb-1 opacity-90">
+            <span>{notification.current_section || 'Processing'}</span>
+            <span>{notification.progress}%</span>
+          </div>
+          <div className="w-full bg-white bg-opacity-30 rounded-full h-1.5">
+            <div className="bg-white h-1.5 rounded-full transition-all duration-300" style={{ width: `${notification.progress}%` }}></div>
+          </div>
+        </div>
+      )}
+      <div className={`absolute right-4 -bottom-2 w-4 h-4 ${color} transform rotate-45`}></div>
+    </div>
+  );
+});
+
+const AgentWelcomeBubble = memo(({ currentAgent, onClose }) => {
+  if (!currentAgent) return null;
+
+  return (
+    <div className="absolute bottom-full mb-2 w-64 bg-green-500 text-white p-4 rounded-lg shadow-lg right-0 transform transition-all duration-300 ease-in-out origin-bottom-right scale-100">
+      <button
+        onClick={onClose}
+        className="absolute top-2 right-2 text-white hover:text-gray-200 transition-colors"
+        aria-label="Close welcome message"
+      >
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+      <h3 className="text-lg font-bold pr-6">Welcome to {currentAgent.displayName}!</h3>
+      <p className="text-sm mt-1">Your {currentAgent.displayName} agent is ready to assist you.</p>
+      <div className="absolute right-4 -bottom-2 w-4 h-4 bg-green-500 transform rotate-45"></div>
+    </div>
+  );
+});
+
+const PersonalAssistant = ({ user, isDialogOpen: externalIsDialogOpen, setIsDialogOpen: externalSetIsDialogOpen, onDialogClose, onUnreadCountChange, onOpenAgentModal, agentType, notifications = [], initialSessionId, onSessionSwitched }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const [internalIsDialogOpen, setInternalIsDialogOpen] = useState(false);
@@ -120,6 +222,11 @@ const PersonalAssistant = ({ user, isDialogOpen: externalIsDialogOpen, setIsDial
   // Always show welcome message on mount
   const [showWelcome, setShowWelcome] = useState(true);
 
+  // Notification bubble state
+  const [activeNotification, setActiveNotification] = useState(null);
+  const notificationProcessedRef = useRef(new Set());
+  const notificationTimerRef = useRef(null);
+
   // Reset showWelcome to true whenever user changes (login/logout)
   useEffect(() => {
     if (user?.first_name) {
@@ -127,13 +234,49 @@ const PersonalAssistant = ({ user, isDialogOpen: externalIsDialogOpen, setIsDial
     }
   }, [user?.id]); // Trigger when user ID changes (login/logout)
 
-  // Calculate safe initial position (120px is the approximate size of the assistant avatar)
+  // Handle notifications - show the latest unprocessed notification
+  useEffect(() => {
+    if (notifications.length > 0) {
+      // Find the latest notification that hasn't been processed
+      const latestNotification = notifications.find(n => !notificationProcessedRef.current.has(n.id));
+
+      if (latestNotification) {
+        // Clear any existing timer before setting new notification
+        if (notificationTimerRef.current) {
+          clearTimeout(notificationTimerRef.current);
+          notificationTimerRef.current = null;
+        }
+
+        // Hide welcome message when showing notification
+        setShowWelcome(false);
+        setActiveNotification(latestNotification);
+        notificationProcessedRef.current.add(latestNotification.id);
+
+        // Auto-dismiss after 5 seconds (except for error notifications)
+        if (latestNotification.type !== 'error') {
+          notificationTimerRef.current = setTimeout(() => {
+            setActiveNotification(null);
+            notificationTimerRef.current = null;
+          }, NOTIFICATION_DISMISS_MS);
+        }
+      }
+    }
+  }, [notifications]);
+
+  // Cleanup timer on unmount only
+  useEffect(() => {
+    return () => {
+      if (notificationTimerRef.current) {
+        clearTimeout(notificationTimerRef.current);
+      }
+    };
+  }, []);
+
+  // Calculate safe initial position
   const getInitialPosition = useCallback(() => {
-    const assistantSize = 120; // Approximate size of the assistant avatar
-    const padding = 20; // Padding from screen edges
     return {
-      x: Math.max(padding, window.innerWidth - assistantSize - padding),
-      y: Math.max(padding, window.innerHeight - assistantSize - padding)
+      x: Math.max(ASSISTANT_PADDING_PX, window.innerWidth - ASSISTANT_SIZE_PX - ASSISTANT_PADDING_PX),
+      y: Math.max(ASSISTANT_PADDING_PX, window.innerHeight - ASSISTANT_SIZE_PX - ASSISTANT_PADDING_PX)
     };
   }, []);
 
@@ -142,6 +285,12 @@ const PersonalAssistant = ({ user, isDialogOpen: externalIsDialogOpen, setIsDial
   // Use reducer for navigation state management to prevent race conditions
   // This replaces 4 separate useState calls: showCountdown, countdown, targetAgent, showAgentWelcome
   const [navState, dispatchNav] = useReducer(navigationReducer, initialNavigationState);
+
+  // Ref to access navState in event handlers without causing listener rebuilds
+  const navStateRef = useRef(navState);
+  useEffect(() => {
+    navStateRef.current = navState;
+  }, [navState]);
 
   const [hasDialogBeenOpened, setHasDialogBeenOpened] = useState(false);
 
@@ -155,15 +304,13 @@ const PersonalAssistant = ({ user, isDialogOpen: externalIsDialogOpen, setIsDial
   useEffect(() => {
     const handleResize = () => {
       setPosition(prevPosition => {
-        const assistantSize = 120;
-        const padding = 20;
-        const maxX = window.innerWidth - assistantSize - padding;
-        const maxY = window.innerHeight - assistantSize - padding;
+        const maxX = window.innerWidth - ASSISTANT_SIZE_PX - ASSISTANT_PADDING_PX;
+        const maxY = window.innerHeight - ASSISTANT_SIZE_PX - ASSISTANT_PADDING_PX;
 
         // Constrain position within new viewport dimensions
         return {
-          x: Math.min(Math.max(padding, prevPosition.x), maxX),
-          y: Math.min(Math.max(padding, prevPosition.y), maxY)
+          x: Math.min(Math.max(ASSISTANT_PADDING_PX, prevPosition.x), maxX),
+          y: Math.min(Math.max(ASSISTANT_PADDING_PX, prevPosition.y), maxY)
         };
       });
     };
@@ -172,12 +319,12 @@ const PersonalAssistant = ({ user, isDialogOpen: externalIsDialogOpen, setIsDial
     return () => window.removeEventListener('resize', handleResize);
   }, []);
   
-  // Available agents configuration - Only show active agents
-  const agents = [
+  // Available agents configuration - Only show active agents (stable reference)
+  const agents = useMemo(() => [
     { name: 'Career Agent', path: '/agents/career', displayName: 'Career' },
     { name: 'Travel Agent', path: '/agents/travel', displayName: 'Travel' },
     { name: 'Body Agent', path: '/agents/body', displayName: 'Body' }
-  ];
+  ], []);
   
   // Function to reset position to bottom right corner
   const resetPosition = useCallback(() => {
@@ -193,9 +340,18 @@ const PersonalAssistant = ({ user, isDialogOpen: externalIsDialogOpen, setIsDial
   const dragStartPos = useRef({ x: 0, y: 0 });
   const initialMousePos = useRef({ x: 0, y: 0 });
   const assistantRef = useRef(null);
+  // Cache assistant dimensions to avoid layout thrashing during drag
+  const assistantDimensionsRef = useRef({ width: 128, height: 128 });
 
   const handleMouseDown = (e) => {
     e.preventDefault();
+    // Cache dimensions at drag start to avoid reading from DOM on every mousemove
+    if (assistantRef.current) {
+      assistantDimensionsRef.current = {
+        width: assistantRef.current.offsetWidth,
+        height: assistantRef.current.offsetHeight
+      };
+    }
     setIsDragging(true);
     dragStartPos.current = { x: position.x, y: position.y };
     initialMousePos.current = { x: e.clientX, y: e.clientY };
@@ -219,34 +375,25 @@ const PersonalAssistant = ({ user, isDialogOpen: externalIsDialogOpen, setIsDial
 
   // Auto-hide welcome message after 10 seconds
   useEffect(() => {
-    console.log('[PersonalAssistant] Welcome state:', {
-      showWelcome,
-      userName: user?.first_name,
-      navState: navState.state
-    });
     if (showWelcome && user?.first_name) {
-      console.log('[PersonalAssistant] Starting 10s timer for welcome message');
       const timer = setTimeout(() => {
-        console.log('[PersonalAssistant] 10s elapsed, hiding welcome');
         setShowWelcome(false);
-      }, 10000); // Hide welcome message after 10 seconds
+      }, WELCOME_MESSAGE_TIMEOUT_MS);
 
       return () => {
-        console.log('[PersonalAssistant] Cleaning up welcome timer');
         clearTimeout(timer);
       };
     }
   }, [showWelcome, user?.first_name, navState.state]);
   
   // Function to cancel ongoing navigation
+  // Uses navStateRef to avoid recreation on every state change
   const cancelNavigation = useCallback(() => {
-    if (navState.state === NavigationState.COUNTDOWN) {
+    if (navStateRef.current.state === NavigationState.COUNTDOWN) {
       dispatchNav({ type: NavigationActions.CANCEL_NAVIGATION });
-      if (window.updateCountdownMessage) {
-        window.updateCountdownMessage('Navigation cancelled. Staying on current page.');
-      }
+      dispatchChatEvent('updateCountdown', { message: 'Navigation cancelled. Staying on current page.' });
     }
-  }, [navState.state]);
+  }, []);
 
   // Handle countdown timer - State machine implementation
   useEffect(() => {
@@ -258,41 +405,39 @@ const PersonalAssistant = ({ user, isDialogOpen: externalIsDialogOpen, setIsDial
         dispatchNav({ type: NavigationActions.UPDATE_COUNTDOWN });
 
         // Send professional countdown update to chat
-        if (window.updateCountdownMessage && navState.targetAgent) {
+        if (navState.targetAgent) {
           const newCount = navState.countdown - 1;
           if (newCount > 0) {
             const agentName = navState.targetAgent.name === 'Dashboard'
               ? 'Dashboard'
               : `${navState.targetAgent.displayName} Agent`;
-            window.updateCountdownMessage(
-              `Redirecting to ${agentName} in ${newCount} second${newCount > 1 ? 's' : ''}...`
-            );
+            dispatchChatEvent('updateCountdown', {
+              message: `Redirecting to ${agentName} in ${newCount} second${newCount > 1 ? 's' : ''}...`
+            });
           }
         }
-      }, 1000);
+      }, NAVIGATION_COUNTDOWN_MS);
     } else if (navState.state === NavigationState.NAVIGATING) {
       // NAVIGATING state: Execute navigation and transition to AGENT_WELCOME
       if (navState.targetAgent) {
         navigate(navState.targetAgent.path);
 
         // Send completion message to chat
-        if (window.updateCountdownMessage) {
-          const agentName = navState.targetAgent.name === 'Dashboard'
-            ? 'Dashboard'
-            : `${navState.targetAgent.displayName} Agent`;
-          window.updateCountdownMessage(`Successfully redirected to ${agentName}!`);
-        }
+        const agentName = navState.targetAgent.name === 'Dashboard'
+          ? 'Dashboard'
+          : `${navState.targetAgent.displayName} Agent`;
+        dispatchChatEvent('updateCountdown', { message: `Successfully redirected to ${agentName}!` });
 
         // Transition to agent welcome state after navigation
         setTimeout(() => {
           dispatchNav({ type: NavigationActions.EXECUTE_NAVIGATION });
-        }, 500);
+        }, NAVIGATION_DELAY_MS);
       }
     } else if (navState.state === NavigationState.AGENT_WELCOME) {
-      // AGENT_WELCOME state: Show welcome for 5 seconds, then return to IDLE
+      // AGENT_WELCOME state: Show welcome, then return to IDLE
       timer = setTimeout(() => {
         dispatchNav({ type: NavigationActions.HIDE_AGENT_WELCOME });
-      }, 5000);
+      }, AGENT_WELCOME_DISPLAY_MS);
     }
 
     return () => {
@@ -303,12 +448,15 @@ const PersonalAssistant = ({ user, isDialogOpen: externalIsDialogOpen, setIsDial
 
   
   // Handle agent navigation from chat dialog
+  // Uses navStateRef to avoid recreation on every state change
   const handleAgentNavigation = useCallback((agentName, onCountdownMessage) => {
+    const currentNavState = navStateRef.current;
+
     if (agentName === 'None') {
       // Check if already on dashboard
       if (location.pathname === '/dashboard') {
         // Cancel any ongoing navigation and stay on current page
-        if (navState.state === NavigationState.COUNTDOWN) {
+        if (currentNavState.state === NavigationState.COUNTDOWN) {
           dispatchNav({ type: NavigationActions.CANCEL_NAVIGATION });
         }
         if (onCountdownMessage) {
@@ -317,9 +465,9 @@ const PersonalAssistant = ({ user, isDialogOpen: externalIsDialogOpen, setIsDial
         return;
       }
       // If there's an ongoing countdown to Dashboard, do nothing
-      if (navState.state === NavigationState.COUNTDOWN &&
-          navState.targetAgent &&
-          navState.targetAgent.name === 'Dashboard') {
+      if (currentNavState.state === NavigationState.COUNTDOWN &&
+          currentNavState.targetAgent &&
+          currentNavState.targetAgent.name === 'Dashboard') {
         return;
       }
       // Navigate to dashboard
@@ -342,7 +490,7 @@ const PersonalAssistant = ({ user, isDialogOpen: externalIsDialogOpen, setIsDial
     // If already on the selected agent page, cancel any ongoing navigation
     if (currentAgent && currentAgent.name === agentName) {
       // Cancel any ongoing navigation and stay on current page
-      if (navState.state === NavigationState.COUNTDOWN) {
+      if (currentNavState.state === NavigationState.COUNTDOWN) {
         dispatchNav({ type: NavigationActions.CANCEL_NAVIGATION });
       }
       if (onCountdownMessage) {
@@ -352,9 +500,9 @@ const PersonalAssistant = ({ user, isDialogOpen: externalIsDialogOpen, setIsDial
     }
 
     // If there's an ongoing countdown, check if it's for the same agent
-    if (navState.state === NavigationState.COUNTDOWN) {
+    if (currentNavState.state === NavigationState.COUNTDOWN) {
       // If selecting the same agent that's already being navigated to, do nothing
-      if (navState.targetAgent && navState.targetAgent.name === agentName) {
+      if (currentNavState.targetAgent && currentNavState.targetAgent.name === agentName) {
         return;
       }
       // Otherwise, cancel current countdown and start new one
@@ -371,7 +519,7 @@ const PersonalAssistant = ({ user, isDialogOpen: externalIsDialogOpen, setIsDial
         if (onCountdownMessage) {
           onCountdownMessage(`Redirecting to ${agent.displayName} Agent in 3 seconds...`);
         }
-      }, 500);
+      }, NAVIGATION_DELAY_MS);
       return;
     }
 
@@ -384,11 +532,12 @@ const PersonalAssistant = ({ user, isDialogOpen: externalIsDialogOpen, setIsDial
     if (onCountdownMessage) {
       onCountdownMessage(`Redirecting to ${agent.displayName} Agent in 3 seconds...`);
     }
-  }, [location.pathname, agents, getCurrentAgent, navState.state, navState.targetAgent]);
+  }, [location.pathname, agents, getCurrentAgent]);
   
   // ==================== CUSTOM EVENT SYSTEM ====================
   // Replace window object pollution with custom events
   // This prevents security issues and namespace conflicts
+  // Uses navStateRef to avoid listener rebuilds on every state change
   useEffect(() => {
     // Set up event listeners for navigation control
     const unsubscribeResetPosition = subscribeToNavigationEvent('resetPosition', () => {
@@ -404,10 +553,10 @@ const PersonalAssistant = ({ user, isDialogOpen: externalIsDialogOpen, setIsDial
     });
 
     const unsubscribeGetState = subscribeToNavigationEvent('getState', () => {
-      // Respond with current state
+      // Use ref to get current state without causing listener rebuilds
       dispatchNavigationEvent('stateResponse', {
-        isNavigating: navState.state === NavigationState.COUNTDOWN,
-        targetAgent: navState.targetAgent
+        isNavigating: navStateRef.current.state === NavigationState.COUNTDOWN,
+        targetAgent: navStateRef.current.targetAgent
       });
     });
 
@@ -417,9 +566,8 @@ const PersonalAssistant = ({ user, isDialogOpen: externalIsDialogOpen, setIsDial
       unsubscribeNavigate();
       unsubscribeCancel();
       unsubscribeGetState();
-      console.log('[PersonalAssistant] All custom event listeners removed');
     };
-  }, [resetPosition, handleAgentNavigation, cancelNavigation, navState.state, navState.targetAgent]);
+  }, [resetPosition, handleAgentNavigation, cancelNavigation]);
 
   // ==================== MOUSE EVENT MANAGEMENT ====================
   // Properly manage mouse event listeners to prevent memory leaks
@@ -437,14 +585,10 @@ const PersonalAssistant = ({ user, isDialogOpen: externalIsDialogOpen, setIsDial
       let newX = dragStartPos.current.x + dx;
       let newY = dragStartPos.current.y + dy;
 
-      // Constrain movement within the viewport
-      if (assistantRef.current) {
-        const assistantWidth = assistantRef.current.offsetWidth;
-        const assistantHeight = assistantRef.current.offsetHeight;
-
-        newX = Math.max(0, Math.min(newX, window.innerWidth - assistantWidth));
-        newY = Math.max(0, Math.min(newY, window.innerHeight - assistantHeight));
-      }
+      // Constrain movement within the viewport using cached dimensions (avoids layout thrashing)
+      const { width, height } = assistantDimensionsRef.current;
+      newX = Math.max(0, Math.min(newX, window.innerWidth - width));
+      newY = Math.max(0, Math.min(newY, window.innerHeight - height));
 
       setPosition({ x: newX, y: newY });
     };
@@ -460,47 +604,7 @@ const PersonalAssistant = ({ user, isDialogOpen: externalIsDialogOpen, setIsDial
     };
   }, [isDragging, handleMouseUp]); // Re-run when isDragging or handleMouseUp changes
 
-  const WelcomeBubble = ({ user, onClose }) => (
-    <div className="absolute bottom-full mb-2 w-64 bg-white p-4 rounded-lg shadow-lg right-0 transform transition-all duration-300 ease-in-out origin-bottom-right scale-100">
-      <button
-        onClick={onClose}
-        className="absolute top-2 right-2 text-gray-400 hover:text-gray-600 transition-colors"
-        aria-label="Close welcome message"
-      >
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-        </svg>
-      </button>
-      <h3 className="text-lg font-bold text-gray-800 pr-6">Welcome, {user?.first_name || 'User'}!</h3>
-      <p className="text-sm text-gray-600 mt-1">Your personal AI assistant for a better life. What can I help you with today?</p>
-      <div className="absolute right-4 -bottom-2 w-4 h-4 bg-white transform rotate-45"></div>
-    </div>
-  );
-  
-
-  
-  // Agent welcome bubble component
-  const AgentWelcomeBubble = ({ onClose }) => {
-    const currentAgent = getCurrentAgent();
-    if (!currentAgent) return null;
-
-    return (
-      <div className="absolute bottom-full mb-2 w-64 bg-green-500 text-white p-4 rounded-lg shadow-lg right-0 transform transition-all duration-300 ease-in-out origin-bottom-right scale-100">
-        <button
-          onClick={onClose}
-          className="absolute top-2 right-2 text-white hover:text-gray-200 transition-colors"
-          aria-label="Close welcome message"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
-        <h3 className="text-lg font-bold pr-6">Welcome to {currentAgent.displayName}!</h3>
-        <p className="text-sm mt-1">Your {currentAgent.displayName} agent is ready to assist you.</p>
-        <div className="absolute right-4 -bottom-2 w-4 h-4 bg-green-500 transform rotate-45"></div>
-      </div>
-    );
-  };
+  // Bubble components are now memoized and defined outside the component
 
   // SVG for the assistant's avatar
   const AssistantAvatar = () => (
@@ -574,9 +678,17 @@ const PersonalAssistant = ({ user, isDialogOpen: externalIsDialogOpen, setIsDial
         <WelcomeBubble user={user} onClose={() => setShowWelcome(false)} />
       )}
 
+      {/* Show notification bubble */}
+      {activeNotification && (
+        <NotificationBubble
+          notification={activeNotification}
+          onClose={() => setActiveNotification(null)}
+        />
+      )}
+
       {/* Show agent welcome bubble after navigation */}
       {navState.state === NavigationState.AGENT_WELCOME && (
-        <AgentWelcomeBubble onClose={() => dispatchNav({ type: NavigationActions.HIDE_AGENT_WELCOME })} />
+        <AgentWelcomeBubble currentAgent={getCurrentAgent()} onClose={() => dispatchNav({ type: NavigationActions.HIDE_AGENT_WELCOME })} />
       )}
       
       <AssistantAvatar />
@@ -594,6 +706,9 @@ const PersonalAssistant = ({ user, isDialogOpen: externalIsDialogOpen, setIsDial
             setAssistantPosition={setPosition}
             onUnreadCountChange={onUnreadCountChange}
             onOpenAgentModal={onOpenAgentModal}
+            agentType={agentType}
+            initialSessionId={initialSessionId}
+            onSessionSwitched={onSessionSwitched}
           />
         </div>
       )}
@@ -618,21 +733,33 @@ export const resetAssistantPosition = () => {
   dispatchNavigationEvent('resetPosition', {});
 };
 
+// Singleton to prevent duplicate listeners
+let pendingStateRequest = null;
+
 export const getAssistantNavigationState = () => {
-  return new Promise((resolve) => {
-    const handler = (event) => {
-      resolve(event.detail);
+  if (pendingStateRequest) return pendingStateRequest;
+
+  pendingStateRequest = new Promise((resolve) => {
+    const cleanup = () => {
       document.removeEventListener('assistant:stateResponse', handler);
+      pendingStateRequest = null;
     };
+
+    const handler = (event) => {
+      cleanup();
+      resolve(event.detail);
+    };
+
     document.addEventListener('assistant:stateResponse', handler);
     dispatchNavigationEvent('getState', {});
 
-    // Timeout after 1 second
     setTimeout(() => {
-      document.removeEventListener('assistant:stateResponse', handler);
+      cleanup();
       resolve(null);
-    }, 1000);
+    }, STATE_REQUEST_TIMEOUT_MS);
   });
+
+  return pendingStateRequest;
 };
 
 export default PersonalAssistant;

@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
-import { profile as profileAPI } from '../services/api';
+import { useAuth } from '../../contexts/AuthContext';
+import { profile as profileAPI } from '../../services/api';
 import {
   BriefcaseIcon,
   CurrencyDollarIcon,
@@ -19,13 +19,22 @@ import {
 } from '@heroicons/react/24/outline';
 
 // Toast notification component
+// Uses ref pattern to avoid stale closure when onClose changes
 const Toast = ({ message, type, onClose }) => {
+  const onCloseRef = useRef(onClose);
+
+  // Keep ref updated when onClose changes
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
+  // Timer only runs once per mount, uses ref for latest callback
   useEffect(() => {
     const timer = setTimeout(() => {
-      onClose();
+      onCloseRef.current?.();
     }, 3000);
     return () => clearTimeout(timer);
-  }, [onClose]);
+  }, []);
 
   return (
     <div className={`fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg transition-all duration-300 ${

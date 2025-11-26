@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState } from 'react';
 import {
   CheckCircleIcon,
   ExclamationCircleIcon,
@@ -10,81 +10,35 @@ import { BellIcon as BellIconSolid } from '@heroicons/react/24/solid';
 
 const NotificationPanel = ({ notifications = [], onDismiss }) => {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const [toastNotifications, setToastNotifications] = useState([]);
 
-  // Use ref to track processed notification IDs (avoids dependency issues)
-  const processedNotificationIdsRef = useRef(new Set());
+  const getNotificationIcon = (type, size = 'h-5 w-5', color = null) => {
+    const iconColor = color || (() => {
+      switch (type) {
+        case 'success':
+        case 'complete':
+          return 'text-green-600';
+        case 'error':
+          return 'text-red-600';
+        case 'progress':
+        case 'info':
+        default:
+          return 'text-blue-600';
+      }
+    })();
 
-  // Handle new notifications as toast
-  // Check all notifications, not just the last one, because notifications
-  // with fixed IDs may be updated in-place (middle of array)
-  useEffect(() => {
-    if (notifications.length === 0) return;
-
-    // Find all new notifications that haven't been shown as toasts yet
-    const newNotifications = notifications.filter(n => !processedNotificationIdsRef.current.has(n.id));
-
-    if (newNotifications.length > 0) {
-      // Process each new notification
-      newNotifications.forEach((notification) => {
-        // Add to toast list
-        setToastNotifications(prev => {
-          const existingToast = prev.find(t => t.id === notification.id);
-          if (existingToast) {
-            return prev;
-          }
-
-          const newToast = { ...notification, showToast: true };
-
-          // Auto-dismiss toast after 5 seconds (except for error notifications)
-          if (notification.type !== 'error') {
-            setTimeout(() => {
-              setToastNotifications(toasts =>
-                toasts.map(t => t.id === notification.id ? { ...t, showToast: false } : t)
-              );
-              // Remove from toast list after animation
-              setTimeout(() => {
-                setToastNotifications(toasts => toasts.filter(t => t.id !== notification.id));
-              }, 300);
-            }, 5000);
-          }
-
-          return [...prev, newToast];
-        });
-
-        // Mark as processed immediately (ref doesn't trigger re-render)
-        processedNotificationIdsRef.current.add(notification.id);
-      });
-    }
-  }, [notifications]);
-
-  const getNotificationIcon = (type, size = 'h-5 w-5') => {
     switch (type) {
       case 'success':
       case 'complete':
-        return <CheckCircleIcon className={`${size} text-green-600`} />;
+        return <CheckCircleIcon className={`${size} ${iconColor}`} />;
       case 'error':
-        return <ExclamationCircleIcon className={`${size} text-red-600`} />;
+        return <ExclamationCircleIcon className={`${size} ${iconColor}`} />;
       case 'progress':
       case 'info':
       default:
-        return <InformationCircleIcon className={`${size} text-blue-600`} />;
+        return <InformationCircleIcon className={`${size} ${iconColor}`} />;
     }
   };
 
-  const getToastStyles = (type) => {
-    switch (type) {
-      case 'success':
-      case 'complete':
-        return 'bg-green-50 border-green-200 text-green-800';
-      case 'error':
-        return 'bg-red-50 border-red-200 text-red-800';
-      case 'progress':
-      case 'info':
-      default:
-        return 'bg-blue-50 border-blue-200 text-blue-800';
-    }
-  };
 
   const getDropdownItemStyles = (type) => {
     switch (type) {
@@ -119,73 +73,10 @@ const NotificationPanel = ({ notifications = [], onDismiss }) => {
     }
   };
 
-  const dismissToast = (notificationId) => {
-    setToastNotifications(prev => 
-      prev.map(t => t.id === notificationId ? { ...t, showToast: false } : t)
-    );
-    setTimeout(() => {
-      setToastNotifications(prev => prev.filter(t => t.id !== notificationId));
-    }, 300);
-  };
-
   const unreadCount = notifications.filter(n => !n.read).length;
 
   return (
     <>
-      {/* Toast Notifications */}
-      <div className="fixed top-4 right-4 z-50 space-y-2">
-        {toastNotifications.map((notification) => (
-          <div
-            key={notification.id}
-            className={`transform transition-all duration-300 ease-in-out max-w-sm w-full ${
-              notification.showToast 
-                ? 'translate-x-0 opacity-100' 
-                : 'translate-x-full opacity-0'
-            }`}
-          >
-            <div className={`rounded-lg border shadow-lg p-4 ${getToastStyles(notification.type)}`}>
-              <div className="flex items-start space-x-3">
-                <div className="flex-shrink-0">
-                  {getNotificationIcon(notification.type)}
-                </div>
-                <div className="flex-1 min-w-0">
-                  {notification.title && (
-                    <p className="text-sm font-semibold mb-1">
-                      {notification.title}
-                    </p>
-                  )}
-                  <p className="text-sm">
-                    {notification.message}
-                  </p>
-                  
-                  {/* Progress Information for Toast */}
-                  {notification.type === 'progress' && notification.progress !== undefined && (
-                    <div className="mt-2">
-                      <div className="flex items-center justify-between text-xs mb-1">
-                         <span>{notification.current_section || 'Processing'}</span>
-                         <span>{notification.progress}%</span>
-                       </div>
-                      <div className="w-full bg-white bg-opacity-30 rounded-full h-1.5">
-                        <div 
-                          className="bg-current h-1.5 rounded-full transition-all duration-300"
-                          style={{ width: `${notification.progress}%` }}
-                        ></div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-                <button
-                  onClick={() => dismissToast(notification.id)}
-                  className="flex-shrink-0 text-current opacity-70 hover:opacity-100 transition-opacity"
-                >
-                  <XMarkIcon className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-
       {/* Notification Bell Icon */}
       <div className="relative">
         <button

@@ -1259,21 +1259,28 @@ class ChatServiceVLLM(BaseChatService):
             True if messages were removed successfully
         """
         try:
-            # Ensure history is loaded
-            if session_id not in self.store:
-                try:
-                    self.get_session_history(session_id)
-                except Exception as e:
-                    logger.error(f"[vLLM] Failed to hydrate history for session {session_id}: {str(e)}")
-                    return True
+            logger.info(f"[vLLM] remove_messages_after_index called: session={session_id}, index={message_index}")
+
+            # Force reload from database to ensure we have latest state
+            if session_id in self.store:
+                del self.store[session_id]
+
+            try:
+                self.get_session_history(session_id)
+            except Exception as e:
+                logger.error(f"[vLLM] Failed to hydrate history for session {session_id}: {str(e)}")
+                return True
 
             if session_id not in self.store:
+                logger.warning(f"[vLLM] Session {session_id} not found in store after hydration")
                 return True
 
             messages = self.store[session_id].messages
+            logger.info(f"[vLLM] Session {session_id} has {len(messages)} messages, removing after index {message_index}")
+
             if message_index < len(messages):
                 self.store[session_id].messages = messages[:message_index + 1]
-                logger.info(f"[vLLM] Removed messages after index {message_index} for session: {session_id}")
+                logger.info(f"[vLLM] Removed messages after index {message_index} for session: {session_id}, kept {len(self.store[session_id].messages)} messages")
             return True
         except Exception as e:
             logger.error(f"[vLLM] Error removing messages: {str(e)}")
@@ -1297,17 +1304,26 @@ class ChatServiceVLLM(BaseChatService):
             True if message was updated successfully
         """
         try:
-            if session_id not in self.store:
-                try:
-                    self.get_session_history(session_id)
-                except Exception as e:
-                    logger.error(f"[vLLM] Failed to hydrate history for session {session_id}: {str(e)}")
-                    return True
+            # Always try to load/refresh history from database
+            logger.info(f"[vLLM] update_message_at_index called: session={session_id}, index={message_index}")
+
+            # Force reload from database to ensure we have latest state
+            if session_id in self.store:
+                del self.store[session_id]
+
+            try:
+                self.get_session_history(session_id)
+            except Exception as e:
+                logger.error(f"[vLLM] Failed to hydrate history for session {session_id}: {str(e)}")
+                return False
 
             if session_id not in self.store:
-                return True
+                logger.warning(f"[vLLM] Session {session_id} not found in store after hydration")
+                return False
 
             messages = self.store[session_id].messages
+            logger.info(f"[vLLM] Session {session_id} has {len(messages)} messages, updating index {message_index}")
+
             if 0 <= message_index < len(messages):
                 # Update message while preserving type
                 if isinstance(messages[message_index], HumanMessage):
@@ -1316,6 +1332,8 @@ class ChatServiceVLLM(BaseChatService):
                     messages[message_index] = AIMessage(content=new_content)
                 logger.info(f"[vLLM] Updated message at index {message_index} for session: {session_id}")
                 return True
+
+            logger.warning(f"[vLLM] Message index {message_index} out of range for session {session_id} (has {len(messages)} messages)")
             return False
         except Exception as e:
             logger.error(f"[vLLM] Error updating message: {str(e)}")

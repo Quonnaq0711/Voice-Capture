@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { useAuth } from "../contexts/AuthContext";
+import { useAuth } from "../../contexts/AuthContext";
 
 const Register = () => {
   const [firstname, setFirstname] = useState("");
@@ -234,17 +234,7 @@ const Register = () => {
                       : "border-gray-300 focus:ring-primary-500 focus:border-primary-500"
                     }`}
                 />
-                <div className="absolute inset-y-0 right-0 flex items-center pr-3 space-x-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      navigator.clipboard.writeText(password);
-                    }}
-                    className="text-gray-500 hover:text-gray-700 transition-colors"
-                    title="Copy password"
-                  >
-                    📋
-                  </button>
+                <div className="absolute inset-y-0 right-0 flex items-center pr-3">
                   <button
                     type="button"
                     onClick={() => setShowPassword((prev) => !prev)}

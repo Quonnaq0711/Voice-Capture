@@ -14,7 +14,12 @@ const AutoLogoutProvider = ({ children }) => {
     // Define handleLogout inside useEffect to avoid recreating event listeners
     const handleLogout = async () => {
       console.log(`Auto-logout triggered: User inactive for ${INACTIVITY_TIMEOUT / 1000 / 60} minutes`);
-      await logout();
+      try {
+        await logout();
+      } catch (error) {
+        // Log error but continue with navigation - logout cleanup is best-effort
+        console.error('Auto-logout error:', error);
+      }
       navigate('/login', { state: { message: 'You have been logged out due to inactivity.' } });
     };
 

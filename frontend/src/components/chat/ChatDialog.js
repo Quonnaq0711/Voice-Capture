@@ -1,65 +1,65 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { XMarkIcon, PaperAirplaneIcon, PlusIcon, ClockIcon, Cog6ToothIcon, TrashIcon, ChevronDownIcon, DocumentDuplicateIcon, PencilIcon, StopIcon, CheckIcon, SparklesIcon, ArrowUturnLeftIcon } from '@heroicons/react/24/outline';
 import { XCircleIcon } from '@heroicons/react/24/solid';
-import { chat, sessions, profile as profileAPI, activities as activitiesAPI } from '../services/api';
-import { sendMessage as defaultSendMessage, sendMessageStream as defaultSendMessageStream, checkHealth, clearMemory, generateSessionId, handleApiError, removeMessagesAfterIndex, updateMessageAtIndex } from '../services/chatApi';
+import { chat, sessions, profile as profileAPI, activities as activitiesAPI } from '../../services/api';
+import { sendMessage as defaultSendMessage, sendMessageStream as defaultSendMessageStream, checkHealth, clearMemory, generateSessionId, handleApiError, removeMessagesAfterIndex, updateMessageAtIndex } from '../../services/chatApi';
 import MessageRenderer from './MessageRenderer';
+import { formatDateTime } from '../../utils/timeFormatter';
+import { getAgentApiUrl, getAgentTypeFromPath, getAgentApiUrls } from '../../utils/apiConfig';
+import { requestAgentNavigation } from '../../utils/navigationEvents';
 
-const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnreadCountChange, onOpenAgentModal }) => {
+// ==================== CONSTANTS ====================
+const DATE_FILTER_OPTIONS = [
+  { value: 'all', label: 'All' },
+  { value: 'today', label: 'Today' },
+  { value: 'week', label: 'Week' },
+  { value: 'month', label: 'Month' }
+];
+
+// Timing constants
+const COPY_FEEDBACK_DURATION_MS = 1500;  // Duration to show copy success feedback
+
+// Input validation constants
+const MAX_MESSAGE_LENGTH = 10000;        // Maximum characters per message
+const MIN_MESSAGE_LENGTH = 1;            // Minimum characters per message (after trim)
+
+const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnreadCountChange, onOpenAgentModal, agentType: propAgentType, initialSessionId, onSessionSwitched }) => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
   const getApiUrls = useCallback(() => {
-    // Map agent paths to their respective API URLs
-    // In production, use relative paths (proxied through Nginx)
-    // In development, use localhost URLs for direct connection
-    const isProduction = process.env.NODE_ENV === 'production';
-
-    const agentApiMap = {
-      '/agents/career': isProduction ? '/api/career' : 'http://localhost:6002/api/chat',
-      '/agents/money': isProduction ? '/api/money' : 'http://localhost:8003/api/chat',
-      '/agents/mind': isProduction ? '/api/mind' : 'http://localhost:8004/api/chat',
-      '/agents/travel': isProduction ? '/api/travel' : 'http://localhost:8005/api/chat',
-      '/agents/body': isProduction ? '/api/body' : 'http://localhost:8006/api/chat',
-      '/agents/family-life': isProduction ? '/api/family-life' : 'http://localhost:8007/api/chat',
-      '/agents/hobby': isProduction ? '/api/hobby' : 'http://localhost:8008/api/chat',
-      '/agents/knowledge': isProduction ? '/api/knowledge' : 'http://localhost:8009/api/chat',
-      '/agents/personal-dev': isProduction ? '/api/personal-dev' : 'http://localhost:8010/api/chat',
-      '/agents/spiritual': isProduction ? '/api/spiritual' : 'http://localhost:8011/api/chat'
-    };
-
-    // Find matching agent API URL
-    for (const [path, baseUrl] of Object.entries(agentApiMap)) {
-      if (location.pathname.startsWith(path)) {
-        return {
-          messageUrl: `${baseUrl}/message`,
-          streamUrl: `${baseUrl}/message/stream`,
-        };
-      }
+    // Priority 1: Check propAgentType (explicit override from parent component)
+    if (propAgentType && propAgentType !== 'dashboard') {
+      return getAgentApiUrls(propAgentType);
     }
 
-    // For dashboard and other pages, use default (personal assistant)
-    return {
-      messageUrl: null, // Will use default from chatApi.js
-      streamUrl: null,  // Will use default from chatApi.js
-    };
-  }, [location.pathname]);
+    // Priority 2: Check URL pathname (backward compatibility for direct navigation)
+    const agentType = getAgentTypeFromPath(location.pathname);
+    if (agentType) {
+      return getAgentApiUrls(agentType);
+    }
 
-  const { messageUrl, streamUrl } = getApiUrls();
+    // Default: Personal Assistant (for dashboard and other pages)
+    return { messageUrl: null, streamUrl: null };
+  }, [propAgentType, location.pathname]);
 
-  const sendMessage = (message, sessionId, signal) => {
+  // Compute URLs at call time to avoid stale closure issues
+  const sendMessage = useCallback((message, sessionId, signal) => {
+    const { messageUrl } = getApiUrls();
     return defaultSendMessage(message, sessionId, signal, messageUrl);
-  };
+  }, [getApiUrls]);
 
-  const sendMessageStream = (message, sessionId, userId, onToken, onComplete, onError, streamApiUrl) => {
-    return defaultSendMessageStream(message, sessionId, userId, onToken, onComplete, onError, streamApiUrl || streamUrl);
-  };
+  const sendMessageStream = useCallback((message, sessionId, userId, onToken, onComplete, onError, streamApiUrl) => {
+    const { streamUrl } = getApiUrls();
+    const finalUrl = streamApiUrl || streamUrl;
+    return defaultSendMessageStream(message, sessionId, userId, onToken, onComplete, onError, finalUrl);
+  }, [getApiUrls]);
   const [messages, setMessages] = useState([]);
-  // Track which message indices have been copied to show feedback
-  const [copiedMessageIds, setCopiedMessageIds] = useState(new Set());
+  // Track which message indices have been copied to show feedback (using Array for React state compatibility)
+  const [copiedMessageIds, setCopiedMessageIds] = useState([]);
   const [input, setInput] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [sessionToDelete, setSessionToDelete] = useState(null);
@@ -76,16 +76,18 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
   const [showSettings, setShowSettings] = useState(false);
   const [sessionsList, setSessionsList] = useState([]);
   const [currentSession, setCurrentSession] = useState(null);
+  const [sessionSearchQuery, setSessionSearchQuery] = useState('');
+  const [sessionDateFilter, setSessionDateFilter] = useState('all'); // 'today', 'week', 'month', 'all'
   const [selectedAgent, setSelectedAgent] = useState('');
   const [showAgentDropdown, setShowAgentDropdown] = useState(false);
   const [isNavigating, setIsNavigating] = useState(false);
   const [userSelectedAgent, setUserSelectedAgent] = useState(false); // Track if user manually selected an agent
-  const [isLoading, setIsLoading] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false); // Track if a message is being submitted (set before any await)
   const [apiStatus, setApiStatus] = useState('unknown'); // 'healthy', 'unhealthy', 'unknown'
   const [chatSessionId, setChatSessionId] = useState(null);
-  const [abortController, setAbortController] = useState(null);
-  const [generatingSessions, setGeneratingSessions] = useState(new Set()); // Track sessions generating responses
+  const abortControllerRef = useRef(null); // Use ref instead of state for mutable instance objects
+  const [generatingSessionIds, setGeneratingSessionIds] = useState([]); // Array instead of Set for stable reference
   const [userId, setUserId] = useState(null);
   const [followUpQuestions, setFollowUpQuestions] = useState({}); // Store follow-up questions by message ID
   const currentSessionRef = useRef(currentSession);
@@ -93,20 +95,35 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
     currentSessionRef.current = currentSession;
   }, [currentSession]);
   const panelRef = useRef(null);
+  // Track the latest session switch request to prevent race conditions
+  const latestSessionRequestRef = useRef(null);
+
+  // Track mounted state to prevent state updates after unmount
+  const isMountedRef = useRef(true);
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => { isMountedRef.current = false; };
+  }, []);
 
   // Fetch user ID once on mount
   useEffect(() => {
     profileAPI.getCurrentUser()
       .then(data => {
-        if (data && data.id) setUserId(data.id);
+        if (isMountedRef.current && data && data.id) setUserId(data.id);
       })
-      .catch(err => console.error('Failed to fetch user ID', err));
+      .catch(err => {
+        if (isMountedRef.current) {
+          console.error('Failed to fetch user ID', err);
+        }
+      });
   }, []);
 
-  useEffect(() => {
-    const isCurrentSessionGenerating = generatingSessions.has(currentSession?.id);
-    setIsLoading(isCurrentSessionGenerating);
-  }, [currentSession, generatingSessions]);
+  // Computed isLoading - derived directly from state without useEffect
+  // isSubmitting is set immediately before any await, ensuring the button shows as "cancel" right away
+  const isLoading = useMemo(() =>
+    isSubmitting || generatingSessionIds.includes(currentSession?.id),
+    [isSubmitting, currentSession?.id, generatingSessionIds]
+  );
   const [editingMessageIndex, setEditingMessageIndex] = useState(null);
   const [editInput, setEditInput] = useState('');
   
@@ -116,25 +133,44 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
   const [isOptimized, setIsOptimized] = useState(false);
   const [sessionHistoryHeight, setSessionHistoryHeight] = useState(240); // Default height for session history
   const [isResizingSessions, setIsResizingSessions] = useState(false);
-  const [eventSource, setEventSource] = useState(null); // Track EventSource for streaming responses
-  const eventSourceRef = useRef(null); // Latest EventSource reference to avoid closure loss
+  const eventSourceRef = useRef(null); // Use ref for EventSource (mutable instance, no re-render needed)
   const cancelPendingRef = useRef(false); // Track whether a cancel request has been initiated
-  const [unreadSessions, setUnreadSessions] = useState(new Set()); // Track sessions with unread messages, now synced with backend
+  const lastTrackedSessionRef = useRef({ sessionId: null, timestamp: 0 }); // Prevent duplicate activity tracking for same session
+  const [unreadSessions, setUnreadSessions] = useState([]); // Track sessions with unread messages (Array for React state compatibility)
   // Sync local chatSessionId with currentSession.id
   useEffect(() => {
-    if (currentSession?.id && chatSessionId !== currentSession.id) {
-       localStorage.setItem('chatSessionId', currentSession.id);
-       setChatSessionId(currentSession.id);
-     }
-  }, [currentSession]);
-  
-  // Available agents configuration - Only show active agents
-  const agents = [
+    if (currentSession?.id) {
+      try {
+        localStorage.setItem('chatSessionId', currentSession.id);
+      } catch (e) {
+        // localStorage may be unavailable in private browsing mode
+        console.warn('Failed to persist chatSessionId to localStorage:', e);
+      }
+      setChatSessionId(currentSession.id);
+    }
+  }, [currentSession?.id]);
+
+  // Cleanup AbortController and EventSource on component unmount
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+      }
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
+    };
+  }, []);
+
+  // Available agents configuration - Only show active agents (stable reference)
+  const agents = useMemo(() => [
     { name: 'Career Agent', path: '/agents/career', displayName: 'Career' },
     { name: 'Travel Agent', path: '/agents/travel', displayName: 'Travel' },
     { name: 'Body Agent', path: '/agents/body', displayName: 'Body' }
-  ];
-  
+  ], []);
+
   // Get current agent based on location
   const getCurrentAgent = useCallback(() => {
     const currentPath = location.pathname;
@@ -164,84 +200,57 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
     setMessages(prev => [...prev, systemMessage]);
   }, []);
 
-  // Track chat activity
-  const trackChatActivity = useCallback(async (messageText, sessionId, messageId) => {
+  // Track chat activity (unified function for send and edit)
+  const trackChatActivity = useCallback(async (messageText, sessionId, messageId, actionType = 'send') => {
     try {
-      const currentPath = location.pathname;
       let activitySource = 'dashboard'; // default
       let sourceContext = 'dashboard';
 
-      // Determine source based on current location
-      if (currentPath === '/dashboard') {
-        activitySource = 'dashboard';
-        sourceContext = 'dashboard';
-      } else if (currentPath === '/agents/career') {
-        activitySource = 'career';
-        sourceContext = 'career_agent';
-      } else if (currentPath.startsWith('/agents/')) {
-        const agentName = currentPath.split('/').pop();
-        activitySource = agentName;
-        sourceContext = `${agentName}_agent`;
+      // Priority 1: Use propAgentType if explicitly provided (for tab-based navigation)
+      if (propAgentType) {
+        activitySource = propAgentType;
+        sourceContext = propAgentType === 'career' ? 'career_agent' : propAgentType;
+      } else {
+        // Priority 2: Determine source based on current path
+        const currentPath = location.pathname;
+        if (currentPath === '/dashboard') {
+          activitySource = 'dashboard';
+          sourceContext = 'dashboard';
+        } else if (currentPath === '/agents/career' || currentPath.startsWith('/agents/career')) {
+          activitySource = 'career';
+          sourceContext = 'career_agent';
+        } else if (currentPath.startsWith('/agents/')) {
+          const agentName = currentPath.split('/').pop();
+          activitySource = agentName;
+          sourceContext = `${agentName}_agent`;
+        }
       }
 
-      // Create activity with more specific information
+      const isEdit = actionType === 'edit';
+      const metadata = {
+        agent_type: 'personal_assistant',
+        source_context: sourceContext,
+        message_preview: messageText.length > 100 ? messageText.substring(0, 100) + '...' : messageText,
+        session_id: sessionId,
+        message_id: messageId
+      };
+      if (isEdit) {
+        metadata.action_type = 'edit';
+      }
+
       await activitiesAPI.createActivity({
         activity_type: 'chat',
         activity_source: activitySource,
-        activity_title: `Chat Message - ${sourceContext}`,
-        activity_description: `Sent message to Personal Assistant from ${sourceContext}`,
-        activity_metadata: {
-          agent_type: 'personal_assistant',
-          source_context: sourceContext,
-          message_preview: messageText.length > 100 ? messageText.substring(0, 100) + '...' : messageText,
-          session_id: sessionId,
-          message_id: messageId
-        }
+        activity_title: isEdit ? `Chat Message Edit - ${sourceContext}` : `Chat Message - ${sourceContext}`,
+        activity_description: isEdit
+          ? `Edited message to Personal Assistant from ${sourceContext}`
+          : `Sent message to Personal Assistant from ${sourceContext}`,
+        activity_metadata: metadata
       });
     } catch (error) {
       console.warn('Failed to track chat activity:', error);
     }
-  }, [location.pathname]);
-
-  // Track edit chat activity
-  const trackEditChatActivity = useCallback(async (messageText, sessionId, messageId) => {
-    try {
-      const currentPath = location.pathname;
-      let activitySource = 'dashboard'; // default
-      let sourceContext = 'dashboard';
-
-      // Determine source based on current location
-      if (currentPath === '/dashboard') {
-        activitySource = 'dashboard';
-        sourceContext = 'dashboard';
-      } else if (currentPath === '/agents/career') {
-        activitySource = 'career';
-        sourceContext = 'career_agent';
-      } else if (currentPath.startsWith('/agents/')) {
-        const agentName = currentPath.split('/').pop();
-        activitySource = agentName;
-        sourceContext = `${agentName}_agent`;
-      }
-
-      // Create activity with edit-specific information
-      await activitiesAPI.createActivity({
-        activity_type: 'chat',
-        activity_source: activitySource,
-        activity_title: `Chat Message Edit - ${sourceContext}`,
-        activity_description: `Edited message to Personal Assistant from ${sourceContext}`,
-        activity_metadata: {
-          agent_type: 'personal_assistant',
-          source_context: sourceContext,
-          message_preview: messageText.length > 100 ? messageText.substring(0, 100) + '...' : messageText,
-          session_id: sessionId,
-          message_id: messageId,
-          action_type: 'edit'
-        }
-      });
-    } catch (error) {
-      console.warn('Failed to track edit chat activity:', error);
-    }
-  }, [location.pathname]);
+  }, [location.pathname, propAgentType]);
 
   // Update countdown message (replace the last system message if it's a countdown)
   const updateCountdownMessage = useCallback((text) => {
@@ -299,25 +308,8 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
       setUserSelectedAgent(true);
     }
 
-    // Use the global navigation function from PersonalAssistant
-    if (window.handleAgentNavigation) {
-      window.handleAgentNavigation(agentName, addSystemMessage);
-    } else {
-      // Fallback to direct navigation if PersonalAssistant is not available
-      if (agentName === 'None') {
-        if (location.pathname !== '/dashboard') {
-          navigate('/dashboard');
-        }
-      } else {
-        const agent = agents.find(a => a.name === agentName);
-        if (agent) {
-          const currentAgent = getCurrentAgent();
-          if (!currentAgent || currentAgent.name !== agentName) {
-            navigate(agent.path);
-          }
-        }
-      }
-    }
+    // Use event system for navigation (replaces window object pollution)
+    requestAgentNavigation(agentName, addSystemMessage);
 
     setShowAgentDropdown(false);
   };
@@ -334,7 +326,7 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
     // Detect current agent context from URL or page state
     const currentPath = window.location.pathname;
     const isCareerAgent = currentPath.includes('/career') || document.querySelector('[data-agent-type="career"]');
-    
+
     // Save progress message to database if we have a current session
     let savedMessage = null;
     if (currentSession?.id) {
@@ -353,7 +345,10 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
         console.error('Failed to save progress message to database:', error);
       }
     }
-    
+
+    // Check if component is still mounted before updating state
+    if (!isMountedRef.current) return;
+
     // Use saved message if available, otherwise create local message
     const progressMessage = savedMessage || {
       text: text,
@@ -363,9 +358,9 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
       messageType: type,
       agent_type: isCareerAgent ? 'career' : 'dashboard'
     };
-    
+
     setMessages(prev => [...prev, progressMessage]);
-  }, [currentSession, chat]);
+  }, [currentSession]);
 
   // Update progress message (replace the last progress message if it exists)
   const updateProgressMessage = useCallback((text, type = 'progress') => {
@@ -404,34 +399,25 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
     });
   }, []);
 
-  // Expose progress functions and updateCountdownMessage to global window object
+  // Listen for progress message events (replaces window object pollution)
   useEffect(() => {
-    window.updateCountdownMessage = updateCountdownMessage;
-    window.addProgressMessage = addProgressMessage;
-    window.updateProgressMessage = updateProgressMessage;
+    const handleCountdownMessage = (e) => updateCountdownMessage(e.detail.message);
+    const handleAddProgress = (e) => addProgressMessage(e.detail.message, e.detail.type);
+    const handleUpdateProgress = (e) => updateProgressMessage(e.detail.message, e.detail.type);
+    const handleNavigationState = (e) => setIsNavigating(e.detail.isNavigating);
+
+    document.addEventListener('chat:updateCountdown', handleCountdownMessage);
+    document.addEventListener('chat:addProgress', handleAddProgress);
+    document.addEventListener('chat:updateProgress', handleUpdateProgress);
+    document.addEventListener('chat:navigationState', handleNavigationState);
+
     return () => {
-      delete window.updateCountdownMessage;
-      delete window.addProgressMessage;
-      delete window.updateProgressMessage;
+      document.removeEventListener('chat:updateCountdown', handleCountdownMessage);
+      document.removeEventListener('chat:addProgress', handleAddProgress);
+      document.removeEventListener('chat:updateProgress', handleUpdateProgress);
+      document.removeEventListener('chat:navigationState', handleNavigationState);
     };
   }, [updateCountdownMessage, addProgressMessage, updateProgressMessage]);
-
-  // Track navigation state from PersonalAssistant
-  useEffect(() => {
-    const checkNavigationState = () => {
-      if (window.getNavigationState) {
-        const navState = window.getNavigationState();
-        setIsNavigating(navState.isNavigating);
-      }
-    };
-
-    // Check navigation state periodically
-    const interval = setInterval(checkNavigationState, 100);
-    
-    return () => {
-      clearInterval(interval);
-    };
-  }, []);
 
   // Listen for career analysis progress events
   useEffect(() => {
@@ -440,8 +426,10 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
       const { section, status, progress, totalSections } = event.detail;
 
       if (status === 'starting') {
-        // Set loading state when analysis starts
-        setIsLoading(true);
+        // Add current session to generating sessions when analysis starts
+        if (currentSession?.id) {
+          setGeneratingSessionIds(prev => prev.includes(currentSession.id) ? prev : [...prev, currentSession.id]);
+        }
         setIsCancelling(false);
         
         const sectionName = section.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
@@ -468,8 +456,10 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
       const { section, display_name, description, progress } = event.detail;
       console.log('ChatDialog: Section started:', { section, display_name, description, progress });
 
-      // Set loading state when section starts
-      setIsLoading(true);
+      // Add current session to generating sessions when section starts
+      if (currentSession?.id) {
+        setGeneratingSessionIds(prev => prev.includes(currentSession.id) ? prev : [...prev, currentSession.id]);
+      }
       setIsCancelling(false);
 
       // Note: Toast notifications are handled by CareerAgent component
@@ -492,33 +482,32 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
       const { success, error } = event.detail;
       console.log('ChatDialog: Analysis workflow completed:', { success, error });
 
-      // Clear loading state when analysis completes
-      setIsLoading(false);
+      // Remove current session from generating sessions when analysis completes
+      if (currentSession?.id) {
+        setGeneratingSessionIds(prev => prev.filter(id => id !== currentSession.id));
+      }
       setIsCancelling(false);
 
       // Note: Toast notifications are handled by CareerAgent component
       // No need to add chat messages here
     };
     
-    // Add event listeners to the document (global events)
-    const element = document.querySelector('[data-agent-type="career"]') || document;
-    if (element) {
-      element.addEventListener('analysisProgress', handleAnalysisProgress);
-      element.addEventListener('sectionStart', handleSectionStart);
-      element.addEventListener('sectionComplete', handleSectionComplete);
-      element.addEventListener('analysisComplete', handleAnalysisComplete);
-    }
-    
-    // Clean up event listeners on component unmount
-    return () => {
-      if (element) {
-        element.removeEventListener('analysisProgress', handleAnalysisProgress);
-        element.removeEventListener('sectionStart', handleSectionStart);
-        element.removeEventListener('sectionComplete', handleSectionComplete);
-        element.removeEventListener('analysisComplete', handleAnalysisComplete);
-      }
+    // Add event listeners - use document as stable reference
+    const eventTarget = document;
+    const events = ['analysisProgress', 'sectionStart', 'sectionComplete', 'analysisComplete'];
+    const handlers = {
+      analysisProgress: handleAnalysisProgress,
+      sectionStart: handleSectionStart,
+      sectionComplete: handleSectionComplete,
+      analysisComplete: handleAnalysisComplete
     };
-  }, [addProgressMessage, updateProgressMessage]);
+
+    events.forEach(event => eventTarget.addEventListener(event, handlers[event]));
+
+    return () => {
+      events.forEach(event => eventTarget.removeEventListener(event, handlers[event]));
+    };
+  }, [addProgressMessage, updateProgressMessage, currentSession]);
 
   // Check API health on component mount and when location changes
   useEffect(() => {
@@ -542,20 +531,25 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
 
   // Generate or restore chat session ID when component mounts
   useEffect(() => {
+    // Skip if we have an initialSessionId to switch to
+    if (initialSessionId) {
+      return;
+    }
+
     if (!chatSessionId) {
       // Try to get existing session ID from localStorage or current session
       let sessionId = localStorage.getItem('chatSessionId');
-      
+
       // If no stored session ID, generate a new one
       if (!sessionId) {
         sessionId = generateSessionId();
         localStorage.setItem('chatSessionId', sessionId);
       }
-      
+
       localStorage.setItem('chatSessionId', sessionId);
        setChatSessionId(sessionId);
     }
-  }, [chatSessionId]);
+  }, [chatSessionId, initialSessionId]);
 
   // Auto scroll to bottom when new messages arrive
   const scrollToBottom = (force = false) => {
@@ -566,16 +560,19 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
 
   // Load chat history and active session on component mount
   useEffect(() => {
+    let isMounted = true;
+
     const loadChatData = async () => {
       try {
         const token = localStorage.getItem('token');
-        if (token) {
-          // Load active session
+        if (token && isMounted) {
           const activeSession = await sessions.getActiveSession();
+          if (!isMounted) return;
           setCurrentSession(activeSession);
-          
-          // Load chat history for active session
+
           const historyData = await chat.getHistory(activeSession?.id);
+          if (!isMounted) return;
+
           const formattedMessages = historyData.messages.map(msg => ({
             text: msg.message_text,
             sender: msg.sender,
@@ -586,13 +583,18 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
           setMessages(formattedMessages);
         }
       } catch (error) {
-        console.error('Failed to load chat data:', error);
+        if (isMounted) {
+          console.error('Failed to load chat data:', error);
+        }
       } finally {
-        setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     };
 
     loadChatData();
+    return () => { isMounted = false; };
   }, []);
 
   useEffect(() => {
@@ -605,37 +607,68 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
   // Cleanup function to prevent memory leaks when component unmounts
   useEffect(() => {
     return () => {
-      // Clean up EventSource
-      if (eventSource) {
-        eventSource.close();
+      // Clean up EventSource (using ref)
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
       }
-      
-      // Clean up AbortController
-      if (abortController) {
-        abortController.abort();
+
+      // Clean up AbortController (using ref)
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
       }
-      
+
       // Clear any generating sessions
-      setGeneratingSessions(new Set());
-      
-      // Clean up global window functions
-      if (window.updateCountdownMessage) {
-        delete window.updateCountdownMessage;
-      }
-      
-      // Clear any pending timeouts or intervals that might be running
-      // Note: The navigation state interval is already cleaned up in its own useEffect
+      setGeneratingSessionIds([]);
+
+      // Note: Event listeners are cleaned up in their respective useEffect hooks
     };
-  }, [eventSource, abortController]);
+  }, []); // Empty deps - only runs on unmount
 
   // Determine agent type based on current path
   const getAgentType = useCallback(() => {
+    // If agentType is explicitly provided via props, use it
+    if (propAgentType) {
+      return propAgentType;
+    }
+    // Otherwise, infer from location pathname
     const agent = agents.find(a => location.pathname.startsWith(a.path));
     if (agent) {
       return agent.path.substring('/agents/'.length);
     }
     return 'dashboard';
-  }, [location.pathname, agents]);
+  }, [propAgentType, location.pathname, agents]);
+
+  // Handle initial session switch when opening from Activity page
+  useEffect(() => {
+    const loadSessionsAndSwitch = async () => {
+      if (!initialSessionId) return;
+
+      try {
+        // Load sessions first to ensure we have the latest list
+        const sessionsData = await sessions.getSessions();
+        setSessionsList(sessionsData);
+
+        // Check if the session exists in the loaded list
+        const sessionExists = sessionsData.some(s => s.id === initialSessionId);
+        if (sessionExists) {
+          // Skip activity tracking here because it's already tracked by the parent component (UnifedSideBar)
+          switchToSession(initialSessionId, true);
+          // Call callback to clear the initialSessionId
+          if (onSessionSwitched) {
+            onSessionSwitched();
+          }
+        } else {
+          console.warn('[ChatDialog] Session not found:', initialSessionId);
+        }
+      } catch (error) {
+        console.error('[ChatDialog] Failed to load sessions:', error);
+      }
+    };
+
+    loadSessionsAndSwitch();
+  }, [initialSessionId, onSessionSwitched]);
 
   // Save message to database
   const saveMessageToDb = async (messageText, sender) => {
@@ -678,44 +711,13 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
   // Check API health
   const checkApiHealth = async () => {
     try {
-      console.log('[ChatDialog] checkApiHealth called, location:', location.pathname);
+      // Get agent type from path and corresponding API URL
+      const agentType = getAgentTypeFromPath(location.pathname);
+      const apiUrl = agentType ? getAgentApiUrl(agentType) : null;
 
-      // Determine which API to check based on current location
-      let apiUrl = null;
-
-      // Map agent paths to their respective API URLs
-      // In production, use relative paths (proxied through Nginx)
-      // In development, use localhost URLs for direct connection
-      const isProduction = process.env.NODE_ENV === 'production';
-
-      const agentApiMap = {
-        '/agents/career': isProduction ? '/api/career' : 'http://localhost:6002/api/chat',
-        '/agents/money': isProduction ? '/api/money' : 'http://localhost:8003/api/chat',
-        '/agents/mind': isProduction ? '/api/mind' : 'http://localhost:8004/api/chat',
-        '/agents/travel': isProduction ? '/api/travel' : 'http://localhost:8005/api/chat',
-        '/agents/body': isProduction ? '/api/body' : 'http://localhost:8006/api/chat',
-        '/agents/family-life': isProduction ? '/api/family-life' : 'http://localhost:8007/api/chat',
-        '/agents/hobby': isProduction ? '/api/hobby' : 'http://localhost:8008/api/chat',
-        '/agents/knowledge': isProduction ? '/api/knowledge' : 'http://localhost:8009/api/chat',
-        '/agents/personal-dev': isProduction ? '/api/personal-dev' : 'http://localhost:8010/api/chat',
-        '/agents/spiritual': isProduction ? '/api/spiritual' : 'http://localhost:8011/api/chat'
-      };
-
-      // Find matching agent API URL
-      for (const [path, url] of Object.entries(agentApiMap)) {
-        if (location.pathname.startsWith(path)) {
-          apiUrl = url;
-          break;
-        }
-      }
-
-      console.log('[ChatDialog] Checking health for apiUrl:', apiUrl);
-
-      // For dashboard and other pages, use default (personal assistant)
+      // For dashboard and other pages, apiUrl will be null (uses default personal assistant)
       const health = await checkHealth(apiUrl);
-      console.log('[ChatDialog] Health check result:', health);
       setApiStatus(health.status === 'healthy' ? 'healthy' : 'unhealthy');
-      console.log('[ChatDialog] API status set to:', health.status === 'healthy' ? 'healthy' : 'unhealthy');
     } catch (error) {
       console.error('[ChatDialog] Health check failed:', error);
       setApiStatus('unhealthy');
@@ -727,15 +729,11 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
     try {
       await navigator.clipboard.writeText(text);
       // Record the message index after successful copy to trigger button animation
-      setCopiedMessageIds(prev => new Set([...prev, msgIndex]));
-      // Reset button state after 1.5 seconds
+      setCopiedMessageIds(prev => prev.includes(msgIndex) ? prev : [...prev, msgIndex]);
+      // Reset button state after showing feedback
       setTimeout(() => {
-        setCopiedMessageIds(prev => {
-          const newSet = new Set(prev);
-          newSet.delete(msgIndex);
-          return newSet;
-        });
-      }, 1500);
+        setCopiedMessageIds(prev => prev.filter(id => id !== msgIndex));
+      }, COPY_FEEDBACK_DURATION_MS);
     } catch (error) {
       // Fallback for older browsers
       const textArea = document.createElement('textarea');
@@ -834,31 +832,48 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
   };
 
   const submitEditedMessage = async (index) => {
-    if (!editInput.trim()) return;
+    const trimmedEdit = editInput.trim();
+
+    // Input validation: check length constraints
+    if (!trimmedEdit || trimmedEdit.length < MIN_MESSAGE_LENGTH) return;
+    if (trimmedEdit.length > MAX_MESSAGE_LENGTH) {
+      console.warn(`Edit message too long: ${trimmedEdit.length} chars (max: ${MAX_MESSAGE_LENGTH})`);
+      return;
+    }
+
+    // CRITICAL: Set submitting state IMMEDIATELY before any await calls
+    setIsSubmitting(true);
 
     const currentSessionAtSendTime = currentSession;
     const currentChatSessionIdAtSendTime = chatSessionId;
-    
+
     // Add current session to generating sessions
     if (currentSessionAtSendTime?.id) {
-      setGeneratingSessions(prev => new Set([...prev, currentSessionAtSendTime.id]));
+      setGeneratingSessionIds(prev => prev.includes(currentSessionAtSendTime.id) ? prev : [...prev, currentSessionAtSendTime.id]);
     }
 
     try {
-      
+
       // Get the message to be edited
       const messageToEdit = messages[index];
-      
+
+      // Calculate backend index by excluding welcome messages (which are local-only)
+      // Backend doesn't store welcome messages, so we need to adjust the index
+      const welcomeMessagesBeforeIndex = messages.slice(0, index).filter(m => m.isWelcome).length;
+      const backendIndex = index - welcomeMessagesBeforeIndex;
+
+      console.log('[ChatDialog] Edit message - frontend index:', index, 'backend index:', backendIndex, 'welcome messages before:', welcomeMessagesBeforeIndex);
+
       // Sync with personal assistant backend: Remove all messages after the edited message index
       try {
-        await removeMessagesAfterIndex(index, chatSessionId);
+        await removeMessagesAfterIndex(backendIndex, chatSessionId);
       } catch (backendError) {
         console.warn('Failed to sync message removal with personal assistant backend:', backendError);
       }
-      
+
       // Sync with personal assistant backend: Update the message at the current index
       try {
-        await updateMessageAtIndex(index, editInput.trim(), chatSessionId);
+        await updateMessageAtIndex(backendIndex, editInput.trim(), chatSessionId);
       } catch (backendError) {
         console.warn('Failed to sync message update with personal assistant backend:', backendError);
       }
@@ -872,15 +887,15 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
         }
       }
       
-      // Sync with database: Delete messages after the edited message index
+      // Sync with database: Delete messages after the edited message index (using backend index)
       try {
-        await chat.deleteMessagesAfterIndex(index);
+        await chat.deleteMessagesAfterIndex(backendIndex);
       } catch (dbError) {
         console.warn('Failed to delete messages after index in database:', dbError);
       }
-      
-      // Update session name if editing the first user message
-      if (index === 0 && messageToEdit.sender === 'user' && currentSession) {
+
+      // Update session name if editing the first user message (backend index 0 = first real message)
+      if (backendIndex === 0 && messageToEdit.sender === 'user' && currentSession) {
         try {
           const newSessionName = editInput.trim().length > 50 ? 
             editInput.trim().substring(0, 50) + '...' : 
@@ -912,7 +927,7 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
       
       // Track edit activity after message is updated
       if (currentSessionAtSendTime?.id) {
-        trackEditChatActivity(editInput.trim(), currentSessionAtSendTime.id, editedMessage.id);
+        trackChatActivity(editInput.trim(), currentSessionAtSendTime.id, editedMessage.id, 'edit');
       }
 
       // Clear edit state
@@ -921,18 +936,17 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
 
       // Create new AbortController for the edit request
       const editController = new AbortController();
-      setAbortController(editController);
+      abortControllerRef.current = editController;
       
       // Set loading state for the new request
       if (currentSessionAtSendTime?.id) {
-        setGeneratingSessions(prev => new Set([...prev, currentSessionAtSendTime.id]));
+        setGeneratingSessionIds(prev => prev.includes(currentSessionAtSendTime.id) ? prev : [...prev, currentSessionAtSendTime.id]);
       }
-      setIsLoading(true);
       setIsCancelling(false);
       
       // Send the edited message to get a new response using streaming
-      const currentPath = location.pathname;
-      const agentType = currentPath.startsWith('/agents/career') ? 'career' : 'personal_assistant';
+      // Use getAgentType() to ensure consistent agent_type based on propAgentType or pathname
+      const currentAgentType = getAgentType();
 
       // Add a placeholder message for the AI response
       const placeholderMessage = {
@@ -941,11 +955,17 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
         sender: 'assistant',
         timestamp: new Date().getTime(),
         isStreaming: true,
-        agent_type: agentType,
+        agent_type: currentAgentType,
       };
       
       setMessages(prev => [...prev, placeholderMessage]);
-      
+
+      // Close existing EventSource before creating new one to prevent multi-instance leaks
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
+
       let streamingResponse = '';
       // Use streaming response for edited messages
       const eventSource = sendMessageStream(
@@ -962,9 +982,8 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
             if (sessionToSaveIn?.id) {
               try {
                 await chat.saveMessage(token, 'assistant', sessionToSaveIn.id, getAgentType());
-                console.log('Initial message saved to database:', token);
               } catch (error) {
-                console.error('Failed to save initial message to database:', error);
+                console.error('Failed to save initial message to database');
               }
             }
           }
@@ -1007,13 +1026,10 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
         },
         // onComplete callback - finalize the message
         async (fullResponse, professionalData, followUpQuestionsData) => {
-          // Remove session from generating sessions on completion
+          // Clear submitting state and remove session from generating sessions on completion
+          setIsSubmitting(false);
           if (currentSessionAtSendTime?.id) {
-            setGeneratingSessions(prev => {
-              const newSet = new Set(prev);
-              newSet.delete(currentSessionAtSendTime.id);
-              return newSet;
-            });
+            setGeneratingSessionIds(prev => prev.filter(id => id !== currentSessionAtSendTime.id));
           }
 
           if (currentSessionRef.current?.id === currentSessionAtSendTime?.id && chatSessionId === currentChatSessionIdAtSendTime) {
@@ -1027,13 +1043,19 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
               timestamp: new Date().getTime()
             };
             
-            // Update the placeholder message with the final response
+            // Update the placeholder message with the final response (immutable update)
             setMessages(prev => {
                 const newMessages = [...prev];
-                const lastMessage = newMessages[newMessages.length - 1];
+                const lastIdx = newMessages.length - 1;
+                const lastMessage = newMessages[lastIdx];
                 if (lastMessage && lastMessage.sender === 'assistant' && lastMessage.isStreaming) {
-                  Object.assign(lastMessage, { ...assistantMessage, id: lastMessage.id }); // Preserve streaming ID
-                  delete lastMessage.isStreaming;
+                  // Create new object instead of mutating - removes isStreaming by destructuring
+                  const { isStreaming: _, ...restOfLastMessage } = lastMessage;
+                  newMessages[lastIdx] = {
+                    ...restOfLastMessage,
+                    ...assistantMessage,
+                    id: lastMessage.id // Preserve streaming ID
+                  };
                 }
                 return newMessages;
               });
@@ -1055,7 +1077,7 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
               // Mark session as unread by calling the backend
               try {
                 await sessions.markSessionAsUnread(currentSessionAtSendTime.id); // This function needs to be created in api.js
-                setUnreadSessions(prev => new Set(prev).add(currentSessionAtSendTime.id));
+                setUnreadSessions(prev => prev.includes(currentSessionAtSendTime.id) ? prev : [...prev, currentSessionAtSendTime.id]);
                 // Trigger unread count update immediately
                 if (onUnreadCountChange) {
                   onUnreadCountChange();
@@ -1069,6 +1091,13 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
         // onError callback - handle errors
         async (error) => {
           console.error('Streaming error during edit:', error);
+
+          // Clear submitting state and remove session from generating sessions on error
+          setIsSubmitting(false);
+          if (currentSessionAtSendTime?.id) {
+            setGeneratingSessionIds(prev => prev.filter(id => id !== currentSessionAtSendTime.id));
+          }
+
           // Handle streaming errors
           const errorMessage = {
             id: Date.now() + 1,
@@ -1076,7 +1105,7 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
             sender: 'system',
             timestamp: new Date().toISOString()
           };
-          
+
           if (currentSessionRef.current?.id === currentSessionAtSendTime?.id) {
             setMessages(prev => {
               const newMessages = [...prev];
@@ -1091,37 +1120,45 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
           }
         }
       );
-      
-      setEventSource(eventSource);
+
+      // Store EventSource in ref for cleanup
       eventSourceRef.current = eventSource;
       // If a cancellation was requested before EventSource became available
       if (cancelPendingRef.current) {
         eventSource.close();
         eventSourceRef.current = null;
-        setEventSource(null);
-      eventSourceRef.current = null;
         return; // Do not proceed with streaming callbacks
       }
 
       // Streaming response handling is done in the callbacks above
     } catch (error) {
+      // Handle errors that occur when starting the streaming (e.g., EventSource creation failure)
+      // Note: Streaming callbacks (onComplete, onError) handle cleanup when streaming finishes normally
       console.error('Error editing message:', error);
-      
+
+      // Clean up submitting state since streaming failed to start
+      setIsSubmitting(false);
+      if (currentSessionAtSendTime?.id) {
+        setGeneratingSessionIds(prev => prev.filter(id => id !== currentSessionAtSendTime.id));
+      }
+      setIsCancelling(false);
+      abortControllerRef.current = null;
+      eventSourceRef.current = null;
+
       // Check if the error is due to cancellation
       if (error.message === 'Request cancelled' || error.name === 'AbortError') {
         console.log('Edit request was cancelled by user');
-        // Don't show error message for cancelled requests, but continue to finally block
+        // Don't show error message for cancelled requests
       } else {
-      
         const errorMessage = handleApiError(error);
-        
+
         const errorResponse = {
           id: Date.now() + 1,
           text: `Error: ${errorMessage}`,
           sender: 'system',
           timestamp: new Date().toISOString()
         };
-        
+
         if (currentSessionRef.current?.id === currentSessionAtSendTime?.id) {
           setMessages(prev => [...prev, errorResponse]);
         } else {
@@ -1131,12 +1168,8 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
           }
         }
       }
-    } finally {
-      setIsLoading(false);
-      setIsCancelling(false);
-      setAbortController(null);
-      setEventSource(null);
     }
+    // Note: No finally block here! The streaming is async - cleanup happens in onComplete/onError callbacks
   };
 
   // Create new session
@@ -1156,7 +1189,7 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
       setChatSessionId(newSession.id);
       localStorage.setItem('chatSessionId', newSession.id);
       
-      // Add a welcome message
+      // Add a welcome message (marked as local-only, not stored in backend)
       const welcomeMessage = {
         text: "Hello! I'm your personal assistant. How can I help you today?",
         sender: 'assistant',
@@ -1164,6 +1197,7 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
         id: Date.now(),
         session_id: newSession.id,
         agent_type: getAgentType(), // Set agent type for correct avatar
+        isWelcome: true, // Mark as welcome message (not stored in backend)
       };
       setMessages([welcomeMessage]);
       
@@ -1183,27 +1217,91 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
     try {
       const sessionsData = await sessions.getSessions();
       setSessionsList(sessionsData);
-      // Update unread sessions set from the server data
-      const unread = new Set(sessionsData.filter(s => s.unread).map(s => s.id));
+      // Update unread sessions array from the server data
+      const unread = sessionsData.filter(s => s.unread).map(s => s.id);
       setUnreadSessions(unread);
     } catch (error) {
       console.error('Failed to load sessions:', error);
     }
   };
 
+  // Filter sessions by search query and date range (memoized)
+  const filteredSessions = useMemo(() => {
+    let filtered = [...sessionsList];
+
+    // Apply search filter
+    if (sessionSearchQuery.trim()) {
+      const query = sessionSearchQuery.toLowerCase();
+      filtered = filtered.filter(session =>
+        session.session_name.toLowerCase().includes(query)
+      );
+    }
+
+    // Apply date filter
+    if (sessionDateFilter !== 'all') {
+      const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+      filtered = filtered.filter(session => {
+        const sessionDate = new Date(session.created_at);
+        const sessionDay = new Date(sessionDate.getFullYear(), sessionDate.getMonth(), sessionDate.getDate());
+
+        switch (sessionDateFilter) {
+          case 'today':
+            return sessionDay.getTime() === today.getTime();
+          case 'week':
+            const weekAgo = new Date(today);
+            weekAgo.setDate(weekAgo.getDate() - 7);
+            return sessionDay >= weekAgo;
+          case 'month':
+            const monthAgo = new Date(today);
+            monthAgo.setMonth(monthAgo.getMonth() - 1);
+            return sessionDay >= monthAgo;
+          default:
+            return true;
+        }
+      });
+    }
+
+    return filtered;
+  }, [sessionsList, sessionSearchQuery, sessionDateFilter]);
+
   // Switch to a specific session
-  const switchToSession = async (sessionId) => {
+  const switchToSession = async (sessionId, skipActivityTracking = false) => {
+    // Track this request to prevent race conditions when rapidly switching sessions
+    const requestId = Symbol();
+    latestSessionRequestRef.current = requestId;
+
     // Optimistically update current session reference to avoid leaking tokens between sessions
     currentSessionRef.current = { id: sessionId };
     setChatSessionId(sessionId);
+
+    // Track activity when switching sessions (unless called from external initial session)
+    // Use ref with timestamp to prevent duplicate tracking (React StrictMode can cause double calls)
+    // Allow re-tracking same session after 2 seconds (for legitimate re-opens)
+    const now = Date.now();
+    const isDuplicate = lastTrackedSessionRef.current.sessionId === sessionId &&
+                        (now - lastTrackedSessionRef.current.timestamp) < 2000;
+    if (!skipActivityTracking && !isDuplicate) {
+      lastTrackedSessionRef.current = { sessionId, timestamp: now };
+      try {
+        const session = sessionsList.find(s => s.id === sessionId);
+        const sessionName = session?.session_name || session?.name || 'Untitled Session';
+        await activitiesAPI.createActivity({
+          activity_type: 'view',
+          activity_source: 'chat_history',
+          activity_title: `Opened chat: ${sessionName}`,
+          activity_description: null,
+          activity_metadata: { chat_id: sessionId }
+        });
+      } catch (error) {
+        console.error('Failed to track session switch activity:', error);
+      }
+    }
     // Mark session as read on the backend when switching to it
     try {
       await sessions.markSessionAsRead(sessionId); // This function needs to be created in api.js
-      setUnreadSessions(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(sessionId);
-        return newSet;
-      });
+      setUnreadSessions(prev => prev.filter(id => id !== sessionId));
       // Trigger unread count update immediately
       if (onUnreadCountChange) {
         onUnreadCountChange();
@@ -1213,11 +1311,22 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
     }
 
     try {
-
-
       await sessions.activateSession(sessionId);
+
+      // Check if user switched to another session while we were loading
+      if (latestSessionRequestRef.current !== requestId) {
+        return; // Abort - a newer session switch was initiated
+      }
+
       const sessionMessages = await sessions.getSessionMessages(sessionId);
-      let formattedMessages = sessionMessages.messages.map(msg => ({
+
+      // Check again after fetching messages
+      if (latestSessionRequestRef.current !== requestId) {
+        return; // Abort - a newer session switch was initiated
+      }
+
+      const messages = sessionMessages?.messages || [];
+      let formattedMessages = messages.map(msg => ({
         text: msg.message_text,
         sender: msg.sender,
         timestamp: msg.created_at,
@@ -1228,7 +1337,7 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
       }));
       // If the session is still generating, add a temporary placeholder.
       // The onToken callback will manage claiming and cleaning this up.
-      if (generatingSessions.has(sessionId)) {
+      if (generatingSessionIds.includes(sessionId)) {
         const hasStreamingPlaceholder = formattedMessages.some(m => m.sender === 'assistant' && m.isStreaming);
         if (!hasStreamingPlaceholder) {
           formattedMessages.push({
@@ -1249,8 +1358,7 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
       setChatSessionId(sessionId);
       setShowSessions(false);
 
-      // Update loading state based on whether the target session is still generating
-      setIsLoading(generatingSessions.has(sessionId));
+      // isLoading is now computed based on generatingSessionIds
       setIsCancelling(false);
     } catch (error) {
       console.error('Failed to switch session:', error);
@@ -1312,35 +1420,42 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
     setIsResizingSessions(true);
   }, []);
 
-  // Session resize effect
+  // Use ref for dialogSize to avoid listener churn during resize
+  const dialogSizeRef = useRef(dialogSize);
+  useEffect(() => {
+    dialogSizeRef.current = dialogSize;
+  }, [dialogSize]);
+
+  // Session resize handlers - defined outside effect to maintain stable references
+  const handleSessionMouseMove = useCallback((e) => {
+    const dialogRect = dialogRef.current?.getBoundingClientRect();
+    if (!dialogRect) return;
+
+    const relativeY = e.clientY - dialogRect.top;
+    const headerHeight = 60;
+    const minHeight = 120;
+    const maxHeight = dialogSizeRef.current.height - headerHeight - 200;
+
+    const newHeight = Math.max(minHeight, Math.min(maxHeight, relativeY - headerHeight));
+    setSessionHistoryHeight(newHeight);
+  }, []);
+
+  const handleSessionMouseUp = useCallback(() => {
+    setIsResizingSessions(false);
+  }, []);
+
+  // Session resize effect - listeners only added/removed when resize state changes
   useEffect(() => {
     if (!isResizingSessions) return;
 
-    const handleMouseMove = (e) => {
-      const dialogRect = dialogRef.current?.getBoundingClientRect();
-      if (!dialogRect) return;
-
-      const relativeY = e.clientY - dialogRect.top;
-      const headerHeight = 60; // Approximate header height
-      const minHeight = 120;
-      const maxHeight = dialogSize.height - headerHeight - 200; // Leave space for messages and input
-      
-      const newHeight = Math.max(minHeight, Math.min(maxHeight, relativeY - headerHeight));
-      setSessionHistoryHeight(newHeight);
-    };
-
-    const handleMouseUp = () => {
-      setIsResizingSessions(false);
-    };
-
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
+    document.addEventListener('mousemove', handleSessionMouseMove);
+    document.addEventListener('mouseup', handleSessionMouseUp);
 
     return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
+      document.removeEventListener('mousemove', handleSessionMouseMove);
+      document.removeEventListener('mouseup', handleSessionMouseUp);
     };
-  }, [isResizingSessions, dialogSize.height]);
+  }, [isResizingSessions, handleSessionMouseMove, handleSessionMouseUp]);
 
 
 
@@ -1380,22 +1495,18 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
     if (eventSourceRef.current) {
       eventSourceRef.current.close();
       eventSourceRef.current = null;
-      setEventSource(null);
     }
 
     // Abort any in-flight fetch / SSE polyfills
-    if (abortController) {
-      abortController.abort();
-      setAbortController(null);
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
     }
 
-    // Remove current session from generating set so isLoading refreshes
+    // Clear submitting state and remove current session from generating set so isLoading refreshes
+    setIsSubmitting(false);
     if (currentSession?.id) {
-      setGeneratingSessions(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(currentSession.id);
-        return newSet;
-      });
+      setGeneratingSessionIds(prev => prev.filter(id => id !== currentSession.id));
     }
 
     // Turn off streaming flags so blinking cursor disappears immediately
@@ -1403,9 +1514,8 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
       msg.isStreaming ? { ...msg, isStreaming: false } : msg
     ));
 
-    // Reset loading state after brief timeout to allow UI update
+    // Reset cancelling state after brief timeout to allow UI update
     setTimeout(() => {
-      setIsLoading(false);
       setIsCancelling(false);
       cancelPendingRef.current = false; // Reset cancel flag
     }, 300);
@@ -1437,9 +1547,17 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
     
     // Determine the message to send, using the override if available (for follow-up questions).
     const userMessage = (messageOverride || input).trim();
-    
-    // Do not send an empty message or if navigation is in progress.
-    if (!userMessage || isNavigating) return;
+
+    // Input validation: check length constraints
+    if (!userMessage || userMessage.length < MIN_MESSAGE_LENGTH || isNavigating) return;
+    if (userMessage.length > MAX_MESSAGE_LENGTH) {
+      console.warn(`Message too long: ${userMessage.length} chars (max: ${MAX_MESSAGE_LENGTH})`);
+      return;
+    }
+
+    // CRITICAL: Set submitting state IMMEDIATELY before any await calls
+    // This ensures isLoading is true and the cancel button shows right away
+    setIsSubmitting(true);
 
     // Clear the input field immediately after sending.
     setInput('');
@@ -1456,6 +1574,18 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
 
     // Save user message to database and add to UI
     const { message: savedUserMessage, newSession } = await saveMessageToDb(userMessage, 'user');
+
+    // IMPORTANT: Mark session as generating IMMEDIATELY after saveMessageToDb
+    // This ensures isLoading is true before any other awaits can cause re-renders
+    const sessionIdForGenerating = newSession?.id || currentSessionAtSendTime?.id;
+    if (sessionIdForGenerating) {
+      setGeneratingSessionIds(prev => prev.includes(sessionIdForGenerating) ? prev : [...prev, sessionIdForGenerating]);
+    }
+    // Also set current session immediately if a new session was created
+    if (newSession) {
+      setCurrentSession(newSession);
+    }
+
     if (savedUserMessage) {
       setMessages(prev => [...prev, savedUserMessage]);
     } else {
@@ -1473,15 +1603,16 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
     // Update currentSessionAtSendTime if a new session was created
     const updatedSessionAtSendTime = newSession || currentSessionAtSendTime;
 
-    // If a new session was created, add it to the top of the sessions list
+    // If a new session was created, add it to the sessions list and rename it
     if (newSession) {
       setSessionsList(prev => [newSession, ...prev]);
 
-      // Rename the newly created session to the user\u2019s first message
+      // Rename the newly created session to the user's first message
       try {
         const newSessionName = userMessage.length > 50 ? userMessage.substring(0, 50) + '...' : userMessage;
         await sessions.updateSessionName(newSession.id, newSessionName);
-        setCurrentSession(prev => (prev ? { ...prev, session_name: newSessionName } : prev));
+        // Update session name in both currentSession and sessionsList
+        setCurrentSession(prev => prev ? { ...prev, session_name: newSessionName } : { ...newSession, session_name: newSessionName });
         setSessionsList(prev => prev.map(s => (s.id === newSession.id ? { ...s, session_name: newSessionName } : s)));
       } catch (err) {
         console.warn('Failed to update new session name:', err);
@@ -1491,29 +1622,16 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
       try {
         const newSessionName = userMessage.length > 50 ? userMessage.substring(0, 50) + '...' : userMessage;
         await sessions.updateSessionName(currentSessionAtSendTime.id, newSessionName);
-        setCurrentSession(prev => (prev ? { ...prev, session_name: newSessionName } : prev));
+        setCurrentSession(prev => prev ? { ...prev, session_name: newSessionName } : { ...currentSessionAtSendTime, session_name: newSessionName });
         setSessionsList(prev => prev.map(s => (s.id === currentSessionAtSendTime.id ? { ...s, session_name: newSessionName } : s)));
       } catch (err) {
         console.warn('Failed to update existing session name:', err);
       }
     }
 
-    // Add current session to generating sessions - ensure we have a valid session ID
-    const sessionIdForGenerating = updatedSessionAtSendTime?.id || currentSessionAtSendTime?.id;
-    if (sessionIdForGenerating) {
-      setGeneratingSessions(prev => {
-        const newSet = new Set(prev);
-        newSet.add(sessionIdForGenerating);
-        return newSet;
-      });
-    }
-
     // Create new AbortController for this request
     const controller = new AbortController();
-    setAbortController(controller);
-
-    // Get AI response from chat API using streaming
-    setIsLoading(true);
+    abortControllerRef.current = controller;
     setIsCancelling(false);
     
     // Create a placeholder message for streaming response
@@ -1531,7 +1649,13 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
     };
     
     setMessages(prev => [...prev, initialAssistantMessage]);
-    
+
+    // Close existing EventSource before creating new one to prevent multi-instance leaks
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+      eventSourceRef.current = null;
+    }
+
     try {
       // Use streaming response
       const eventSource = sendMessageStream(
@@ -1548,9 +1672,8 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
             if (sessionToSaveIn?.id) {
               try {
                 await chat.saveMessage(token, 'assistant', sessionToSaveIn.id, getAgentType());
-                console.log('Initial message saved to database:', token);
               } catch (error) {
-                console.error('Failed to save initial message to database:', error);
+                console.error('Failed to save initial message to database');
               }
             }
           }
@@ -1590,14 +1713,11 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
         },
         // onComplete callback - finalize the message
         async (fullResponse, professionalData, followUpQuestionsData) => {
-          // Remove session from generating sessions on completion
+          // Clear submitting state and remove session from generating sessions on completion
+          setIsSubmitting(false);
           const sessionIdForClearing = updatedSessionAtSendTime?.id || currentSessionAtSendTime?.id;
           if (sessionIdForClearing) {
-            setGeneratingSessions(prev => {
-              const newSet = new Set(prev);
-              newSet.delete(sessionIdForClearing);
-              return newSet;
-            });
+            setGeneratingSessionIds(prev => prev.filter(id => id !== sessionIdForClearing));
           }
 
           // Check if user is still in the same session
@@ -1664,7 +1784,7 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
               // Mark session as unread by calling the backend
               try {
                 await sessions.markSessionAsUnread(sessionIdToSave); // This function needs to be created in api.js
-                setUnreadSessions(prev => new Set(prev).add(sessionIdToSave));
+                setUnreadSessions(prev => prev.includes(sessionIdToSave) ? prev : [...prev, sessionIdToSave]);
                 // Trigger unread count update immediately
                 if (onUnreadCountChange) {
                   onUnreadCountChange();
@@ -1678,15 +1798,11 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
           }
         },
         // onError callback - handle errors
-        async (errorMessage) => { 
+        async (errorMessage) => {
           // Remove session from generating sessions on error
           const sessionIdForClearing = updatedSessionAtSendTime?.id || currentSessionAtSendTime?.id;
           if (sessionIdForClearing) {
-            setGeneratingSessions(prev => {
-              const newSet = new Set(prev);
-              newSet.delete(sessionIdForClearing);
-              return newSet;
-            });
+            setGeneratingSessionIds(prev => prev.filter(id => id !== sessionIdForClearing));
           }
 
           console.error('Streaming error:', errorMessage);
@@ -1738,35 +1854,44 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
           }
         }
       );
-      
-      // Store the EventSource for potential cancellation
-      setEventSource(eventSource);
+
+      // Store the EventSource in ref for potential cancellation
       eventSourceRef.current = eventSource;
       if (cancelPendingRef.current) {
         eventSource.close();
         eventSourceRef.current = null;
-        setEventSource(null);
         return;
       }
 
       
     } catch (error) {
+      // Handle errors that occur when starting the streaming (e.g., EventSource creation failure)
+      // Note: Streaming callbacks (onComplete, onError) handle cleanup when streaming finishes normally
       console.error('Error starting streaming response:', error);
-      
+
+      // Clean up submitting state since streaming failed to start
+      setIsSubmitting(false);
+      if (sessionIdForGenerating) {
+        setGeneratingSessionIds(prev => prev.filter(id => id !== sessionIdForGenerating));
+      }
+      setIsCancelling(false);
+      abortControllerRef.current = null;
+      eventSourceRef.current = null;
+
       // Remove the placeholder streaming message
       setMessages(prev => prev.filter(msg => msg.id !== streamingMessageId));
-      
+
       // Check if user is still in the same session
-      const errorSessionMatches = currentSessionAtSendTime === null ? 
-        (currentSessionRef.current?.id === updatedSessionAtSendTime?.id) : 
+      const errorSessionMatches = currentSessionAtSendTime === null ?
+        (currentSessionRef.current?.id === updatedSessionAtSendTime?.id) :
         (currentSessionRef.current?.id === currentSessionAtSendTime?.id);
-      
+
       if (errorSessionMatches && chatSessionId === currentChatSessionIdAtSendTime) {
         const errorMessage = handleApiError(error);
         // For new sessions, use the updatedSessionAtSendTime which contains the newly created session
         const sessionToSaveIn = updatedSessionAtSendTime || currentSessionAtSendTime;
         let savedErrorMessage = null;
-        
+
         if (sessionToSaveIn?.id) {
           try {
             const savedMessage = await chat.saveMessage(errorMessage, 'assistant', sessionToSaveIn.id, getAgentType());
@@ -1780,23 +1905,19 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
             console.error('Failed to save error message to database:', saveError);
           }
         }
-        
+
         if (savedErrorMessage) {
           setMessages(prev => [...prev, savedErrorMessage]);
         } else {
-          setMessages(prev => [...prev, { 
-            text: errorMessage, 
-            sender: 'assistant', 
-            timestamp: new Date().toISOString() 
+          setMessages(prev => [...prev, {
+            text: errorMessage,
+            sender: 'assistant',
+            timestamp: new Date().toISOString()
           }]);
         }
       }
-    } finally {
-      setIsLoading(false);
-      setIsCancelling(false);
-      setAbortController(null);
-      setEventSource(null);
     }
+    // Note: No finally block here! The streaming is async - cleanup happens in onComplete/onError callbacks
   };
 
   // Handle resize functionality
@@ -1929,23 +2050,18 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
     setDialogKey(prev => prev + 1);
   }, [assistantPosition.x, assistantPosition.y]);
 
-  //Close on outside Click
+  // Close settings panel on outside click
   useEffect(() => {
+    if (!showSettings) return;
+
     const handleOutsideClick = (event) => {
       if (panelRef.current && !panelRef.current.contains(event.target)) {
         setShowSettings(false);
       }
-    }
-
-    if (showSettings) {
-      document.addEventListener("mousedown", handleOutsideClick)
-    } else {
-      document.removeEventListener("mousedown", handleOutsideClick)
-    }
-
-    return () => {
-      document.removeEventListener("mousedown", handleOutsideClick)
     };
+
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => document.removeEventListener('mousedown', handleOutsideClick);
   }, [showSettings]);
 
   const getDialogStyle = () => {
@@ -2190,44 +2306,6 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
             </button>
           </div>
         </div>
-        
-        {/* Agent Selection Dropdown */}
-        <div className="relative">
-          <button
-            onClick={() => setShowAgentDropdown(!showAgentDropdown)}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg text-sm font-medium flex items-center justify-between transition-colors"
-          >
-            <span>
-              {selectedAgent ? 
-                `${agents.find(a => a.name === selectedAgent)?.displayName}` : 
-                'Select an Agent'
-              }
-            </span>
-            <ChevronDownIcon className="w-4 h-4" />
-          </button>
-          
-          {showAgentDropdown && (
-            <div className="absolute top-full mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg z-20 max-h-48 overflow-y-auto">
-              <button
-                onClick={() => handleAgentSelection('None')}
-                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 focus:outline-none focus:bg-gray-100 border-b border-gray-100 text-gray-700"
-              >
-                <span className="font-medium text-gray-500">None (Dashboard)</span>
-              </button>
-              {agents.map((agent) => (
-                <button
-                  key={agent.name}
-                  onClick={() => handleAgentSelection(agent.name)}
-                  className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-100 focus:outline-none focus:bg-gray-100 ${
-                    selectedAgent === agent.name ? 'bg-blue-50 text-blue-700' : 'text-gray-700'
-                  }`}
-                >
-                  <span className="font-medium">{agent.displayName}</span>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
       </div>
 
       {/* Settings Panel */}
@@ -2264,68 +2342,148 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
       {/* Sessions List Panel */}
       {showSessions && (
         <div className="relative">
-          <div 
-            className="p-4 border-b border-gray-200 bg-gray-50 overflow-y-auto"
+          <div
+            className="border-b border-gray-200 bg-gradient-to-b from-gray-50 to-white overflow-y-auto"
             style={{ height: `${sessionHistoryHeight}px` }}
           >
-            <h4 className="text-sm font-medium text-gray-700 mb-3">Session History</h4>
-            {sessionsList.length === 0 ? (
-              <p className="text-xs text-gray-500">No previous sessions</p>
-            ) : (
-              <div className="space-y-2">
-                {sessionsList.map((session) => (
-                  <div
-                    key={session.id}
-                    onClick={() => switchToSession(session.id)}
-                    className={`p-2 rounded cursor-pointer hover:bg-gray-100 transition-colors relative group ${
-                      currentSession?.id === session.id ? 'bg-blue-100 border border-blue-300' : 'bg-white border border-gray-200'
+            {/* Header */}
+            <div className="sticky top-0 bg-white border-b border-gray-100 p-4 z-10">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="text-sm font-semibold text-gray-900 flex items-center">
+                  <ClockIcon className="w-4 h-4 mr-2 text-blue-600" />
+                  Session History
+                </h4>
+                <span className="text-xs text-gray-500 font-medium">
+                  {filteredSessions.length} {filteredSessions.length === 1 ? 'session' : 'sessions'}
+                </span>
+              </div>
+
+              {/* Search Box */}
+              <div className="relative mb-2">
+                <input
+                  type="text"
+                  placeholder="Search"
+                  value={sessionSearchQuery}
+                  onChange={(e) => setSessionSearchQuery(e.target.value)}
+                  className="w-full pl-9 pr-4 py-2 text-xs border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                />
+                <svg
+                  className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                {sessionSearchQuery && (
+                  <button
+                    onClick={() => setSessionSearchQuery('')}
+                    className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                  >
+                    <XMarkIcon className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+
+              {/* Date Filter */}
+              <div className="flex gap-1">
+                {DATE_FILTER_OPTIONS.map((filter) => (
+                  <button
+                    key={filter.value}
+                    onClick={() => setSessionDateFilter(filter.value)}
+                    className={`flex-1 px-2 py-1.5 text-xs font-medium rounded-md transition-all ${
+                      sessionDateFilter === filter.value
+                        ? 'bg-blue-600 text-white shadow-sm'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                     }`}
                   >
-                    <div className="flex justify-between items-start">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-medium text-gray-800 truncate flex items-center">
-                          {unreadSessions.has(session.id) && (
-                            <span className="w-2 h-2 bg-blue-500 rounded-full mr-2 flex-shrink-0"></span>
-                          )}
-                          {session.session_name}
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          {generatingSessions.has(session.id) ? (
-                            <span className="text-blue-600 animate-pulse">Generating response...</span>
-                          ) : (
-                            new Date(session.created_at).toLocaleString('en-US', {
-                              year: 'numeric',
-                              month: '2-digit',
-                              day: '2-digit',
-                              hour: '2-digit',
-                              minute: '2-digit',
-                              timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
-                            })
-                          )}
-                        </p>
-                      </div>
-                      <button
-                         onClick={(e) => showDeleteConfirmation(session.id, e)}
-                         className="ml-2 p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors opacity-0 group-hover:opacity-100"
-                         title="Delete Session"
-                       >
-                         <TrashIcon className="w-4 h-4" />
-                       </button>
-                    </div>
-                  </div>
+                    {filter.label}
+                  </button>
                 ))}
               </div>
-            )}
+            </div>
+
+            {/* Sessions List */}
+            <div className="p-3">
+              {sessionsList.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 px-4">
+                  <ClockIcon className="w-12 h-12 text-gray-300 mb-3" />
+                  <p className="text-sm text-gray-500 font-medium">No sessions yet</p>
+                  <p className="text-xs text-gray-400 mt-1">Start a conversation to create your first session</p>
+                </div>
+              ) : filteredSessions.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 px-4">
+                  <svg className="w-12 h-12 text-gray-300 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                  <p className="text-sm text-gray-500 font-medium">No matching sessions</p>
+                  <p className="text-xs text-gray-400 mt-1">Try adjusting your filters</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {filteredSessions.map((session) => (
+                    <div
+                      key={session.id}
+                      onClick={() => switchToSession(session.id)}
+                      className={`p-3 rounded-lg cursor-pointer transition-all duration-200 relative group ${
+                        currentSession?.id === session.id
+                          ? 'bg-blue-50 border-2 border-blue-500 shadow-sm'
+                          : 'bg-white border border-gray-200 hover:border-blue-300 hover:shadow-md hover:scale-[1.02]'
+                      }`}
+                    >
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1 min-w-0 pr-2">
+                          <div className="flex items-center mb-1">
+                            {unreadSessions.includes(session.id) && (
+                              <span className="w-2 h-2 bg-blue-500 rounded-full mr-2 flex-shrink-0 animate-pulse"></span>
+                            )}
+                            <p className="text-xs font-semibold text-gray-900 truncate">
+                              {session.session_name}
+                            </p>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            {generatingSessionIds.includes(session.id) ? (
+                              <div className="flex items-center space-x-1">
+                                <div className="w-1 h-1 bg-blue-600 rounded-full animate-bounce"></div>
+                                <div className="w-1 h-1 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                                <div className="w-1 h-1 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                                <span className="text-xs text-blue-600 font-medium ml-1">Generating...</span>
+                              </div>
+                            ) : (
+                              <>
+                                <svg className="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                <span className="text-xs text-gray-500">
+                                  {formatDateTime(session.created_at)}
+                                </span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                        <button
+                          onClick={(e) => showDeleteConfirmation(session.id, e)}
+                          className="flex-shrink-0 p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-all opacity-0 group-hover:opacity-100"
+                          title="Delete Session"
+                        >
+                          <TrashIcon className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
           {/* Resize handle for session history */}
-          <div 
-            className={`absolute bottom-0 left-0 right-0 h-2 cursor-ns-resize bg-gray-300 hover:bg-gray-400 transition-colors ${
-              isResizingSessions ? 'bg-blue-400' : ''
+          <div
+            className={`absolute bottom-0 left-0 right-0 h-2 cursor-ns-resize transition-colors ${
+              isResizingSessions ? 'bg-blue-500' : 'bg-gray-300 hover:bg-gray-400'
             }`}
             onMouseDown={handleSessionResizeStart}
             title="Drag to resize session history"
           >
-            <div className="absolute inset-x-0 top-1/2 transform -translate-y-1/2 h-0.5 bg-gray-500 mx-4"></div>
+            <div className="absolute inset-x-0 top-1/2 transform -translate-y-1/2 h-0.5 bg-white mx-4 rounded-full"></div>
           </div>
         </div>
       )}
@@ -2431,10 +2589,10 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
                       <div className={`mt-2 flex space-x-1 ${message.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
                         <button
                           onClick={() => copyToClipboard(message.text, index)}
-                          className={`p-1 rounded transition-colors ${copiedMessageIds.has(index) ? 'bg-green-100 text-green-600' : 'hover:bg-gray-200 text-gray-500 hover:text-gray-700'}`}
+                          className={`p-1 rounded transition-colors ${copiedMessageIds.includes(index) ? 'bg-green-100 text-green-600' : 'hover:bg-gray-200 text-gray-500 hover:text-gray-700'}`}
                           title="Copy message"
                         >
-                          {copiedMessageIds.has(index) ? (
+                          {copiedMessageIds.includes(index) ? (
                             <CheckIcon className="w-4 h-4 text-green-500" />
                           ) : (
                             <DocumentDuplicateIcon className="w-4 h-4" />
@@ -2455,13 +2613,7 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
                     
                     {message.timestamp && message.sender !== 'system' && editingMessageIndex !== index && (
                       <div className="text-xs text-gray-400 mt-1 px-1">
-                        {new Date(typeof message.timestamp === 'string' ? message.timestamp : message.timestamp).toLocaleString('en-US', {
-                          year: 'numeric',
-                          month: '2-digit',
-                          day: '2-digit',
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}
+                        {formatDateTime(message.timestamp)}
                       </div>
                     )}
                     
@@ -2477,7 +2629,7 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
                         <div className="grid gap-2">
                           {followUpQuestions[message.id].map((question, qIndex) => (
                             <button
-                              key={qIndex}
+                              key={`${message.id}-q-${qIndex}-${question.slice(0, 20)}`}
                               onClick={() => handleFollowUpQuestionClick(question)}
                               disabled={isLoading || isNavigating}
                               className={`group relative w-full text-left p-3 text-sm rounded-lg border-2 transition-all duration-200 transform ${

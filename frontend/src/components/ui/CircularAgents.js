@@ -19,20 +19,22 @@ const animationStyles = `
   }
 `;
 
-// Inject styles if not already present
-if (typeof document !== 'undefined' && !document.getElementById('circular-agents-styles')) {
-  const styleSheet = document.createElement('style');
-  styleSheet.id = 'circular-agents-styles';
-  styleSheet.textContent = animationStyles;
-  document.head.appendChild(styleSheet);
-}
-
 const CircularAgents = ({ agents, avatarUrl, user, triggerAnimation = false, onAgentClick }) => {
   const navigate = useNavigate();
   const containerRef = useRef(null);
   const [radius, setRadius] = useState(280);
   const [isAnimating, setIsAnimating] = useState(false);
   const [isImgError, setImgError] = useState(false);
+
+  // Inject animation styles once per page lifecycle (moved from module level)
+  useEffect(() => {
+    if (!document.getElementById('circular-agents-styles')) {
+      const styleSheet = document.createElement('style');
+      styleSheet.id = 'circular-agents-styles';
+      styleSheet.textContent = animationStyles;
+      document.head.appendChild(styleSheet);
+    }
+  }, []);
 
   useEffect(() => {
     const updateRadius = () => {

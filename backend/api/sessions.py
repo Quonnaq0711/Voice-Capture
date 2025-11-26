@@ -1,3 +1,4 @@
+import logging
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import text
@@ -9,6 +10,8 @@ from backend.models.user import User
 from backend.models.chat import ChatMessage
 from backend.utils.auth import get_current_user
 from pydantic import BaseModel
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -130,9 +133,8 @@ async def get_user_sessions(
                 active_session['unread'] = False
             except Exception as e:
                 db.rollback()
-                # Don't fail the entire request if marking as read fails, just log it
-                # Still return the sessions list
-                pass
+                # Don't fail the entire request if marking as read fails, but log it
+                logger.warning(f"Failed to mark session {active_session['id']} as read: {str(e)}")
 
         return sessions
 

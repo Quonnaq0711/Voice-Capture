@@ -1,14 +1,15 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
-import { profile as profileAPI, sessions as sessionsAPI, auth, activities as activitiesAPI } from '../services/api';
-import { getCareerInsights, hasCareerInsights, getCareerInsightsByResume } from '../services/chatApi';
-import PersonalAssistant from './PersonalAssistant';
+import { useAuth } from '../../contexts/AuthContext';
+import { profile as profileAPI, sessions as sessionsAPI, auth, activities as activitiesAPI, streamingFetch } from '../../services/api';
+import { getCareerInsights, hasCareerInsights, getCareerInsightsByResume } from '../../services/chatApi';
+import PersonalAssistant from '../chat/PersonalAssistant';
 // Progress tracking is now handled in ChatDialog
 // import ProgressTracker from './ProgressTracker';
-import NotificationPanel from './NotificationPanel';
-import AgentDesignModal from './AgentDesignModal';
+import NotificationPanel from '../ui/NotificationPanel';
+import AgentDesignModal from '../AgentDesignModal';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, LineChart, Line, ResponsiveContainer, RadialBarChart, RadialBar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar } from 'recharts';
+import { Search, Filter, X, FileText, FileType, File } from 'lucide-react';
 
 // Import Heroicons
 import {
@@ -346,8 +347,63 @@ const DocumentUpload = ({ onUploadSuccess }) => {
   );
 };
 
-// Document list component
+// Document list component with search, filters, and pagination
 const DocumentList = ({ documents, loading, onPreview, onDelete, onAnalyze, formatDate, getFileIcon }) => {
+  const [searchQuery, setSearchQuery] = useState('');
+  const [docTypeFilter, setDocTypeFilter] = useState('all'); // 'all', 'pdf', 'docx', 'txt'
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 5;
+
+  // Filter documents by search query and document type
+  const filteredDocuments = useMemo(() => {
+    let filtered = [...documents];
+
+    // Apply document type filter
+    if (docTypeFilter !== 'all') {
+      filtered = filtered.filter(doc =>
+        doc.file_type?.toLowerCase() === docTypeFilter.toLowerCase()
+      );
+    }
+
+    // Apply search query filter
+    if (searchQuery.trim()) {
+      filtered = filtered.filter(doc =>
+        doc.original_filename.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+    }
+
+    return filtered;
+  }, [documents, docTypeFilter, searchQuery]);
+
+  // Get paginated documents
+  const paginatedDocuments = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    return filteredDocuments.slice(startIndex, endIndex);
+  }, [filteredDocuments, currentPage]);
+
+  // Calculate total pages
+  const totalPages = Math.ceil(filteredDocuments.length / itemsPerPage);
+
+  // Handle search change - reset to first page
+  const handleSearchChange = (e) => {
+    setSearchQuery(e.target.value);
+    setCurrentPage(1);
+  };
+
+  // Handle filter change - reset to first page
+  const handleFilterChange = (filter) => {
+    setDocTypeFilter(filter);
+    setCurrentPage(1);
+  };
+
+  // Clear all filters
+  const clearFilters = () => {
+    setSearchQuery('');
+    setDocTypeFilter('all');
+    setCurrentPage(1);
+  };
+
   if (loading) {
     return (
       <div>
@@ -368,57 +424,238 @@ const DocumentList = ({ documents, loading, onPreview, onDelete, onAnalyze, form
   return (
     <div>
       <label className="block text-sm font-medium text-gray-700 mb-2">Document History</label>
-      
+
       {documents.length === 0 ? (
         <div className="border border-gray-200 rounded-lg p-6 text-center">
           <DocumentIcon className="mx-auto h-12 w-12 text-gray-400 mb-2" />
           <p className="text-gray-500 text-sm">No documents uploaded yet</p>
         </div>
       ) : (
-        <div className="border border-gray-200 rounded-lg divide-y divide-gray-200 max-h-64 overflow-y-auto">
-          {documents.map((document) => (
-            <div key={document.id} className="p-4 hover:bg-gray-50 transition-colors">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-3 flex-1 min-w-0">
-                  {getFileIcon(document.file_type)}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900 truncate">
-                      {document.original_filename}
-                    </p>
-                    <div className="flex items-center text-xs text-gray-500 mt-1">
-                      <CalendarIcon className="h-3 w-3 mr-1" />
-                      <span>{formatDate(document.created_at)}</span>
-                      <span className="mx-2">•</span>
-                      <span className="uppercase">{document.file_type}</span>
-                    </div>
+        <div className="border border-gray-200 rounded-lg overflow-hidden">
+          {/* Search Bar and Filters */}
+          <div className="p-3 border-b border-gray-100 bg-gradient-to-b from-white to-gray-50">
+            <div className="space-y-3">
+              {/* Search Box */}
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search documents..."
+                  value={searchQuery}
+                  onChange={handleSearchChange}
+                  className="w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm transition-all"
+                />
+                {searchQuery && (
+                  <button
+                    onClick={() => { setSearchQuery(''); setCurrentPage(1); }}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+
+              {/* Filters Section */}
+              <div className="space-y-2">
+                {/* Filter Header with Active Count */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Filter className="h-4 w-4 text-gray-400" />
+                    <span className="text-xs font-medium text-gray-600">Filters</span>
+                    {(docTypeFilter !== 'all' || searchQuery) && (
+                      <span className="px-1.5 py-0.5 bg-blue-100 text-blue-600 text-xs font-medium rounded-full">
+                        {(docTypeFilter !== 'all' ? 1 : 0) + (searchQuery ? 1 : 0)} active
+                      </span>
+                    )}
                   </div>
+                  {(docTypeFilter !== 'all' || searchQuery) && (
+                    <button
+                      onClick={clearFilters}
+                      className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 transition-colors"
+                    >
+                      <X className="h-3 w-3" />
+                      Clear
+                    </button>
+                  )}
                 </div>
-                <div className="flex items-center space-x-2">
-                  <button
-                    onClick={() => onPreview(document)}
-                    className="inline-flex items-center px-3 py-1 border border-gray-300 shadow-sm text-xs font-medium rounded text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
-                  >
-                    <EyeIcon className="h-3 w-3 mr-1" />
-                    Preview
-                  </button>
-                  <button
-                    onClick={() => onAnalyze(document)}
-                    className="inline-flex items-center px-3 py-1 border border-green-300 shadow-sm text-xs font-medium rounded text-green-700 bg-white hover:bg-green-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors"
-                  >
-                    <ChartBarIcon className="h-3 w-3 mr-1" />
-                    Analyze
-                  </button>
-                  <button
-                    onClick={() => onDelete(document)}
-                    className="inline-flex items-center px-3 py-1 border border-red-300 shadow-sm text-xs font-medium rounded text-red-700 bg-white hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors"
-                  >
-                    <TrashIcon className="h-3 w-3 mr-1" />
-                    Delete
-                  </button>
+
+                {/* Document Type Filter - Chip Style with Icons */}
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <FileType className="h-3.5 w-3.5 text-gray-400" />
+                    <span className="text-xs text-gray-500">Document Type</span>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      { value: 'all', label: 'All', icon: null, color: 'gray' },
+                      { value: 'pdf', label: 'PDF', icon: FileText, color: 'red' },
+                      { value: 'docx', label: 'DOCX', icon: File, color: 'blue' },
+                      { value: 'txt', label: 'TXT', icon: File, color: 'green' }
+                    ].map((filter) => {
+                      const isActive = docTypeFilter === filter.value;
+                      const IconComponent = filter.icon;
+                      const colorClasses = {
+                        gray: isActive ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300',
+                        red: isActive ? 'bg-red-600 text-white border-red-600' : 'bg-white text-red-600 border-red-200 hover:border-red-300',
+                        blue: isActive ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-blue-600 border-blue-200 hover:border-blue-300',
+                        green: isActive ? 'bg-green-600 text-white border-green-600' : 'bg-white text-green-600 border-green-200 hover:border-green-300'
+                      };
+                      return (
+                        <button
+                          key={filter.value}
+                          onClick={() => handleFilterChange(filter.value)}
+                          className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-full border transition-all ${colorClasses[filter.color]}`}
+                        >
+                          {IconComponent && <IconComponent className="h-3.5 w-3.5" />}
+                          {filter.label}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
             </div>
-          ))}
+          </div>
+
+          {/* Document List */}
+          <div className="p-3">
+            {filteredDocuments.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-8 px-4">
+                <Search className="h-10 w-10 text-gray-300 mb-3" />
+                <p className="text-sm text-gray-500 font-medium">No matching documents</p>
+                <p className="text-xs text-gray-400 mt-1 text-center">
+                  {searchQuery || docTypeFilter !== 'all'
+                    ? 'Try adjusting your filters'
+                    : 'Try a different search term'}
+                </p>
+                {(searchQuery || docTypeFilter !== 'all') && (
+                  <button
+                    onClick={clearFilters}
+                    className="mt-3 text-xs text-blue-600 hover:text-blue-800 underline"
+                  >
+                    Clear all filters
+                  </button>
+                )}
+              </div>
+            ) : (
+              <>
+                {/* Document Cards */}
+                <div className="space-y-2 mb-4">
+                  {paginatedDocuments.map((document) => (
+                    <div
+                      key={document.id}
+                      className="relative bg-white border border-gray-200 rounded-lg p-3 hover:border-blue-300 hover:shadow-md transition-all duration-200 group hover:scale-[1.01]"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center space-x-3 flex-1 min-w-0">
+                          <div className="flex-shrink-0">
+                            {getFileIcon(document.file_type)}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold text-gray-900 truncate">
+                              {document.original_filename}
+                            </p>
+                            <div className="flex items-center space-x-3 text-xs text-gray-500 mt-1">
+                              <div className="flex items-center">
+                                <CalendarIcon className="h-3 w-3 mr-1" />
+                                <span>{formatDate(document.created_at)}</span>
+                              </div>
+                              <span className="uppercase font-medium">{document.file_type}</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-2 flex-shrink-0">
+                          <button
+                            onClick={() => onPreview(document)}
+                            className="inline-flex items-center px-2 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded text-gray-700 bg-white hover:bg-gray-50 transition-colors"
+                          >
+                            <EyeIcon className="h-3 w-3 sm:mr-1" />
+                            <span className="hidden sm:inline">View</span>
+                          </button>
+                          <button
+                            onClick={() => onAnalyze(document)}
+                            className="inline-flex items-center px-2 py-1.5 border border-green-300 shadow-sm text-xs font-medium rounded text-green-700 bg-white hover:bg-green-50 transition-colors"
+                          >
+                            <ChartBarIcon className="h-3 w-3 sm:mr-1" />
+                            <span className="hidden sm:inline">Analyze</span>
+                          </button>
+                          <button
+                            onClick={() => onDelete(document)}
+                            className="inline-flex items-center px-2 py-1.5 border border-red-300 shadow-sm text-xs font-medium rounded text-red-700 bg-white hover:bg-red-50 transition-colors"
+                          >
+                            <TrashIcon className="h-3 w-3 sm:mr-1" />
+                            <span className="hidden sm:inline">Delete</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Pagination Controls */}
+                {totalPages > 1 && (
+                  <div className="flex items-center justify-center space-x-2 pt-4 border-t border-gray-100">
+                    {/* Previous Button */}
+                    <button
+                      onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                      disabled={currentPage === 1}
+                      className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                        currentPage === 1
+                          ? 'text-gray-300 cursor-not-allowed'
+                          : 'text-gray-700 hover:bg-gray-100'
+                      }`}
+                    >
+                      Previous
+                    </button>
+
+                    {/* Page Numbers */}
+                    <div className="flex items-center space-x-1">
+                      {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => {
+                        const showPage =
+                          pageNum === 1 ||
+                          pageNum === totalPages ||
+                          Math.abs(pageNum - currentPage) <= 1;
+
+                        if (!showPage) {
+                          if (pageNum === currentPage - 2 || pageNum === currentPage + 2) {
+                            return <span key={pageNum} className="text-gray-400 px-2">...</span>;
+                          }
+                          return null;
+                        }
+
+                        return (
+                          <button
+                            key={pageNum}
+                            onClick={() => setCurrentPage(pageNum)}
+                            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                              currentPage === pageNum
+                                ? 'bg-blue-600 text-white shadow-sm'
+                                : 'text-gray-700 hover:bg-gray-100'
+                            }`}
+                          >
+                            {pageNum}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* Next Button */}
+                    <button
+                      onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                      disabled={currentPage === totalPages}
+                      className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                        currentPage === totalPages
+                          ? 'text-gray-300 cursor-not-allowed'
+                          : 'text-gray-700 hover:bg-gray-100'
+                      }`}
+                    >
+                      Next
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
         </div>
       )}
     </div>
@@ -426,7 +663,7 @@ const DocumentList = ({ documents, loading, onPreview, onDelete, onAnalyze, form
 };
 
 // Document manager component that combines upload and list
-const DocumentManager = ({ analysisProgress, setAnalysisProgress, setSectionStatus, setProfessionalData, addNotification, setLastAnalyzedDocumentId }) => {
+const DocumentManager = ({ analysisProgress, startGlobalAnalysisStream }) => {
   const [documents, setDocuments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState(null);
@@ -465,8 +702,12 @@ const DocumentManager = ({ analysisProgress, setAnalysisProgress, setSectionStat
   };
 
   const handleAnalyze = async (document) => {
-    if (analysisProgress.isAnalyzing) {
-      console.log('Analysis already in progress, ignoring request');
+    if (analysisProgress?.isAnalyzing) {
+      return;
+    }
+
+    if (!startGlobalAnalysisStream) {
+      showToast('Analysis functionality not available', 'error');
       return;
     }
 
@@ -483,261 +724,13 @@ const DocumentManager = ({ analysisProgress, setAnalysisProgress, setSectionStat
           source_type: 'document_history'
         }
       });
-      // Reset analysis state
-      setAnalysisProgress({
-        isAnalyzing: true,
-        currentSection: null,
-        completedSections: [],
-        totalSections: 7,
-        progress: 0,
-        error: null
-      });
 
-      setSectionStatus({
-        professionalIdentity: 'pending',
-        educationBackground: 'pending',
-        workExperience: 'pending',
-        skillsAnalysis: 'pending',
-        marketPosition: 'pending',
-        careerTrajectory: 'pending',
-        strengthsWeaknesses: 'pending',
-        salaryAnalysis: 'pending'
-      });
+      showToast('Starting document analysis...', 'success');
 
-      // Clear existing professional data to prepare for new analysis
-      setProfessionalData({
-        professionalIdentity: {
-          title: '',
-          summary: '',
-          keyHighlights: [],
-          currentRole: '',
-          currentIndustry: '',
-          currentCompany: '',
-          location: '',
-          marketPosition: { competitiveness: 0, skillRelevance: 0, industryDemand: 0, careerPotential: 0 }
-        },
-        workExperience: { totalYears: 0, timelineStart: null, timelineEnd: null, analytics: { workingYears: { years: '', period: '' }, heldRoles: { count: '', longest: '' }, heldTitles: { count: '', shortest: '' }, companies: { count: '', longest: '' }, insights: { gaps: '', shortestTenure: '', companyChanges: '', careerProgression: '' } } },
-        skillsAnalysis: { hardSkills: [], softSkills: [], coreStrengths: [], developmentAreas: [] },
-        careerTrajectory: [],
-        strengthsWeaknesses: { strengths: [], weaknesses: [] },
-        salaryAnalysis: { currentSalary: null, historicalTrends: [], marketComparison: null, predictedGrowth: null, salaryFactors: [], recommendations: [] }
-      });
-
-      // Store the document ID for later retrieval of analysis results
-      setLastAnalyzedDocumentId(document.id);
-      
-      addNotification({
-        type: 'progress',
-        title: 'Resume Analysis Started',
-        message: `Starting comprehensive analysis of ${document.original_filename}`,
-        details: 'This may take a few minutes. You will see real-time updates as each section completes.'
-      });
-      
-      // Call the streaming API with the specific document ID
-      // Use relative path in production (proxied through Nginx), localhost in development
-      const apiUrl = process.env.NODE_ENV === 'production'
-        ? '/api/career/analyze_resume_streaming'
-        : (process.env.REACT_APP_CAREER_URL || 'http://localhost:6002') + '/api/career/analyze_resume_streaming';
-      const response = await fetch(apiUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify({ 
-          user_id: String(document.user_id),
-          resume_id: String(document.id)
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = ''; // Buffer to accumulate incomplete lines
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        // Decode and append to buffer
-        const chunk = decoder.decode(value, { stream: true });
-        buffer += chunk;
-
-        // Split by newlines, but keep the last incomplete line in buffer
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || ''; // Keep last incomplete line
-
-        for (const line of lines) {
-          if (line.trim() && line.startsWith('data: ')) {
-            try {
-              const jsonString = line.slice(6).trim();
-              if (!jsonString) continue; // Skip empty data lines
-
-              const data = JSON.parse(jsonString);
-              console.log('Received streaming data:', data);
-              
-              // Handle different types of streaming responses
-              if (data.type === 'section_progress') {
-                // Update state directly for immediate UI feedback
-                setAnalysisProgress(prev => ({
-                  ...prev,
-                  currentSection: data.section,
-                  progress: data.progress || prev.progress,
-                  totalSections: data.total_sections || 7,
-                  isAnalyzing: true
-                }));
-                
-                setSectionStatus(prev => ({
-                  ...prev,
-                  [data.section]: 'analyzing'
-                }));
-                
-                // Add progress notification
-                const sectionName = data.section.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
-                addNotification({
-                  type: 'progress',
-                  title: 'Analysis in Progress',
-                  message: `Analyzing ${sectionName}...`,
-                  current_section: sectionName,
-                  progress: data.progress || 0,
-                  details: `Processing section ${data.progress ? Math.ceil(data.progress / (100 / (data.total_sections || 7))) : 1} of ${data.total_sections || 7}`
-                });
-                
-                // Also dispatch event for compatibility (browser only)
-                if (typeof document !== 'undefined' && typeof document.querySelector === 'function') {
-                  const progressEvent = new CustomEvent('analysisProgress', {
-                    detail: {
-                      section: data.section,
-                      status: 'analyzing',
-                      progress: data.progress,
-                      totalSections: data.total_sections || 7
-                    }
-                  });
-                  document.querySelector('[data-agent-type="career"]')?.dispatchEvent(progressEvent);
-                }
-              } else if (data.type === 'section_complete') {
-                console.log('Section completed:', data.section, data.data);
-                
-                // Update state directly for immediate UI feedback
-                if (data.data) {
-                  // Update professional data with the new section data
-                  const sectionData = data.data[data.section] || data.data;
-                  setProfessionalData(prev => {
-                    const newData = {
-                      ...prev,
-                      [data.section]: sectionData
-                    };
-                    console.log(`Updated professional data for section ${data.section}:`, newData);
-                    return newData;
-                  });
-                }
-                
-                // Update section status
-                setSectionStatus(prev => {
-                  const newStatus = { ...prev, [data.section]: 'completed' };
-                  console.log('Updated section status:', newStatus);
-                  return newStatus;
-                });
-                
-                // Update analysis progress
-                setAnalysisProgress(prev => {
-                  const newCompletedSections = [...prev.completedSections, data.section];
-                  const newProgress = Math.round((newCompletedSections.length / prev.totalSections) * 100);
-                  return {
-                    ...prev,
-                    completedSections: newCompletedSections,
-                    progress: newProgress,
-                    currentSection: null
-                  };
-                });
-
-                // Add section completion notification
-                const sectionName = data.section.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
-                addNotification({
-                  type: 'complete',
-                  title: `✅ ${sectionName} Complete`,
-                  message: `${sectionName} analysis completed successfully! New insights are now available in your career profile.`,
-                  timestamp: Date.now()
-                });
-
-                // Also dispatch event for compatibility (browser only)
-                if (typeof document !== 'undefined' && typeof document.querySelector === 'function') {
-                  const completeEvent = new CustomEvent('sectionComplete', {
-                    detail: {
-                      section: data.section,
-                      data: data.data,
-                      error: data.error
-                    }
-                  });
-                  document.querySelector('[data-agent-type="career"]')?.dispatchEvent(completeEvent);
-                }
-              } else if (data.type === 'analysis_complete') {
-                console.log('Analysis completed:', data);
-                
-                // Update state directly for immediate UI feedback
-                setAnalysisProgress(prev => ({
-                  ...prev,
-                  isAnalyzing: false,
-                  currentSection: null,
-                  progress: data.success ? 100 : prev.progress,
-                  error: data.error || null
-                }));
-                
-                // If backend returns complete data, merge it with existing professionalData
-                if (data.professional_data) {
-                  const finalData = data.professional_data;
-                  setProfessionalData(prev => ({
-                    ...prev,
-                    ...finalData
-                  }));
-                }
-                
-                // Add completion notification
-                if (data.success) {
-                  addNotification({
-                    type: 'complete',
-                    title: '✅ Resume Analysis Complete',
-                    message: 'Resume analysis completed successfully! All insights are now available in your career profile.',
-                    timestamp: Date.now()
-                  });
-                }
-                
-                // Also dispatch event for compatibility (browser only)
-                if (typeof document !== 'undefined' && typeof document.querySelector === 'function') {
-                  const analysisCompleteEvent = new CustomEvent('analysisComplete', {
-                    detail: {
-                      success: data.success,
-                      error: data.error,
-                      professional_data: data.professional_data
-                    }
-                  });
-                  document.querySelector('[data-agent-type="career"]')?.dispatchEvent(analysisCompleteEvent);
-                }
-                break;
-              }
-            } catch (parseError) {
-              console.error('Error parsing streaming data:', parseError);
-            }
-          }
-        }
-      }
+      // Call global stream handler - this keeps running even when user switches pages
+      await startGlobalAnalysisStream(document.user_id, document.id, document.original_filename);
     } catch (error) {
-      console.error('Error analyzing document:', error);
-      setAnalysisProgress(prev => ({
-        ...prev,
-        isAnalyzing: false,
-        error: `Failed to analyze resume: ${error.message}`
-      }));
-      
-      addNotification({
-        type: 'error',
-        title: 'Analysis Failed',
-        message: `Failed to analyze ${document.original_filename}`,
-        details: error.message || 'An unexpected error occurred during analysis'
-      });
+      showToast('Failed to analyze document: ' + error.message, 'error');
     }
   };
 
@@ -896,7 +889,21 @@ const professionalData = {
 
 
 
-const CareerAgent = () => {
+const CareerAgent = ({
+  showPersonalAssistant = true,
+  showSidebar = true,
+  externalActiveTab = null,
+  externalInsightsTab = null,
+  externalAnalysisProgress = null,
+  externalSectionStatus = null,
+  externalSetAnalysisProgress = null,
+  externalSetSectionStatus = null,
+  externalProfessionalData = null,
+  externalSetProfessionalData = null,
+  externalAddNotification = null,
+  externalStartGlobalAnalysisStream = null,
+  externalOnOpenAssistant = null
+}) => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -906,8 +913,14 @@ const CareerAgent = () => {
   const [isAssistantDialogOpen, setIsAssistantDialogOpen] = useState(false);
   const [agentModalOpen, setAgentModalOpen] = useState(false);
   const [selectedAgent, setSelectedAgent] = useState(null);
-  const [activeTab, setActiveTab] = useState('insights');
-    const [insightsTab, setInsightsTab] = useState('identity');
+  const [internalActiveTab, setInternalActiveTab] = useState('insights');
+  const [internalInsightsTab, setInternalInsightsTab] = useState('identity');
+
+  // Use external tabs if provided, otherwise use internal state
+  const activeTab = externalActiveTab || internalActiveTab;
+  const insightsTab = externalInsightsTab || internalInsightsTab;
+  const setActiveTab = externalActiveTab ? () => {} : setInternalActiveTab;
+  const setInsightsTab = externalInsightsTab ? () => {} : setInternalInsightsTab;
   const [isInsightsMenuOpen, setIsInsightsMenuOpen] = useState(true);
   const [unreadCount, setUnreadCount] = useState(0);
   const [careerData, setCareerData] = useState({
@@ -918,7 +931,7 @@ const CareerAgent = () => {
   });
 
   // Professional data for visualizations
-  const [professionalData, setProfessionalData] = useState({
+  const [internalProfessionalData, setInternalProfessionalData] = useState({
     professionalIdentity: {
       title: '',
       summary: '',
@@ -994,7 +1007,7 @@ const CareerAgent = () => {
   });
 
   // Analysis progress state for streaming workflow
-  const [analysisProgress, setAnalysisProgress] = useState({
+  const [internalAnalysisProgress, setInternalAnalysisProgress] = useState({
     isAnalyzing: false,
     currentSection: null,
     completedSections: [],
@@ -1004,7 +1017,7 @@ const CareerAgent = () => {
   });
 
   // Section completion status
-  const [sectionStatus, setSectionStatus] = useState({
+  const [internalSectionStatus, setInternalSectionStatus] = useState({
     professionalIdentity: 'pending',
     workExperience: 'pending',
     skillsAnalysis: 'pending',
@@ -1014,10 +1027,21 @@ const CareerAgent = () => {
     salaryAnalysis: 'pending'
   });
 
+  // Use external states if provided, otherwise use internal states
+  const analysisProgress = externalAnalysisProgress || internalAnalysisProgress;
+  const sectionStatus = externalSectionStatus || internalSectionStatus;
+  const setAnalysisProgress = externalSetAnalysisProgress || setInternalAnalysisProgress;
+  const setSectionStatus = externalSetSectionStatus || setInternalSectionStatus;
+  const professionalData = externalProfessionalData || internalProfessionalData;
+  const setProfessionalData = externalSetProfessionalData || setInternalProfessionalData;
+
   // Notifications state
-  const [notifications, setNotifications] = useState([]);
+  const [internalNotifications, setInternalNotifications] = useState([]);
   const [hasLoadedStoredInsights, setHasLoadedStoredInsights] = useState(false);
   const [notificationCounter, setNotificationCounter] = useState(0);
+
+  // Use external notifications if provided, otherwise use internal state
+  const notifications = internalNotifications;
 
   // Track whether we're loading stored data vs receiving new analysis data
   const [isLoadingStoredData, setIsLoadingStoredData] = useState(false);
@@ -1050,7 +1074,7 @@ const CareerAgent = () => {
     const handleCareerInsightsReceived = (event) => {
       const { professionalData: newProfessionalData } = event.detail;
       if (newProfessionalData) {
-        console.log('Received complete career insights data:', newProfessionalData);
+        if (process.env.NODE_ENV === 'development') console.log('Received complete career insights data:', newProfessionalData);
         
         // Only update professional data if this is from a new analysis (not loading stored data)
         // AND only if the new data has meaningful content (not empty or just default structure)
@@ -1069,12 +1093,12 @@ const CareerAgent = () => {
               }));
             // Automatically switch to insights tab when new data is received
             setActiveTab('insights');
-            console.log('Updated professional data with new complete analysis');
+            if (process.env.NODE_ENV === 'development') console.log('Updated professional data with new complete analysis');
           } else {
-            console.log('Skipping complete data update - received data appears to be empty or incomplete');
+            if (process.env.NODE_ENV === 'development') console.log('Skipping complete data update - received data appears to be empty or incomplete');
           }
         } else {
-          console.log('Skipping complete data update - currently loading stored data');
+          if (process.env.NODE_ENV === 'development') console.log('Skipping complete data update - currently loading stored data');
         }
       }
     };
@@ -1190,14 +1214,8 @@ const CareerAgent = () => {
           setActiveTab('insights');
         }
 
-        // Add completion notification
-        const sectionName = section.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
-        addNotification({
-          type: 'complete',
-          title: `✅ ${sectionName} Complete`,
-          message: `${sectionName} analysis completed successfully! New insights are now available in your career profile.`,
-          timestamp: Date.now()
-        });
+        // Note: Notification is added in handleAnalyzeResume when dispatching the CustomEvent
+        // to avoid duplicate notifications
       }
     };
 
@@ -1229,42 +1247,24 @@ const CareerAgent = () => {
         }
       }
 
-      // Add completion notification
-      if (success) {
-        addNotification({
-          type: 'complete',
-          title: 'Analysis Complete!',
-          message: 'Your comprehensive career analysis is now ready',
-          details: 'All sections have been analyzed. Explore your insights to discover new opportunities.'
-        });
-      } else if (error) {
-        addNotification({
-          type: 'error',
-          title: 'Analysis Failed',
-          message: 'There was an error completing your career analysis',
-          details: error
-        });
-      }
+      // Note: Notification is added in handleAnalyzeResume when dispatching the CustomEvent
+      // to avoid duplicate notifications
     };
     
-    // Add event listeners to the component element (browser only)
-    if (typeof document !== 'undefined' && typeof document.querySelector === 'function') {
-      const element = document.querySelector('[data-agent-type="career"]');
-      if (element) {
-        element.addEventListener('careerInsightsReceived', handleCareerInsightsReceived);
-        element.addEventListener('analysisProgress', handleAnalysisProgress);
-        element.addEventListener('sectionComplete', handleSectionComplete);
-        element.addEventListener('analysisComplete', handleAnalysisComplete);
+    // Add event listeners to document (stable reference, always available)
+    const events = ['careerInsightsReceived', 'analysisProgress', 'sectionComplete', 'analysisComplete'];
+    const handlers = {
+      careerInsightsReceived: handleCareerInsightsReceived,
+      analysisProgress: handleAnalysisProgress,
+      sectionComplete: handleSectionComplete,
+      analysisComplete: handleAnalysisComplete
+    };
 
-        // Clean up event listeners on component unmount
-        return () => {
-          element.removeEventListener('careerInsightsReceived', handleCareerInsightsReceived);
-          element.removeEventListener('analysisProgress', handleAnalysisProgress);
-          element.removeEventListener('sectionComplete', handleSectionComplete);
-          element.removeEventListener('analysisComplete', handleAnalysisComplete);
-        };
-      }
-    }
+    events.forEach(event => document.addEventListener(event, handlers[event]));
+
+    return () => {
+      events.forEach(event => document.removeEventListener(event, handlers[event]));
+    };
   }, []);
 
   // Load stored career insights when user is available
@@ -1410,7 +1410,7 @@ const CareerAgent = () => {
   };
 
   // Notification management functions
-  const addNotification = (notification) => {
+  const internalAddNotification = (notification) => {
     // Generate unique ID using timestamp + random number to avoid collisions
     const uniqueId = notification.id || `notification-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
@@ -1422,7 +1422,7 @@ const CareerAgent = () => {
 
     // Only check for duplicates if a custom ID is provided
     // This allows section completion notifications to accumulate while preventing specific duplicates
-    setNotifications(prev => {
+    setInternalNotifications(prev => {
       if (notification.id) {
         const existingIndex = prev.findIndex(n => n.id === newNotification.id);
         if (existingIndex !== -1) {
@@ -1437,12 +1437,15 @@ const CareerAgent = () => {
     setNotificationCounter(prev => prev + 1);
   };
 
+  // Use external addNotification if provided, otherwise use internal
+  const addNotification = externalAddNotification || internalAddNotification;
+
   const dismissNotification = (notificationId) => {
-    setNotifications(prev => prev.filter(n => n.id !== notificationId));
+    setInternalNotifications(prev => prev.filter(n => n.id !== notificationId));
   };
 
   const clearAllNotifications = () => {
-    setNotifications([]);
+    setInternalNotifications([]);
   };
 
   // Handler for Resume Analysis
@@ -1544,26 +1547,22 @@ const CareerAgent = () => {
       const apiUrl = process.env.NODE_ENV === 'production'
         ? '/api/career/analyze_resume_streaming'
         : (process.env.REACT_APP_CAREER_URL || 'http://localhost:6002') + '/api/career/analyze_resume_streaming';
-      const response = await fetch(apiUrl, {
+      const response = await streamingFetch(apiUrl, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}` // Assuming token-based auth
-        },
         body: JSON.stringify({ user_id: String(user.id) })
       });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = ''; // Buffer to accumulate incomplete lines
 
+      let streamCompleted = false;
       while (true) {
         const { done, value } = await reader.read();
-        if (done) break;
+        if (done) {
+          streamCompleted = true;
+          break;
+        }
 
         // Decode and append to buffer
         const chunk = decoder.decode(value, { stream: true });
@@ -1610,6 +1609,7 @@ const CareerAgent = () => {
                 // Dispatch section progress event (browser only)
                 if (typeof document !== 'undefined' && typeof document.querySelector === 'function') {
                   const progressEvent = new CustomEvent('analysisProgress', {
+                    bubbles: true,
                     detail: {
                       section: data.section,
                       status: 'analyzing',
@@ -1621,7 +1621,7 @@ const CareerAgent = () => {
                 }
               } else if (data.type === 'section_complete') {
                 console.log('Section completed:', data.section, data.data);
-                
+
                 // Update state directly for immediate UI feedback
                 if (data.data) {
                   // Update professional data with the new section data
@@ -1635,17 +1635,27 @@ const CareerAgent = () => {
                     return newData;
                   });
                 }
-                
+
                 // Update section status
                 setSectionStatus(prev => {
                   const newStatus = { ...prev, [data.section]: 'completed' };
                   console.log('Updated section status:', newStatus);
                   return newStatus;
                 });
-                
+
+                // Add notification for section completion
+                const sectionName = data.section.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
+                addNotification({
+                  type: 'complete',
+                  title: `✅ ${sectionName} Complete`,
+                  message: `${sectionName} analysis completed successfully! New insights are now available in your career profile.`,
+                  timestamp: Date.now()
+                });
+
                 // Dispatch section completion event (browser only)
                 if (typeof document !== 'undefined' && typeof document.querySelector === 'function') {
                   const completeEvent = new CustomEvent('sectionComplete', {
+                    bubbles: true,
                     detail: {
                       section: data.section,
                       data: data.data,
@@ -1655,9 +1665,27 @@ const CareerAgent = () => {
                   document.querySelector('[data-agent-type="career"]')?.dispatchEvent(completeEvent);
                 }
               } else if (data.type === 'analysis_complete') {
+                // Add notification for analysis completion
+                if (data.success) {
+                  addNotification({
+                    type: 'complete',
+                    title: '✅ Resume Analysis Complete',
+                    message: 'Resume analysis completed successfully! All insights are now available in your career profile.',
+                    timestamp: Date.now()
+                  });
+                } else if (data.error) {
+                  addNotification({
+                    type: 'error',
+                    title: 'Analysis Failed',
+                    message: 'There was an error completing your career analysis',
+                    details: data.error
+                  });
+                }
+
                 // Dispatch analysis completion event (browser only)
                 if (typeof document !== 'undefined' && typeof document.querySelector === 'function') {
                   const analysisCompleteEvent = new CustomEvent('analysisComplete', {
+                    bubbles: true,
                     detail: {
                       success: data.success,
                       error: data.error,
@@ -1673,6 +1701,23 @@ const CareerAgent = () => {
             }
           }
         }
+      }
+
+      // Fallback: Ensure isAnalyzing is reset when stream ends
+      // This handles cases where the analysisComplete event might not be dispatched/received
+      if (streamCompleted) {
+        setAnalysisProgress(prev => {
+          // Only reset if we're still in analyzing state (not already reset by event handler)
+          if (prev.isAnalyzing) {
+            console.log('Stream completed - resetting isAnalyzing state as fallback');
+            return {
+              ...prev,
+              isAnalyzing: false,
+              currentSection: null
+            };
+          }
+          return prev;
+        });
       }
     } catch (error) {
       console.error('Error analyzing resume:', error);
@@ -1708,7 +1753,13 @@ const CareerAgent = () => {
 
   // Handler for Personal Assistant dialog
   const handlePersonalAssistant = () => {
-    setIsAssistantDialogOpen(true);
+    // If external handler is provided (used by UnifiedSidebar), use it
+    if (externalOnOpenAssistant) {
+      externalOnOpenAssistant();
+    } else {
+      // Otherwise use internal state (standalone CareerAgent)
+      setIsAssistantDialogOpen(true);
+    }
     // Note: Chat activity is now tracked when messages are actually sent in ChatDialog
   };
 
@@ -2604,13 +2655,9 @@ const careerInsights = {
                   <p className="text-gray-600">Manage your professional documents and certifications</p>
                 </div>
               </div>
-              <DocumentManager 
+              <DocumentManager
                   analysisProgress={analysisProgress}
-                  setAnalysisProgress={setAnalysisProgress}
-                  setSectionStatus={setSectionStatus}
-                  setProfessionalData={setProfessionalData}
-                  addNotification={addNotification}
-                  setLastAnalyzedDocumentId={setLastAnalyzedDocumentId}
+                  startGlobalAnalysisStream={externalStartGlobalAnalysisStream}
                 />
             </div>
           </div>
@@ -4706,7 +4753,8 @@ const careerInsights = {
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 flex" data-agent-type="career">
       {/* Left Sidebar */}
-      <div className="w-64 bg-white shadow-lg border-r border-gray-200 flex flex-col">
+      {showSidebar && (
+        <div className="w-64 bg-white shadow-lg border-r border-gray-200 flex flex-col">
         {/* Header */}
         <div className="p-6 border-b border-gray-200">
           <div className="flex items-center space-x-3">
@@ -4822,22 +4870,17 @@ const careerInsights = {
 
 
       </div>
+      )}
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col">
-        {/* Clean Top Navigation Bar */}
+        {/* Clean Top Navigation Bar - Only show on Career Insights pages, not on Documents */}
+        {activeTab !== 'documents' && (
         <div className="bg-white shadow-sm border-b border-gray-200">
           {/* Simplified Top Navigation */}
           <div className="flex items-center justify-between px-8 py-4">
             <div className="flex items-center">
-              {/* Elegantly Positioned Back to Dashboard Button */}
-              <button
-                onClick={handleBackToDashboard}
-                className="group flex items-center space-x-3 px-5 py-2.5 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gradient-to-r hover:from-gray-50 hover:to-gray-100 rounded-xl transition-all duration-300 border border-gray-200 hover:border-gray-300 shadow-sm hover:shadow-md"
-              >
-                <ArrowLeftIcon className="h-5 w-5 text-gray-400 group-hover:text-gray-600 transition-all duration-300 group-hover:-translate-x-0.5" />
-                <span className="font-semibold tracking-wide">Back to Dashboard</span>
-              </button>
+              {/* Title or empty space for alignment */}
             </div>
             <div className="flex items-center space-x-4">
               <button
@@ -4854,36 +4897,42 @@ const careerInsights = {
               >
                 Ask Career Agent
               </button>
-              
-              {/* Notification Bell - moved from bottom to top navigation */}
-              <NotificationPanel 
-                notifications={notifications}
-                onDismiss={dismissNotification}
-                maxVisible={5}
-              />
-              
-              <div
-                onClick={handleAccount}
-                className="w-10 h-10 bg-gray-300 rounded-full flex items-center justify-center cursor-pointer hover:bg-gray-400 transition-colors duration-200"
-                role="button"
-                aria-label="Go to account settings"
-                tabIndex={0}
-                onKeyDown={(e) => e.key === 'Enter' && handleAccount()}
-              >
-                {avatarUrl && !isImgError ? (
-                  <img
-                    src={avatarUrl}
-                    alt="User Avatar"
-                    onError={() => setImgError(true)}
-                    className="h-10 w-10 rounded-full object-cover"
+
+              {/* Only show NotificationPanel and Avatar when standalone (showSidebar=true) */}
+              {showSidebar && (
+                <>
+                  {/* Notification Bell - moved from bottom to top navigation */}
+                  <NotificationPanel
+                    notifications={notifications}
+                    onDismiss={dismissNotification}
+                    maxVisible={5}
                   />
-                ) : (
-                  <UserCircleIcon className="h-10 w-10 text-gray-400" />
-                )}
-              </div>
+
+                  <div
+                    onClick={handleAccount}
+                    className="w-10 h-10 bg-gray-300 rounded-full flex items-center justify-center cursor-pointer hover:bg-gray-400 transition-colors duration-200"
+                    role="button"
+                    aria-label="Go to account settings"
+                    tabIndex={0}
+                    onKeyDown={(e) => e.key === 'Enter' && handleAccount()}
+                  >
+                    {avatarUrl && !isImgError ? (
+                      <img
+                        src={avatarUrl}
+                        alt="User Avatar"
+                        onError={() => setImgError(true)}
+                        className="h-10 w-10 rounded-full object-cover"
+                      />
+                    ) : (
+                      <UserCircleIcon className="h-10 w-10 text-gray-400" />
+                    )}
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </div>
+        )}
 
         {/* Progress tracking is now handled in ChatDialog personal assistant */}
         {/* Enhanced Progress Tracker component removed - progress messages now appear in personal assistant chat */}
@@ -4896,14 +4945,17 @@ const careerInsights = {
         {/* Notification Panel moved to top navigation bar */}
 
         {/* Personal Assistant Section */}
-        <PersonalAssistant
-          user={userData}
-          isDialogOpen={isAssistantDialogOpen}
-          setIsDialogOpen={setIsAssistantDialogOpen}
-          onDialogClose={fetchUnreadCount}
-          onUnreadCountChange={fetchUnreadCount}
-          onOpenAgentModal={handleOpenAgentModal}
-        />
+        {showPersonalAssistant && (
+          <PersonalAssistant
+            user={userData}
+            isDialogOpen={isAssistantDialogOpen}
+            setIsDialogOpen={setIsAssistantDialogOpen}
+            onDialogClose={fetchUnreadCount}
+            onUnreadCountChange={fetchUnreadCount}
+            onOpenAgentModal={handleOpenAgentModal}
+            notifications={notifications}
+          />
+        )}
 
         {/* Agent Design Modal */}
         {selectedAgent && (

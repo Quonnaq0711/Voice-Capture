@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../../contexts/AuthContext';
 
 const Login = () => {
   const [email, setEmail] = useState('');
@@ -91,7 +91,10 @@ const Login = () => {
         navigate('/dashboard');
       }
     } catch (err) {
-      setError('Login failed: ' + (err.response?.data?.detail || 'Please check your email and password'));
+      // Use generic error message to prevent information leakage
+      // Log actual error for debugging (only visible in browser console)
+      console.error('Login error:', err.response?.data?.detail || err.message);
+      setError('Invalid email or password. Please try again.');
     } finally {
       setLoading(false);
     }

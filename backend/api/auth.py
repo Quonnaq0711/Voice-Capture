@@ -1,11 +1,15 @@
 import email
+import logging
 import os
+import re
 from fastapi import APIRouter, Body, Depends, HTTPException, status, UploadFile, File
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from datetime import timedelta, datetime, timezone
 from typing import List
 import aiofiles
+
+logger = logging.getLogger(__name__)
 
 from backend.services.email_service import EmailService
 from backend.services.otp_service import OTPService
@@ -86,9 +90,8 @@ async def confirm_registration_otp(
     db: Session = Depends(get_db),
     email_validation_service: EmailValidationService = Depends(get_email_validation_service)
 ):
-    print(f"Received request: {request}") 
-
     # Verify the registration OTP and activate the user account.
+    logger.debug(f"Verify registration request for email: {request.email}")
 
     try:
         result = await email_validation_service.verify_email_validation (
@@ -105,10 +108,6 @@ async def confirm_registration_otp(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="An error occurred during verification")
 
 # Resend verification OTP for users who didn't receive it or it expired.
-import logging
-
-logger = logging.getLogger(__name__)
-
 @router.post("/resend-verification-otp")
 async def resend_verification_otp(
     request: schemas.ResendOTPRequest,  # Assuming you're using request body
@@ -237,24 +236,36 @@ async def reset_password_request(
             detail="Failed to send password reset email"
         )
 
-import logging
-
-logger = logging.getLogger(__name__)
+def validate_password_complexity(password: str) -> tuple[bool, str]:
+    """
+    Validate password complexity requirements.
+    Returns (is_valid, error_message).
+    """
+    if len(password) < 8:
+        return False, "Password must be at least 8 characters long"
+    if not re.search(r'[A-Z]', password):
+        return False, "Password must contain at least one uppercase letter"
+    if not re.search(r'[a-z]', password):
+        return False, "Password must contain at least one lowercase letter"
+    if not re.search(r'[0-9]', password):
+        return False, "Password must contain at least one digit"
+    return True, ""
 
 @router.post("/reset-password-confirm", response_model=schemas.PasswordResetResponse)
 async def reset_password_confirm(
-    request: schemas.PasswordResetConfirmModel,  
+    request: schemas.PasswordResetConfirmModel,
     db: Session = Depends(get_db),
     password_reset_service: PasswordResetService = Depends(get_password_reset_service)
 ):
     logger.info(f"Password reset attempt for email: {request.email}")
-    
-    # Basic password validation
-    if len(request.new_password) < 8:
-        logger.warning(f"Password too short for email: {request.email}")
+
+    # Password complexity validation
+    is_valid, error_msg = validate_password_complexity(request.new_password)
+    if not is_valid:
+        logger.warning(f"Password validation failed for email: {request.email}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Password must be at least 8 characters long"
+            detail=error_msg
         )
     
     try:

@@ -1,118 +1,128 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { DocumentDuplicateIcon, CheckIcon } from '@heroicons/react/24/outline';
 import Latex from 'react-latex-next';
 import 'katex/dist/katex.min.css';
-import '../styles/MessageRenderer.css';
+import '../../styles/MessageRenderer.css';
 
-const MessageRenderer = ({ content, className, isStreaming }) => {
-  const [copiedBlocks, setCopiedBlocks] = useState(new Set());
-  
-  const copyToClipboard = async (text, blockIndex) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopiedBlocks(prev => new Set([...prev, blockIndex]));
-      setTimeout(() => {
-        setCopiedBlocks(prev => {
-          const newSet = new Set(prev);
-          newSet.delete(blockIndex);
-          return newSet;
-        });
-      }, 2000);
-    } catch (err) {
-      console.error('Failed to copy text: ', err);
+// Parse content outside component to avoid recreation
+const parseContent = (text) => {
+  if (!text) return [];
+  const parts = [];
+  let currentIndex = 0;
+  const contentRegex = /```(\w+)?\n([\s\S]*?)```|(\$\$[\s\S]*?\$\$)/g;
+  let match;
+
+  while ((match = contentRegex.exec(text)) !== null) {
+    if (match.index > currentIndex) {
+      parts.push({ type: 'text', content: text.slice(currentIndex, match.index) });
     }
-  };
-  // Special handling for streaming with no content yet
-  if (isStreaming && !content) {
-    return (
-      <span className="inline-block w-2 h-5 bg-gray-600 animate-pulse"></span>
-    );
+    if (match[1] !== undefined || match[2] !== undefined) {
+      parts.push({ type: 'codeblock', language: match[1] || 'code', content: match[2] });
+    } else if (match[3] !== undefined) {
+      parts.push({ type: 'latex-block', content: match[3] });
+    }
+    currentIndex = match.index + match[0].length;
   }
 
-  // Parse content to handle code blocks and markdown-like formatting
-  const parseContent = (text) => {
-    if (!text) return [];
-    const parts = [];
-    let currentIndex = 0;
-    
-    // Find code blocks (```language\ncode\n```)
-    const contentRegex = /```(\w+)?\n([\s\S]*?)```|(\$\$[\s\S]*?\$\$)/g;
-    let match;
-    
-    while ((match = contentRegex.exec(text)) !== null) {
-      // Add text before code block
-      if (match.index > currentIndex) {
-        const beforeText = text.slice(currentIndex, match.index);
-        parts.push({ type: 'text', content: beforeText });
+  if (currentIndex < text.length) {
+    parts.push({ type: 'text', content: text.slice(currentIndex) });
+  }
+  return parts;
+};
+
+const MessageRenderer = ({ content, className, isStreaming }) => {
+  // Use array instead of Set for serializable state (DevTools compatible)
+  const [copiedBlocks, setCopiedBlocks] = useState([]);
+  const timersRef = useRef(new Map());
+
+  // Cleanup timers on unmount
+  useEffect(() => {
+    const timers = timersRef.current;
+    return () => {
+      timers.forEach(timer => clearTimeout(timer));
+      timers.clear();
+    };
+  }, []);
+
+  const copyToClipboard = useCallback(async (text, blockIndex) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      // Add to array if not already present
+      setCopiedBlocks(prev => prev.includes(blockIndex) ? prev : [...prev, blockIndex]);
+
+      // Clear existing timer for this block
+      if (timersRef.current.has(blockIndex)) {
+        clearTimeout(timersRef.current.get(blockIndex));
       }
-      
-      if (match[1] !== undefined || match[2] !== undefined) {
-        // Code block
-        const language = match[1] || 'code';
-        const code = match[2];
-        parts.push({ type: 'codeblock', language, content: code });
-      } else if (match[3] !== undefined) {
-        // Block LaTeX
-        parts.push({ type: 'latex-block', content: match[3] });
-      }
-      
-      currentIndex = match.index + match[0].length;
+
+      const timerId = setTimeout(() => {
+        // Remove from array
+        setCopiedBlocks(prev => prev.filter(idx => idx !== blockIndex));
+        timersRef.current.delete(blockIndex);
+      }, 2000);
+
+      timersRef.current.set(blockIndex, timerId);
+    } catch (err) {
+      console.error('Failed to copy text:', err);
     }
-    
-    // Add remaining text
-    if (currentIndex < text.length) {
-      const remainingText = text.slice(currentIndex);
-      parts.push({ type: 'text', content: remainingText });
-    }
-    
-    return parts;
-  };
+  }, []);
+
+  // Memoize parsed content
+  const parsedParts = useMemo(() => parseContent(content), [content]);
+
+  if (isStreaming && !content) {
+    return <span className="inline-block w-2 h-5 bg-gray-600 animate-pulse"></span>;
+  }
   
   // Render text with inline formatting
    const renderText = (text) => {
      if (!text) return '';
-     
+
      const parts = [];
      let currentText = text;
-     let keyCounter = 0;
-     
+
      // Process different inline formats in order
+     // Use match.index for stable keys across re-renders
      const formatters = [
        {
+         name: 'code',
          regex: /`([^`]+)`/g,
-         render: (match, content) => (
-           <code key={`code-${keyCounter++}`} className="bg-gray-100 text-red-600 px-1 py-0.5 rounded text-sm font-mono">
+         render: (match, content, matchIndex) => (
+           <code key={`code-${matchIndex}`} className="bg-gray-100 text-red-600 px-1 py-0.5 rounded text-sm font-mono">
              {content}
            </code>
          )
        },
        {
+         name: 'latex',
          regex: /\$([^\$]+?)\$/g,
-         render: (match, content) => {
+         render: (match, content, matchIndex) => {
            try {
         return (
-          <span key={`latex-${keyCounter++}`} className="katex-inline" style={{ display: 'inline-block' }}>
+          <span key={`latex-${matchIndex}`} className="katex-inline" style={{ display: 'inline-block' }}>
             <Latex>{`$${content}$`}</Latex>
           </span>
         );
       } catch (error) {
         console.error('LaTeX rendering error:', error);
-        return <span key={`latex-error-${keyCounter++}`} className="text-red-500">{`$${content}$`}</span>
+        return <span key={`latex-err-${matchIndex}`} className="text-red-500">{`$${content}$`}</span>
       }
          }
        },
        {
+         name: 'bold',
          regex: /\*\*([^*]+)\*\*/g,
-         render: (match, content) => (
-           <strong key={`bold-${keyCounter++}`} className="font-bold">
+         render: (match, content, matchIndex) => (
+           <strong key={`bold-${matchIndex}`} className="font-bold">
              {content}
            </strong>
          )
        },
        {
+         name: 'italic',
          regex: /\*([^*]+)\*/g,
-         render: (match, content) => (
-           <em key={`italic-${keyCounter++}`} className="italic">
+         render: (match, content, matchIndex) => (
+           <em key={`italic-${matchIndex}`} className="italic">
              {content}
            </em>
          )
@@ -139,8 +149,8 @@ const MessageRenderer = ({ content, className, isStreaming }) => {
                if (beforeText) subParts.push(beforeText);
              }
              
-             // Add formatted element
-             subParts.push(formatter.render(match[0], match[1]));
+             // Add formatted element - use match.index for stable key
+             subParts.push(formatter.render(match[0], match[1], match.index));
              
              lastIndex = match.index + match[0].length;
            }
@@ -353,13 +363,11 @@ const MessageRenderer = ({ content, className, isStreaming }) => {
      });
    };
   
-  const parts = parseContent(content);
-  
   return (
     <div className={className}>
-      {parts.map((part, index) => {
+      {parsedParts.map((part, index) => {
          if (part.type === 'codeblock') {
-           const isCopied = copiedBlocks.has(index);
+           const isCopied = copiedBlocks.includes(index);
            return (
              <div key={index} className="my-4 group">
                <div className="bg-gray-800 text-gray-200 px-3 py-2 text-xs font-medium rounded-t-lg border-b border-gray-600 flex justify-between items-center">
@@ -384,7 +392,7 @@ const MessageRenderer = ({ content, className, isStreaming }) => {
                </div>
                <pre className="bg-gray-900 text-gray-100 p-4 rounded-b-lg overflow-x-auto border border-gray-700 border-t-0 relative">
                  <code className="font-mono text-sm leading-relaxed whitespace-pre block">
-                   {part.content}{isStreaming && index === parts.length - 1 && (
+                   {part.content}{isStreaming && index === parsedParts.length - 1 && (
                      <span className="inline-block w-2 h-5 bg-gray-300 animate-pulse"></span>
                    )}
                  </code>
@@ -405,7 +413,7 @@ const MessageRenderer = ({ content, className, isStreaming }) => {
          } else {
            return (
              <div key={index}>
-               {isStreaming && index === parts.length - 1 ? 
+               {isStreaming && index === parsedParts.length - 1 ?
                  renderFormattedTextWithCursor(part.content) : 
                  renderFormattedText(part.content)
                }

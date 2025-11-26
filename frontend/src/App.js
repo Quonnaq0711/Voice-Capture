@@ -2,19 +2,17 @@ import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import AutoLogoutProvider from './contexts/AutoLogoutProvider';
-import PrivateRoute from './components/PrivateRoute';
-import Login from './components/Login';
-import Register from './components/Register';
-import Dashboard from './components/Dashboard';
-import Profile from './components/Profile';
-import OnboardingWizard from './components/OnboardingWizard';
-import ResetPasswordRequest from './components/ResetPasswordRequest';
-import VerifyPasswordOTP from './components/VerifyPasswordOTP';
-import VerifyRegistration from './components/VerifyRegistration';
-import CareerAgent from './components/CareerAgent';
-import TravelAgent from './components/TravelAgent';
-import BodyAgent from './components/BodyAgent';
 import memoryMonitor from './utils/memoryMonitor';
+
+// Auth components
+import { Login, Register, PrivateRoute, VerifyRegistration, ResetPasswordRequest, VerifyPasswordOTP } from './components/auth';
+
+// Feature components
+import { Profile } from './components/profile';
+import { OnboardingWizard } from './components/onboarding';
+import { UnifiedSidebar } from './components/dashboard';
+import { CareerAgent, TravelAgent, BodyAgent } from './components/agents';
+import { ErrorBoundary } from './components/ui';
 
 // Placeholder components for agent routes
 const AgentPage = ({ agentName }) => (
@@ -43,10 +41,11 @@ function App() {
   }, []);
 
   return (
-    <Router>
-      <AuthProvider>
-        <AutoLogoutProvider>
-          <Routes>
+    <ErrorBoundary>
+      <Router>
+        <AuthProvider>
+          <AutoLogoutProvider>
+            <Routes>
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Register />} />
@@ -62,7 +61,7 @@ function App() {
             path="/dashboard"
             element={
               <PrivateRoute>
-                <Dashboard />
+                <UnifiedSidebar />
               </PrivateRoute>
             }
           />
@@ -90,10 +89,11 @@ function App() {
           <Route path="/agents/knowledge" element={<PrivateRoute><AgentPage agentName="Knowledge" /></PrivateRoute>} />
           <Route path="/agents/personal-dev" element={<PrivateRoute><AgentPage agentName="Personal Development" /></PrivateRoute>} />
           <Route path="/agents/spiritual" element={<PrivateRoute><AgentPage agentName="Spiritual" /></PrivateRoute>} />
-          </Routes>
-        </AutoLogoutProvider>
-      </AuthProvider>
-    </Router>
+            </Routes>
+          </AutoLogoutProvider>
+        </AuthProvider>
+      </Router>
+    </ErrorBoundary>
   );
 }
 

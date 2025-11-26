@@ -53,7 +53,7 @@ class CreateActivityRequest(BaseModel):
 
 @router.get("/recent", response_model=List[ActivityResponse])
 async def get_recent_activities(
-    limit: int = Query(10, description="Number of recent activities to return", ge=1, le=50),
+    limit: int = Query(1000, description="Number of recent activities to return", ge=1, le=10000),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -88,7 +88,7 @@ async def get_recent_activities(
 
 @router.get("/", response_model=List[ActivityResponse])
 async def get_user_activities(
-    limit: int = Query(20, description="Number of activities to return", ge=1, le=100),
+    limit: int = Query(1000, description="Number of activities to return", ge=1, le=10000),
     offset: int = Query(0, description="Number of activities to skip", ge=0),
     activity_type: Optional[str] = Query(None, description="Filter by activity type"),
     activity_source: Optional[str] = Query(None, description="Filter by activity source"),

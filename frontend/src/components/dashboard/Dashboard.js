@@ -1,13 +1,267 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useEffect, useCallback, useRef, useReducer, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
-import { profile as profileAPI, activities as activitiesAPI, careerInsights as careerInsightsAPI, dailyRecommendations as dailyRecommendationsAPI } from '../services/api';
-import PersonalAssistant from './PersonalAssistant';
-import CircularAgents from './CircularAgents';
-import AgentDesignModal from './AgentDesignModal';
+import { List } from 'react-window';
+import { useAuth } from '../../contexts/AuthContext';
+import { profile as profileAPI, activities as activitiesAPI, careerInsights as careerInsightsAPI, dailyRecommendations as dailyRecommendationsAPI } from '../../services/api';
+import PersonalAssistant from '../chat/PersonalAssistant';
+import CircularAgents from '../ui/CircularAgents';
+import { BriefcaseIcon, CurrencyDollarIcon, HeartIcon, GlobeAltIcon, UserCircleIcon, SparklesIcon, HomeIcon, BookOpenIcon, AcademicCapIcon, FireIcon, SunIcon, ChatBubbleLeftRightIcon, CommandLineIcon, LightBulbIcon, ArrowTrendingUpIcon, ClockIcon, StarIcon, ChevronDownIcon, CpuChipIcon, CheckCircleIcon, UserGroupIcon } from '@heroicons/react/24/outline';
+import { Home, Lightbulb, Map, Briefcase, FileText, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Star, Sun } from 'lucide-react';
+import { requestResetAssistantPosition } from '../../utils/navigationEvents';
+import { getStaticFallbackRecommendations } from '../../utils/recommendations';
 
-// Import Heroicons
-import { BriefcaseIcon, CurrencyDollarIcon, HeartIcon, GlobeAltIcon, MapPinIcon, UserCircleIcon, SparklesIcon, HomeIcon, BookOpenIcon, AcademicCapIcon, FireIcon, SunIcon, ChatBubbleLeftRightIcon, CommandLineIcon, LightBulbIcon, ArrowTrendingUpIcon, ClockIcon, StarIcon, ChevronLeftIcon, ChevronRightIcon, ChevronDownIcon, ChevronUpIcon, CpuChipIcon, CheckCircleIcon, UserGroupIcon } from '@heroicons/react/24/outline';
+// ==================== STATE REDUCER ====================
+// Consolidates 28 useState calls into organized state management
+
+const initialState = {
+  // User & Profile
+  avatarUrl: null,
+  userData: { first_name: '', email: '' },
+  isImgError: false,
+
+  // UI Navigation
+  sidebarExpanded: false,
+  activeTab: 'welcome',
+  activeDashboardTab: 'insights',
+  isInsightsMenuOpen: false,
+  insightsTab: 'identity',
+  showInsightsSubTabs: false,
+  showDashboardSubTabs: true,
+  triggerAnimation: false,
+  isAssistantDialogOpen: false,
+
+  // Insights & Career
+  personalizedInsights: [],
+  recommendedAgents: [],
+  careerInsightsStatus: 'loading',
+  analysisProgress: { isAnalyzing: false },
+  sectionStatus: {
+    professionalIdentity: 'completed',
+    workExperience: 'completed',
+    salaryAnalysis: 'pending',
+    skillsAnalysis: 'pending',
+    marketPosition: 'pending'
+  },
+
+  // Activities
+  recentActivities: [],
+  activitySummary: null,
+  loadingActivities: false,
+  showAllActivities: false,
+
+  // Recommendations
+  dailyRecommendations: [],
+  loadingRecommendations: false,
+  recommendationsLastFetched: null,
+
+  // Time
+  currentTime: new Date()
+};
+
+function dashboardReducer(state, action) {
+  switch (action.type) {
+    // User & Profile actions
+    case 'SET_AVATAR_URL':
+      return { ...state, avatarUrl: action.payload };
+    case 'SET_USER_DATA':
+      return { ...state, userData: action.payload };
+    case 'SET_IMG_ERROR':
+      return { ...state, isImgError: action.payload };
+
+    // UI Navigation actions
+    case 'TOGGLE_SIDEBAR':
+      return { ...state, sidebarExpanded: !state.sidebarExpanded };
+    case 'SET_ACTIVE_TAB':
+      return { ...state, activeTab: action.payload };
+    case 'SET_ACTIVE_DASHBOARD_TAB':
+      return { ...state, activeDashboardTab: action.payload };
+    case 'TOGGLE_INSIGHTS_MENU':
+      return { ...state, isInsightsMenuOpen: !state.isInsightsMenuOpen };
+    case 'SET_INSIGHTS_TAB':
+      return { ...state, insightsTab: action.payload };
+    case 'TOGGLE_INSIGHTS_SUB_TABS':
+      return { ...state, showInsightsSubTabs: !state.showInsightsSubTabs };
+    case 'TOGGLE_DASHBOARD_SUB_TABS':
+      return { ...state, showDashboardSubTabs: !state.showDashboardSubTabs };
+    case 'SET_TRIGGER_ANIMATION':
+      return { ...state, triggerAnimation: action.payload };
+    case 'SET_ASSISTANT_DIALOG_OPEN':
+      return { ...state, isAssistantDialogOpen: action.payload };
+
+    // Insights & Career actions
+    case 'SET_PERSONALIZED_INSIGHTS':
+      return { ...state, personalizedInsights: action.payload };
+    case 'SET_RECOMMENDED_AGENTS':
+      return { ...state, recommendedAgents: action.payload };
+    case 'SET_CAREER_INSIGHTS_STATUS':
+      return { ...state, careerInsightsStatus: action.payload };
+
+    // Activities actions
+    case 'SET_RECENT_ACTIVITIES':
+      return { ...state, recentActivities: action.payload };
+    case 'SET_ACTIVITY_SUMMARY':
+      return { ...state, activitySummary: action.payload };
+    case 'SET_LOADING_ACTIVITIES':
+      return { ...state, loadingActivities: action.payload };
+    case 'TOGGLE_SHOW_ALL_ACTIVITIES':
+      return { ...state, showAllActivities: !state.showAllActivities };
+
+    // Recommendations actions
+    case 'SET_DAILY_RECOMMENDATIONS':
+      return { ...state, dailyRecommendations: action.payload };
+    case 'SET_LOADING_RECOMMENDATIONS':
+      return { ...state, loadingRecommendations: action.payload };
+    case 'SET_RECOMMENDATIONS_LAST_FETCHED':
+      return { ...state, recommendationsLastFetched: action.payload };
+
+    // Time actions
+    case 'SET_CURRENT_TIME':
+      return { ...state, currentTime: action.payload };
+
+    // Batch updates for performance
+    case 'BATCH_UPDATE':
+      return { ...state, ...action.payload };
+
+    default:
+      return state;
+  }
+}
+
+// ==================== ACTIVITY HELPERS ====================
+const getActivityStyle = (activity) => {
+  if (activity.activity_type === 'chat') {
+    const isEdit = activity.activity_metadata?.action_type === 'edit';
+    if (activity.activity_source === 'dashboard') {
+      return {
+        color: 'bg-purple-500',
+        title: isEdit ? '✏️ Personal Assistant Edit' : '💬 Personal Assistant Chat',
+        description: isEdit ? 'Edited dashboard conversation' : 'Started dashboard conversation'
+      };
+    } else if (activity.activity_source === 'career') {
+      return {
+        color: 'bg-green-500',
+        title: isEdit ? '✏️ Career Assistant Edit' : '💼 Career Assistant Chat',
+        description: isEdit ? 'Edited career agent conversation' : 'Started career agent conversation'
+      };
+    }
+  } else if (activity.activity_type === 'resume_analysis') {
+    return { color: 'bg-blue-500', title: '📄 Resume Analysis', description: activity.activity_description };
+  }
+
+  const sourceStyles = {
+    career: { color: 'bg-blue-500', icon: '💼' },
+    money: { color: 'bg-green-500', icon: '💰' },
+    mind: { color: 'bg-purple-500', icon: '🧠' },
+    travel: { color: 'bg-indigo-500', icon: '✈️' },
+    dashboard: { color: 'bg-gray-500', icon: '📊' }
+  };
+  const style = sourceStyles[activity.activity_source] || { color: 'bg-gray-400', icon: '📝' };
+  return { ...style, title: activity.activity_title, description: activity.activity_description };
+};
+
+const formatTimeAgo = (dateString, now) => {
+  let utcDateString = dateString;
+  const hasTimezone = dateString.includes('Z') ||
+    dateString.includes('+', dateString.indexOf('T')) ||
+    dateString.includes('-', dateString.indexOf('T'));
+
+  if (!hasTimezone) {
+    utcDateString = dateString.includes('.') ? dateString.split('.')[0] + 'Z' : dateString + 'Z';
+  }
+
+  const diff = now - new Date(utcDateString);
+  const seconds = Math.floor(diff / 1000);
+  if (seconds < 5) return 'just now';
+  if (seconds < 60) return `${seconds} second${seconds === 1 ? '' : 's'} ago`;
+
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes} minute${minutes === 1 ? '' : 's'} ago`;
+
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} hour${hours === 1 ? '' : 's'} ago`;
+
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days} day${days === 1 ? '' : 's'} ago`;
+
+  const months = Math.floor(days / 30);
+  if (days < 365) return `${months} month${months === 1 ? '' : 's'} ago`;
+
+  const years = Math.floor(days / 365);
+  return `${years} year${years === 1 ? '' : 's'} ago`;
+};
+
+// ==================== VIRTUALIZED ACTIVITY LIST ====================
+const ITEM_HEIGHT = 88;
+const VIRTUALIZATION_THRESHOLD = 10;
+const MAX_VISIBLE_HEIGHT = 400;
+
+// Row component for react-window v2
+const ActivityRow = React.memo(({ index, style: rowStyle, activities, currentTime }) => {
+  const activity = activities[index];
+  const activityStyle = getActivityStyle(activity);
+
+  return (
+    <div style={rowStyle}>
+      <div className="flex items-start space-x-3 p-3 mx-1 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+        <div className={`w-3 h-3 ${activityStyle.color} rounded-full mt-1.5 flex-shrink-0 shadow-sm`} />
+        <div className="min-w-0 flex-1">
+          <p className="text-sm text-gray-900 font-medium truncate">{activityStyle.title}</p>
+          <p className="text-xs text-gray-500 mt-1">{formatTimeAgo(activity.created_at, currentTime)}</p>
+          {activityStyle.description && (
+            <p className="text-xs text-gray-600 mt-1 line-clamp-2">{activityStyle.description}</p>
+          )}
+          {activity.activity_metadata?.message_preview && (
+            <p className="text-xs text-gray-500 mt-1 italic bg-gray-100 px-2 py-1 rounded truncate">
+              "{activity.activity_metadata.message_preview}"
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+});
+
+const VirtualizedActivityList = React.memo(({ activities, currentTime }) => {
+  const listHeight = Math.min(activities.length * ITEM_HEIGHT, MAX_VISIBLE_HEIGHT);
+  const rowProps = useMemo(() => ({ activities, currentTime }), [activities, currentTime]);
+
+  // Use regular rendering for small lists (virtualization overhead not worth it)
+  if (activities.length <= VIRTUALIZATION_THRESHOLD) {
+    return (
+      <div className="space-y-3">
+        {activities.map((activity) => {
+          const style = getActivityStyle(activity);
+          return (
+            <div key={activity.id} className="flex items-start space-x-3 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+              <div className={`w-3 h-3 ${style.color} rounded-full mt-1.5 flex-shrink-0 shadow-sm`} />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm text-gray-900 font-medium truncate">{style.title}</p>
+                <p className="text-xs text-gray-500 mt-1">{formatTimeAgo(activity.created_at, currentTime)}</p>
+                {style.description && <p className="text-xs text-gray-600 mt-1 line-clamp-2">{style.description}</p>}
+                {activity.activity_metadata?.message_preview && (
+                  <p className="text-xs text-gray-500 mt-2 italic bg-gray-100 px-2 py-1 rounded">
+                    "{activity.activity_metadata.message_preview}"
+                  </p>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
+  return (
+    <List
+      rowComponent={ActivityRow}
+      rowCount={activities.length}
+      rowHeight={ITEM_HEIGHT}
+      rowProps={rowProps}
+      style={{ height: listHeight }}
+      className="scrollbar-thin scrollbar-thumb-gray-300"
+    />
+  );
+});
 
 /**
  * Dashboard component - The main view after a user logs in.
@@ -16,138 +270,119 @@ import { BriefcaseIcon, CurrencyDollarIcon, HeartIcon, GlobeAltIcon, MapPinIcon,
 const Dashboard = () => {
   const { logout, user } = useAuth();
   const navigate = useNavigate();
-  const [avatarUrl, setAvatarUrl] = useState(null);
-  const [userData, setUserData] = useState({ first_name: '', last_name: '', email: '' });
-  const [triggerAnimation, setTriggerAnimation] = useState(false);
-  const [isAssistantDialogOpen, setIsAssistantDialogOpen] = useState(false);
-  const [personalizedInsights, setPersonalizedInsights] = useState([]);
-  const [recommendedAgents, setRecommendedAgents] = useState([]);
-  const [careerInsightsStatus, setCareerInsightsStatus] = useState('loading');
-  const [isImgError, setImgError] = useState(false);
-  const [sidebarExpanded, setSidebarExpanded] = useState(false);
-  const [activeTab, setActiveTab] = useState('welcome');
-  const [recentActivities, setRecentActivities] = useState([]);
-  const [activitySummary, setActivitySummary] = useState(null);
-  const [loadingActivities, setLoadingActivities] = useState(false);
-  const [showAllActivities, setShowAllActivities] = useState(false);
-  const [currentTime, setCurrentTime] = useState(new Date());
-  const [dailyRecommendations, setDailyRecommendations] = useState([]);
-  const [loadingRecommendations, setLoadingRecommendations] = useState(false);
-  const [recommendationsLastFetched, setRecommendationsLastFetched] = useState(null);
-  const [agentModalOpen, setAgentModalOpen] = useState(false);
-  const [selectedAgent, setSelectedAgent] = useState(null);
 
-  // ==================== TIMER MANAGEMENT ====================
-  // Centralized timer management to prevent memory leaks
-  const timersRef = useRef({
-    animation: null,
-    timeUpdate: null,
-    recommendationRefresh: null
-  });
+  // Consolidated state management using useReducer
+  const [state, dispatch] = useReducer(dashboardReducer, initialState);
 
-  // Cleanup all timers on unmount
+  // Destructure state for easier access
+  const {
+    avatarUrl, userData, isImgError, triggerAnimation, isAssistantDialogOpen,
+    sidebarExpanded, activeTab, activeDashboardTab, insightsTab,
+    showInsightsSubTabs, showDashboardSubTabs, personalizedInsights,
+    recommendedAgents, careerInsightsStatus, analysisProgress, sectionStatus,
+    recentActivities, activitySummary, loadingActivities, showAllActivities,
+    dailyRecommendations, loadingRecommendations, recommendationsLastFetched,
+    currentTime
+  } = state;
+
+  // Ref to avoid stale closure in timer callbacks
+  const recommendationsLastFetchedRef = useRef(null);
+
+
+  // Fetch all data on component mount - parallel execution with Promise.allSettled
   useEffect(() => {
-    return () => {
-      // Clear all active timers when component unmounts
-      Object.values(timersRef.current).forEach(timerId => {
-        if (timerId) {
-          clearTimeout(timerId);
-          clearInterval(timerId);
-        }
-      });
-      console.log('[Dashboard] All timers cleared on unmount');
+    let isMounted = true;
+
+    const loadAllData = async () => {
+      const results = await Promise.allSettled([
+        fetchUserData(),
+        fetchAvatar(),
+        generatePersonalizedInsights(),
+        fetchRecentActivities(),
+        fetchActivitySummary(),
+        fetchDailyRecommendations()
+      ]);
+
+      // Log any failed requests for debugging (only if component is still mounted)
+      if (isMounted) {
+        results.forEach((result, index) => {
+          if (result.status === 'rejected') {
+            const taskNames = ['fetchUserData', 'fetchAvatar', 'generatePersonalizedInsights', 'fetchRecentActivities', 'fetchActivitySummary', 'fetchDailyRecommendations'];
+            console.warn(`Dashboard: ${taskNames[index]} failed:`, result.reason);
+          }
+        });
+      }
     };
-  }, []);
 
-  // Fetch user data and avatar on component mount
-  useEffect(() => {
-    fetchUserData();
-    fetchAvatar();
-    generatePersonalizedInsights();
-    fetchRecentActivities();
-    fetchActivitySummary();
-    fetchDailyRecommendations();
+    loadAllData().catch(error => {
+      if (isMounted) {
+        console.error('Dashboard: Unhandled error in loadAllData:', error);
+      }
+    });
+    return () => { isMounted = false; };
   }, []);
 
   // Trigger animation when user data is loaded
   useEffect(() => {
     if (userData.first_name && user) {
-      // Clear previous animation timer if exists
-      if (timersRef.current.animation) {
-        clearTimeout(timersRef.current.animation);
-      }
-
       // Delay animation slightly to ensure component is fully rendered
-      timersRef.current.animation = setTimeout(() => {
-        setTriggerAnimation(true);
+      const timer = setTimeout(() => {
+        dispatch({ type: 'SET_TRIGGER_ANIMATION', payload: true });
       }, 500);
-
-      return () => {
-        if (timersRef.current.animation) {
-          clearTimeout(timersRef.current.animation);
-          timersRef.current.animation = null;
-        }
-      };
+      return () => clearTimeout(timer);
     }
   }, [userData.first_name, user]);
 
   // Re-fetch activities when showAllActivities changes
   useEffect(() => {
     fetchRecentActivities();
-  }, [showAllActivities]);
+  }, [fetchRecentActivities]);
 
   // Setup timer to update time display dynamically
   useEffect(() => {
-    // Update immediately
-    setCurrentTime(new Date());
+    // Simple timer that updates every 10 seconds
+    const timer = setInterval(() => {
+      dispatch({ type: 'SET_CURRENT_TIME', payload: new Date() });
+    }, 10000); // Update every 10 seconds
 
-    // Then update every 10 seconds
-    timersRef.current.timeUpdate = setInterval(() => {
-      setCurrentTime(new Date());
-    }, 10000);
-
-    return () => {
-      if (timersRef.current.timeUpdate) {
-        clearInterval(timersRef.current.timeUpdate);
-        timersRef.current.timeUpdate = null;
-      }
-    };
+    return () => clearInterval(timer);
   }, []);
 
-  // Setup 24-hour refresh for recommendations
+  // Setup 24-hour refresh for recommendations with debounce to prevent race conditions
+  const recommendationsRefreshRef = useRef(false);
+
   useEffect(() => {
-    const checkRecommendationsRefresh = () => {
+    const checkRecommendationsRefresh = async () => {
+      // Debounce: skip if already refreshing
+      if (recommendationsRefreshRef.current) return;
+
       if (shouldRefreshRecommendations()) {
-        console.log('[Dashboard] 24 hours passed, refreshing recommendations...');
-        fetchDailyRecommendations();
+        recommendationsRefreshRef.current = true;
+        if (process.env.NODE_ENV === 'development') console.log('24 hours passed, refreshing recommendations...');
+        try {
+          await fetchDailyRecommendations();
+        } finally {
+          recommendationsRefreshRef.current = false;
+        }
       }
     };
-
-    // Check immediately when component mounts
-    checkRecommendationsRefresh();
 
     // Check every hour for recommendation refresh
-    timersRef.current.recommendationRefresh = setInterval(
-      checkRecommendationsRefresh,
-      60 * 60 * 1000
-    );
+    const timer = setInterval(checkRecommendationsRefresh, 60 * 60 * 1000); // Check every hour
 
-    return () => {
-      if (timersRef.current.recommendationRefresh) {
-        clearInterval(timersRef.current.recommendationRefresh);
-        timersRef.current.recommendationRefresh = null;
-      }
-    };
-  }, [recommendationsLastFetched]);
+    // Check on mount (but not on recommendationsLastFetched changes to avoid loops)
+    checkRecommendationsRefresh();
+
+    return () => clearInterval(timer);
+  }, []); // Empty deps - only runs on mount/unmount
 
   const fetchUserData = async () => {
     try {
       const data = await profileAPI.getCurrentUser();
-      setUserData({
+      dispatch({ type: 'SET_USER_DATA', payload: {
         first_name: data.first_name,
-        last_name: data.last_name,
         email: data.email
-      });
+      }});
     } catch (error) {
       console.error('Error fetching user data:', error);
     }
@@ -156,7 +391,7 @@ const Dashboard = () => {
   // Generate personalized insights based on user data
   const generatePersonalizedInsights = async () => {
     try {
-      setCareerInsightsStatus('loading');
+      dispatch({ type: 'SET_CAREER_INSIGHTS_STATUS', payload: 'loading' });
 
       // Fetch career insights from API
       const careerInsightsResponse = await careerInsightsAPI.getSummary();
@@ -165,7 +400,7 @@ const Dashboard = () => {
 
       if (careerInsightsResponse.status === 'success') {
         // Use real career insights data
-        insights = careerInsightsResponse.insights.map(insight => ({
+        insights = (careerInsightsResponse.insights || []).map(insight => ({
           id: insight.id,
           title: insight.title,
           description: insight.description,
@@ -177,7 +412,7 @@ const Dashboard = () => {
           details: insight.details
         }));
 
-        setCareerInsightsStatus('success');
+        dispatch({ type: 'SET_CAREER_INSIGHTS_STATUS', payload: 'success' });
       } else if (careerInsightsResponse.status === 'no_analysis') {
         // Show default message when no analysis available
         insights = [
@@ -192,33 +427,33 @@ const Dashboard = () => {
             action: "Go to Career Agent"
           }
         ];
-        setCareerInsightsStatus('no_analysis');
+        dispatch({ type: 'SET_CAREER_INSIGHTS_STATUS', payload: 'no_analysis' });
       } else {
-        setCareerInsightsStatus('error');
+        dispatch({ type: 'SET_CAREER_INSIGHTS_STATUS', payload: 'error' });
       }
 
       // Add some general insights if we have fewer than 3
       if (insights.length < 3) {
         const generalInsights = [
           {
-            id: 'travel_preview',
-            title: "Travel Agent (Preview)",
-            description: "Explore personalized travel recommendations and itinerary planning.",
-            type: "travel",
+            id: 'financial_planning',
+            title: "Financial Planning Insight",
+            description: "Track your expenses and explore investment opportunities with the Money Agent.",
+            type: "money",
             priority: "medium",
-            icon: GlobeAltIcon,
-            color: "bg-indigo-500",
-            action: "Check Travel Agent"
+            icon: CurrencyDollarIcon,
+            color: "bg-green-500",
+            action: "Check Money Agent"
           },
           {
-            id: 'body_preview',
-            title: "Body Agent (Preview)",
-            description: "Get fitness and wellness recommendations tailored to your goals.",
-            type: "body",
+            id: 'wellness_recommendation',
+            title: "Wellness Recommendation",
+            description: "Consider incorporating mindfulness practices into your daily routine.",
+            type: "mind",
             priority: "medium",
             icon: HeartIcon,
-            color: "bg-red-500",
-            action: "Visit Body Agent"
+            color: "bg-pink-500",
+            action: "Visit Mind Agent"
           }
         ];
 
@@ -227,46 +462,46 @@ const Dashboard = () => {
         insights = [...insights, ...generalInsights.slice(0, remainingSlots)];
       }
 
-      setPersonalizedInsights(insights);
+      dispatch({ type: 'SET_PERSONALIZED_INSIGHTS', payload: insights });
 
     } catch (error) {
       console.error('Error fetching career insights:', error);
-      setCareerInsightsStatus('error');
+      dispatch({ type: 'SET_CAREER_INSIGHTS_STATUS', payload: 'error' });
 
       // Fallback to default insights if API fails
       const fallbackInsights = [
         {
           id: 'career_growth',
-          title: "Upload Your Resume",
-          description: "Get personalized career insights by uploading your resume to the Career Agent.",
+          title: "Career Growth Opportunity",
+          description: "Upload your resume to get personalized career recommendations.",
           type: "career",
           priority: "high",
           icon: ArrowTrendingUpIcon,
           color: "bg-blue-500",
-          action: "Go to Career Agent"
+          action: "Explore Career Agent"
         },
         {
-          id: 'travel_preview',
-          title: "Travel Agent (Preview)",
-          description: "Explore personalized travel recommendations and itinerary planning.",
-          type: "travel",
+          id: 'financial_planning',
+          title: "Financial Planning Insight",
+          description: "Track your expenses and explore investment opportunities.",
+          type: "money",
           priority: "medium",
-          icon: GlobeAltIcon,
-          color: "bg-indigo-500",
-          action: "Check Travel Agent"
+          icon: CurrencyDollarIcon,
+          color: "bg-green-500",
+          action: "Check Money Agent"
         },
         {
-          id: 'body_preview',
-          title: "Body Agent (Preview)",
-          description: "Get fitness and wellness recommendations tailored to your goals.",
-          type: "body",
+          id: 'wellness_recommendation',
+          title: "Wellness Recommendation",
+          description: "Consider incorporating mindfulness practices into your daily routine.",
+          type: "mind",
           priority: "medium",
           icon: HeartIcon,
-          color: "bg-red-500",
-          action: "Visit Body Agent"
+          color: "bg-pink-500",
+          action: "Visit Mind Agent"
         }
       ];
-      setPersonalizedInsights(fallbackInsights);
+      dispatch({ type: 'SET_PERSONALIZED_INSIGHTS', payload: fallbackInsights });
     }
 
     // Generate recommended agents based on user activity and profile
@@ -275,7 +510,7 @@ const Dashboard = () => {
       { name: 'Money Agent', priority: 2, reason: 'High potential impact' },
       { name: 'Mind Agent', priority: 3, reason: 'Trending in your network' }
     ];
-    setRecommendedAgents(recommended);
+    dispatch({ type: 'SET_RECOMMENDED_AGENTS', payload: recommended });
   };
 
   // Helper function to get icon component from string
@@ -287,22 +522,21 @@ const Dashboard = () => {
       'ArrowTrendingUpIcon': ArrowTrendingUpIcon,
       'ClockIcon': ClockIcon,
       'HeartIcon': HeartIcon,
-      'CheckCircleIcon': CheckCircleIcon,
-      'AcademicCapIcon': AcademicCapIcon
+      'CheckCircleIcon': CheckCircleIcon
     };
     return iconMap[iconName] || BriefcaseIcon; // Default to BriefcaseIcon
   };
 
 
-  // Sort agents based on recommendations
-  const getSortedAgents = () => {
+  // Sort agents based on recommendations (memoized to avoid re-sorting on every render)
+  const sortedAgents = useMemo(() => {
     const agentsCopy = [...agentModules];
     const recommendedNames = recommendedAgents.map(r => r.name);
-    
+
     return agentsCopy.sort((a, b) => {
       const aIndex = recommendedNames.indexOf(a.name);
       const bIndex = recommendedNames.indexOf(b.name);
-      
+
       if (aIndex !== -1 && bIndex !== -1) {
         return aIndex - bIndex;
       }
@@ -310,44 +544,50 @@ const Dashboard = () => {
       if (bIndex !== -1) return 1;
       return 0;
     });
-  };
+  }, [recommendedAgents]);
 
-  const fetchAvatar = async () => {
-    try {
-      const data = await profileAPI.getAvatarUrl();
-      // In development mode, prepend backend URL to relative avatar paths
-      let url = data.url;
-      if (process.env.NODE_ENV !== 'production' && url && url.startsWith('/')) {
-        const backendUrl = process.env.REACT_APP_BACKEND_URL || 'http://localhost:5000';
-        url = backendUrl + url;
-      }
-      setAvatarUrl(url);
-    } catch (error) {
-      console.error('Error fetching avatar:', error);
+const fetchAvatar = async () => {
+  try {
+    const data = await profileAPI.getAvatarUrl();
+    // In development mode, prepend backend URL to relative avatar paths
+    let url = data.url;
+    if (process.env.NODE_ENV !== 'production' && url && url.startsWith('/')) {
+      const backendUrl = process.env.REACT_APP_BACKEND_URL || 'http://localhost:5000';
+      url = backendUrl + url;
     }
-  };
+    
+    // Add timestamp to force cache refresh
+    const timestamp = new Date().getTime();
+    const urlWithTimestamp = url.includes('?') 
+      ? `${url}&t=${timestamp}` 
+      : `${url}?t=${timestamp}`;
+    
+    dispatch({ type: 'SET_AVATAR_URL', payload: urlWithTimestamp });
+  } catch (error) {
+    console.error('Error fetching avatar:', error);
+  }
+};
 
-  // Fetch recent activities
-  const fetchRecentActivities = async (limit = null) => {
+  // Fetch recent activities (memoized to avoid stale closures)
+  const fetchRecentActivities = useCallback(async (limit = null) => {
     try {
-      setLoadingActivities(true);
+      dispatch({ type: 'SET_LOADING_ACTIVITIES', payload: true });
       const activityLimit = limit || (showAllActivities ? 10 : 5);
       const activities = await activitiesAPI.getRecentActivities(activityLimit);
-      setRecentActivities(activities);
+      dispatch({ type: 'SET_RECENT_ACTIVITIES', payload: activities });
     } catch (error) {
       console.error('Error fetching recent activities:', error);
-      // Keep empty array on error
-      setRecentActivities([]);
+      dispatch({ type: 'SET_RECENT_ACTIVITIES', payload: [] });
     } finally {
-      setLoadingActivities(false);
+      dispatch({ type: 'SET_LOADING_ACTIVITIES', payload: false });
     }
-  };
+  }, [showAllActivities]);
 
   // Fetch activity summary
   const fetchActivitySummary = async () => {
     try {
       const summary = await activitiesAPI.getActivitySummary(7); // Last 7 days
-      setActivitySummary(summary);
+      dispatch({ type: 'SET_ACTIVITY_SUMMARY', payload: summary });
     } catch (error) {
       console.error('Error fetching activity summary:', error);
     }
@@ -374,104 +614,75 @@ const Dashboard = () => {
   // Fetch daily recommendations
   const fetchDailyRecommendations = async () => {
     try {
-      setLoadingRecommendations(true);
+      dispatch({ type: 'SET_LOADING_RECOMMENDATIONS', payload: true });
       const response = await dailyRecommendationsAPI.getRecommendations();
 
       // Accept any valid recommendations regardless of status (success, cached, fallback)
       if (response.recommendations && response.recommendations.length > 0) {
-        setDailyRecommendations(response.recommendations);
-        setRecommendationsLastFetched(new Date());
-        console.log(`Loaded ${response.recommendations.length} recommendations`);
+        const now = new Date();
+        dispatch({ type: 'BATCH_UPDATE', payload: {
+          dailyRecommendations: response.recommendations,
+          recommendationsLastFetched: now
+        }});
+        recommendationsLastFetchedRef.current = now; // Keep ref in sync for timer callbacks
+        if (process.env.NODE_ENV === 'development') console.log(`Loaded ${response.recommendations.length} recommendations`);
       } else {
         // Fallback to static recommendations if API fails
-        console.log('No recommendations received, using fallback');
-        setDailyRecommendations(getStaticFallbackRecommendations());
+        if (process.env.NODE_ENV === 'development') console.log('No recommendations received, using fallback');
+        dispatch({ type: 'SET_DAILY_RECOMMENDATIONS', payload: getStaticFallbackRecommendations() });
       }
     } catch (error) {
       console.error('Error fetching daily recommendations:', error);
       // Fallback to static recommendations
-      setDailyRecommendations(getStaticFallbackRecommendations());
+      dispatch({ type: 'SET_DAILY_RECOMMENDATIONS', payload: getStaticFallbackRecommendations() });
     } finally {
-      setLoadingRecommendations(false);
+      dispatch({ type: 'SET_LOADING_RECOMMENDATIONS', payload: false });
     }
   };
 
   // Force generate new recommendations (for refresh button)
   const forceGenerateRecommendations = async () => {
     try {
-      setLoadingRecommendations(true);
+      dispatch({ type: 'SET_LOADING_RECOMMENDATIONS', payload: true });
       const response = await dailyRecommendationsAPI.generateRecommendations();
 
       // Accept any valid recommendations regardless of status (success, cached, fallback)
       if (response.recommendations && response.recommendations.length > 0) {
-        setDailyRecommendations(response.recommendations);
-        setRecommendationsLastFetched(new Date());
-        console.log(`✅ Generated ${response.recommendations.length} new recommendations (${response.status})`);
+        dispatch({ type: 'BATCH_UPDATE', payload: {
+          dailyRecommendations: response.recommendations,
+          recommendationsLastFetched: new Date()
+        }});
+        if (process.env.NODE_ENV === 'development') console.log(`Generated ${response.recommendations.length} new recommendations (${response.status})`);
       } else {
         // Fallback to static recommendations if API fails
-        console.log('⚠️ No recommendations generated, using static fallback');
-        setDailyRecommendations(getStaticFallbackRecommendations());
+        if (process.env.NODE_ENV === 'development') console.log('No recommendations generated, using static fallback');
+        dispatch({ type: 'SET_DAILY_RECOMMENDATIONS', payload: getStaticFallbackRecommendations() });
       }
     } catch (error) {
       console.error('Error generating new recommendations:', error);
       // Fallback to static recommendations
-      setDailyRecommendations(getStaticFallbackRecommendations());
+      dispatch({ type: 'SET_DAILY_RECOMMENDATIONS', payload: getStaticFallbackRecommendations() });
     } finally {
-      setLoadingRecommendations(false);
+      dispatch({ type: 'SET_LOADING_RECOMMENDATIONS', payload: false });
     }
   };
 
-  // Static fallback recommendations
-  const getStaticFallbackRecommendations = () => [
-    {
-      id: "career_profile_review",
-      title: "Profile Boost",
-      description: "Optimize your LinkedIn profile with compelling headlines, achievements, and keywords to attract opportunities",
-      category: "career",
-      priority: "high",
-      estimated_time: "25 min",
-      action_type: "review",
-      color: "blue",
-      icon: "BriefcaseIcon"
-    },
-    {
-      id: "skill_assessment",
-      title: "Market Analysis",
-      description: "Identify 3 high-demand skills in your target market and create a strategic learning roadmap",
-      category: "learning",
-      priority: "high",
-      estimated_time: "25 min",
-      action_type: "explore",
-      color: "purple",
-      icon: "AcademicCapIcon"
-    },
-    {
-      id: "industry_networking",
-      title: "Industry Connect",
-      description: "Research and reach out to 3 industry leaders with thoughtful messages to expand your professional circle",
-      category: "networking",
-      priority: "medium",
-      estimated_time: "35 min",
-      action_type: "connect",
-      color: "green",
-      icon: "UserGroupIcon"
-    }
-  ];
-
   // Check if recommendations need refresh (24 hour logic)
-  const shouldRefreshRecommendations = () => {
-    if (!recommendationsLastFetched) return true;
+  // Uses ref to avoid stale closure in timer callbacks
+  const shouldRefreshRecommendations = useCallback(() => {
+    const lastFetched = recommendationsLastFetchedRef.current;
+    if (!lastFetched) return true;
 
     const now = new Date();
-    const lastFetch = new Date(recommendationsLastFetched);
+    const lastFetch = new Date(lastFetched);
     const hoursSinceLastFetch = (now - lastFetch) / (1000 * 60 * 60);
 
     return hoursSinceLastFetch >= 24;
-  };
+  }, []);
 
   // Handlers for navigation
-  const handleLogout = async () => {
-    await logout();
+  const handleLogout = () => {
+    logout();
     navigate('/login');
   };
 
@@ -481,53 +692,42 @@ const Dashboard = () => {
 
   // Handler for Personal Assistant dialog
   const handlePersonalAssistant = () => {
-    setIsAssistantDialogOpen(true);
-    // Reset assistant position to bottom right corner
-    if (window.resetAssistantPosition) {
-      window.resetAssistantPosition();
-    }
+    dispatch({ type: 'SET_ASSISTANT_DIALOG_OPEN', payload: true });
+    // Reset assistant position using event system (replaces window object pollution)
+    requestResetAssistantPosition();
     // Note: Chat activity is now tracked when messages are actually sent in ChatDialog
   };
 
   // Handler for view all activities toggle
   const handleViewAllActivities = () => {
-    setShowAllActivities(!showAllActivities);
-  };
-
-  // Handler for opening agent design modal
-  const handleOpenAgentModal = (agentName) => {
-    if (agentName === 'Travel Agent') {
-      setSelectedAgent({
-        title: 'Travel Agent (Preview)',
-        imageSrc: '/design/Travel Agent 4.0.png'
-      });
-      setAgentModalOpen(true);
-    } else if (agentName === 'Body Agent') {
-      setSelectedAgent({
-        title: 'Body Agent (Preview)',
-        imageSrc: '/design/Body Agent 3.0.png'
-      });
-      setAgentModalOpen(true);
-    }
+    dispatch({ type: 'TOGGLE_SHOW_ALL_ACTIVITIES' });
   };
 
   // Handler for sidebar toggle
   const toggleSidebar = () => {
-    setSidebarExpanded(!sidebarExpanded);
+    dispatch({ type: 'TOGGLE_SIDEBAR' });
   };
 
-  // Handler for tab change
-  const handleTabChange = (tabId) => {
-    // Check if tab is disabled
-    const tab = tabs.find(t => t.id === tabId);
-    if (tab?.disabled) {
-      return; // Don't change tab if disabled
-    }
+  const handleDashboardToggle = () => {
+    dispatch({ type: 'BATCH_UPDATE', payload: { activeTab: 'welcome' }});
+    dispatch({ type: 'TOGGLE_DASHBOARD_SUB_TABS' });
+  };
 
-    setActiveTab(tabId);
-    if (!sidebarExpanded) {
-      setSidebarExpanded(true);
-    }
+  const handleInsightsToggle = () => {
+    dispatch({ type: 'SET_ACTIVE_TAB', payload: 'insights' });
+    dispatch({ type: 'TOGGLE_INSIGHTS_SUB_TABS' });
+  };
+
+  const handleDashboardTabChange = (tabId) => {
+    dispatch({ type: 'BATCH_UPDATE', payload: { activeDashboardTab: tabId, activeTab: 'welcome' }});
+  };
+
+  const handleInsightsSubTabChange = (subTabId) => {
+    dispatch({ type: 'BATCH_UPDATE', payload: { insightsTab: subTabId, activeTab: 'insights' }});
+  };
+
+  const handleTabChange = (tabId) => {
+    dispatch({ type: 'SET_ACTIVE_TAB', payload: tabId });
   };
 
   // Agent modules available in the dashboard
@@ -561,9 +761,9 @@ const Dashboard = () => {
       path: '/agents/travel',
     },
     {
-      name: 'Body Agent',
+      name: 'Wellness',
       description: 'Personalized health and fitness guidance for your physical well-being.',
-      icon: HeartIcon,
+      icon: SparklesIcon,
       color: 'text-purple-500',
       path: '/agents/body',
     },
@@ -604,37 +804,46 @@ const Dashboard = () => {
     },
   ];
 
-  // Tab configuration - All main tabs at same level
-  const tabs = [
-    {
-      id: 'welcome',
-      name: 'Dashboard',
-      icon: HomeIcon,
-      color: 'text-gray-700',
-      bgColor: 'bg-gray-50'
-    },
+  // Tab configuration
+  const dashboardTabs = [
     {
       id: 'insights',
       name: 'AI Insights',
-      icon: LightBulbIcon,
+      icon: Lightbulb,
       color: 'text-blue-600',
       bgColor: 'bg-blue-50'
     },
     {
       id: 'achievements',
       name: 'Achievements',
-      icon: StarIcon,
+      icon: Star,
       color: 'text-green-600',
       bgColor: 'bg-green-50',
-      disabled: true // Coming soon
+      disabled: true
     },
     {
       id: 'recommendations',
       name: 'Recommendations',
-      icon: SunIcon,
+      icon: Sun,
       color: 'text-orange-600',
-      bgColor: 'bg-orange-50'
+      bgColor: 'bg-orange-50',
+      preview: true
     }
+  ];
+
+  const tabs = [
+    { id: 'planning', name: 'Career Planning', icon: Map, disabled: true },
+    { id: 'job-search', name: 'Job Search', icon: Briefcase, disabled: true },
+    { id: 'resume-builder', name: 'Resume Builder', icon: FileText, disabled: true },
+    { id: 'documents', name: 'Documents', icon: FileText, disabled: false }
+  ];
+
+  const insightsSubTabs = [
+    { id: 'identity', label: 'Professional Identity', section: 'professionalIdentity' },
+    { id: 'work', label: 'Work Experience Analysis', section: 'workExperience' },
+    { id: 'salary', label: 'Salary Analysis', section: 'salaryAnalysis' },
+    { id: 'skills', label: 'Skills Analysis', section: 'skillsAnalysis' },
+    { id: 'market', label: 'Market Position Analysis', section: 'marketPosition' }
   ];
 
   // Personalized Insights Component
@@ -705,12 +914,12 @@ const Dashboard = () => {
 
             // Function to render bullet points if description contains them
             const renderDescription = (description) => {
-              if (description.includes('•')) {
+              if (description && description.includes('•')) {
                 const bulletPoints = description.split('•').filter(point => point.trim());
                 return (
                   <ul className="space-y-2">
-                    {bulletPoints.map((point, index) => (
-                      <li key={index} className="flex items-start">
+                    {bulletPoints.map((point) => (
+                      <li key={`bullet-${point.trim().substring(0, 30)}`} className="flex items-start">
                         <span className="text-blue-500 mr-2 mt-0.5">•</span>
                         <span className="text-gray-700 text-sm leading-relaxed">{point.trim()}</span>
                       </li>
@@ -755,9 +964,6 @@ const Dashboard = () => {
                           case 'work_experience':
                             navigate(`${baseCareerUrl}?tab=work`);
                             break;
-                          case 'education_background':
-                            navigate(`${baseCareerUrl}?tab=education`);
-                            break;
                           case 'skills_analysis':
                             navigate(`${baseCareerUrl}?tab=skills`);
                             break;
@@ -767,20 +973,14 @@ const Dashboard = () => {
                           case 'salary_analysis':
                             navigate(`${baseCareerUrl}?tab=salary`);
                             break;
-                          case 'travel_preview':
-                            handleOpenAgentModal('Travel Agent');
-                            break;
-                          case 'body_preview':
-                            handleOpenAgentModal('Body Agent');
-                            break;
                           default:
                             // Fallback for other insight types
                             if (insight.action.includes('Career')) {
                               navigate('/agents/career');
-                            } else if (insight.action.includes('Travel')) {
-                              handleOpenAgentModal('Travel Agent');
-                            } else if (insight.action.includes('Body')) {
-                              handleOpenAgentModal('Body Agent');
+                            } else if (insight.action.includes('Money')) {
+                              navigate('/agents/money');
+                            } else if (insight.action.includes('Mind')) {
+                              navigate('/agents/mind');
                             }
                         }
                       }}
@@ -824,164 +1024,10 @@ const Dashboard = () => {
             ))}
           </div>
         ) : recentActivities.length > 0 ? (
-          <div className="space-y-3">
-            {recentActivities.map((activity) => {
-              // Determine color and icon based on activity type and source
-              const getActivityStyle = (activity) => {
-                if (activity.activity_type === 'chat') {
-                  const isEdit = activity.activity_metadata?.action_type === 'edit';
-                  // Special handling for chat messages
-                  if (activity.activity_source === 'dashboard') {
-                    return {
-                      color: 'bg-purple-500',
-                      title: isEdit ? '✏️ Personal Assistant Edit' : '💬 Personal Assistant Chat',
-                      description: isEdit ? 'Edited dashboard conversation' : 'Started dashboard conversation',
-                      icon: isEdit ? '✏️' : '💬'
-                    };
-                  } else if (activity.activity_source === 'career') {
-                    return {
-                      color: 'bg-green-500',
-                      title: isEdit ? '✏️ Career Assistant Edit' : '💼 Career Assistant Chat',
-                      description: isEdit ? 'Edited career agent conversation' : 'Started career agent conversation',
-                      icon: isEdit ? '✏️' : '💼'
-                    };
-                  }
-                } else if (activity.activity_type === 'resume_analysis') {
-                  return {
-                    color: 'bg-blue-500',
-                    title: '📄 Resume Analysis',
-                    description: activity.activity_description,
-                    icon: '📄'
-                  };
-                }
-
-                // Default colors for other activities
-                switch (activity.activity_source) {
-                  case 'career':
-                    return {
-                      color: 'bg-blue-500',
-                      title: activity.activity_title,
-                      description: activity.activity_description,
-                      icon: '💼'
-                    };
-                  case 'money':
-                    return {
-                      color: 'bg-green-500',
-                      title: activity.activity_title,
-                      description: activity.activity_description,
-                      icon: '💰'
-                    };
-                  case 'mind':
-                    return {
-                      color: 'bg-purple-500',
-                      title: activity.activity_title,
-                      description: activity.activity_description,
-                      icon: '🧠'
-                    };
-                  case 'travel':
-                    return {
-                      color: 'bg-indigo-500',
-                      title: activity.activity_title,
-                      description: activity.activity_description,
-                      icon: '✈️'
-                    };
-                  case 'dashboard':
-                    return {
-                      color: 'bg-gray-500',
-                      title: activity.activity_title,
-                      description: activity.activity_description,
-                      icon: '📊'
-                    };
-                  default:
-                    return {
-                      color: 'bg-gray-400',
-                      title: activity.activity_title,
-                      description: activity.activity_description,
-                      icon: '📝'
-                    };
-                }
-              };
-
-              // Format time ago with comprehensive time units
-              const formatTimeAgo = (dateString) => {
-                const now = currentTime;
-                // Force treat dateString as UTC by adding 'Z' if no timezone info
-                let utcDateString = dateString;
-
-                // Check for timezone info (+ or - after 'T', or 'Z' at end)
-                const hasTimezoneInfo = dateString.includes('Z') ||
-                                      dateString.includes('+', dateString.indexOf('T')) ||
-                                      dateString.includes('-', dateString.indexOf('T'));
-
-                if (!hasTimezoneInfo) {
-                  // Remove any microseconds and add Z
-                  if (dateString.includes('.')) {
-                    utcDateString = dateString.split('.')[0] + 'Z';
-                  } else {
-                    utcDateString = dateString + 'Z';
-                  }
-                }
-                const activityDate = new Date(utcDateString);
-                const diffInMilliseconds = now - activityDate;
-
-
-                // Less than 1 minute
-                const diffInSeconds = Math.floor(diffInMilliseconds / 1000);
-                if (diffInSeconds < 60) {
-                  if (diffInSeconds < 5) return 'just now';
-                  return `${diffInSeconds} second${diffInSeconds === 1 ? '' : 's'} ago`;
-                }
-
-                // Less than 1 hour
-                const diffInMinutes = Math.floor(diffInSeconds / 60);
-                if (diffInMinutes < 60) {
-                  return `${diffInMinutes} minute${diffInMinutes === 1 ? '' : 's'} ago`;
-                }
-
-                // Less than 1 day
-                const diffInHours = Math.floor(diffInMinutes / 60);
-                if (diffInHours < 24) {
-                  return `${diffInHours} hour${diffInHours === 1 ? '' : 's'} ago`;
-                }
-
-                // Less than 1 month (30 days)
-                const diffInDays = Math.floor(diffInHours / 24);
-                if (diffInDays < 30) {
-                  return `${diffInDays} day${diffInDays === 1 ? '' : 's'} ago`;
-                }
-
-                // Less than 1 year (365 days)
-                const diffInMonths = Math.floor(diffInDays / 30);
-                if (diffInDays < 365) {
-                  return `${diffInMonths} month${diffInMonths === 1 ? '' : 's'} ago`;
-                }
-
-                // 1 year or more
-                const diffInYears = Math.floor(diffInDays / 365);
-                return `${diffInYears} year${diffInYears === 1 ? '' : 's'} ago`;
-              };
-
-              const style = getActivityStyle(activity);
-
-              return (
-                <div key={activity.id} className="flex items-start space-x-3 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
-                  <div className={`w-3 h-3 ${style.color} rounded-full mt-1.5 flex-shrink-0 shadow-sm`}></div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm text-gray-900 font-medium truncate">{style.title}</p>
-                    <p className="text-xs text-gray-500 mt-1">{formatTimeAgo(activity.created_at)}</p>
-                    {style.description && (
-                      <p className="text-xs text-gray-600 mt-1 line-clamp-2">{style.description}</p>
-                    )}
-                    {activity.activity_metadata?.message_preview && (
-                      <p className="text-xs text-gray-500 mt-2 italic bg-gray-100 px-2 py-1 rounded">
-                        "{activity.activity_metadata.message_preview}"
-                      </p>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+          <VirtualizedActivityList
+            activities={recentActivities}
+            currentTime={currentTime}
+          />
         ) : (
           <div className="text-center py-8">
             <ClockIcon className="h-12 w-12 text-gray-300 mx-auto mb-3" />
@@ -1149,7 +1195,8 @@ const Dashboard = () => {
   // Today's Recommendations Component
   const TodaysRecommendations = () => {
     // Get the high priority recommendation for the priority section
-    const highPriorityRec = dailyRecommendations.find(rec => rec.priority === 'high') || dailyRecommendations[0];
+    const recommendations = dailyRecommendations || [];
+    const highPriorityRec = recommendations.find(rec => rec.priority === 'high') || recommendations[0] || null;
 
     return (
       <div className="space-y-6">
@@ -1304,7 +1351,7 @@ const Dashboard = () => {
       {/* AI Agents Section */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <CircularAgents
-          agents={getSortedAgents()}
+          agents={sortedAgents}
           avatarUrl={avatarUrl}
           user={userData}
           triggerAnimation={triggerAnimation}
@@ -1366,25 +1413,19 @@ const Dashboard = () => {
             </button>
 
             <button
-              onClick={() => handleOpenAgentModal('Travel Agent')}
-              className="w-full bg-gradient-to-r from-indigo-500 to-purple-500 text-white px-6 py-4 rounded-lg font-medium hover:from-indigo-600 hover:to-purple-600 transition-all duration-200 flex items-center justify-between"
+              onClick={() => navigate('/agents/travel')}
+              className="w-full bg-gradient-to-r from-indigo-500 to-purple-500 text-white px-6 py-4 rounded-lg font-medium hover:from-indigo-600 hover:to-purple-600 transition-all duration-200 flex items-center space-x-3"
             >
-              <div className="flex items-center space-x-3">
-                <GlobeAltIcon className="h-5 w-5" />
-                <span>Travel Agent</span>
-              </div>
-              <span className="text-white text-sm opacity-90">(Preview Only)</span>
+              <GlobeAltIcon className="h-5 w-5" />
+              <span>Travel Agent</span>
             </button>
 
             <button
-              onClick={() => handleOpenAgentModal('Body Agent')}
-              className="w-full bg-gradient-to-r from-purple-500 to-pink-500 text-white px-6 py-4 rounded-lg font-medium hover:from-purple-600 hover:to-pink-600 transition-all duration-200 flex items-center justify-between"
+              onClick={() => navigate('/agents/body')}
+              className="w-full bg-gradient-to-r from-purple-500 to-pink-500 text-white px-6 py-4 rounded-lg font-medium hover:from-purple-600 hover:to-pink-600 transition-all duration-200 flex items-center space-x-3"
             >
-              <div className="flex items-center space-x-3">
-                <HeartIcon className="h-5 w-5" />
-                <span>Body Agent</span>
-              </div>
-              <span className="text-white text-sm opacity-90">(Preview Only)</span>
+              <SparklesIcon className="h-5 w-5" />
+              <span>Wellness</span>
             </button>
           </div>
         </div>
@@ -1469,7 +1510,7 @@ const Dashboard = () => {
                     <img
                       src={avatarUrl}
                       alt="User Avatar"
-                      onError={() => setImgError(true)}
+                      onError={() => dispatch({ type: 'SET_IMG_ERROR', payload: true })}
                       className="h-8 w-8 rounded-full object-cover border-2 border-blue-200"
                     />
                   ) : (
@@ -1503,95 +1544,246 @@ const Dashboard = () => {
 
       {/* Main Content */}
       <main className="min-h-screen bg-gray-50">
+        {/* Sidebar */}
+       <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 flex">
+      <div className={`bg-white shadow-lg border-r border-gray-200 flex flex-col transition-all duration-300 relative ${
+        sidebarExpanded ? 'w-64' : 'w-16'
+      }`}>
+        <button
+          onClick={toggleSidebar}
+          className="absolute -right-3 top-6 w-6 h-6 bg-white border border-gray-300 text-gray-600 rounded-full flex items-center justify-center hover:bg-gray-50 hover:border-gray-400 transition-all shadow-md z-50"
+          aria-label={sidebarExpanded ? 'Collapse sidebar' : 'Expand sidebar'}
+        >
+          {sidebarExpanded ? (
+            <ChevronLeft className="h-3 w-3" />
+          ) : (
+            <ChevronRight className="h-3 w-3" />
+          )}
+        </button>
 
-
-        {/* Sidebar and Tab Content Section */}
-        <div className="relative flex min-h-screen">
-          {/* Sidebar */}
-          <div className={`fixed left-0 top-16 h-full bg-white border-r border-gray-200 transition-all duration-300 z-40 shadow-sm ${
-            sidebarExpanded ? 'w-72' : 'w-14'
-          }`}>
-            {/* Sidebar Toggle Button */}
-            <div className="absolute -right-3 top-6 z-50">
+        <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
+          {!sidebarExpanded ? (
+            <div className="space-y-2">
               <button
-                onClick={toggleSidebar}
-                className="w-6 h-6 bg-white border border-gray-300 text-gray-600 rounded-full flex items-center justify-center hover:bg-gray-50 hover:border-gray-400 transition-all shadow-md"
-                aria-label={sidebarExpanded ? 'Collapse sidebar' : 'Expand sidebar'}
+                onClick={handleDashboardToggle}
+                className={`w-full h-10 rounded-lg flex items-center justify-center transition-all duration-200 ${
+                  activeTab === 'welcome'
+                    ? 'bg-orange-500 text-white shadow-md'
+                    : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
+                }`}
+                title="Dashboard"
               >
-                {sidebarExpanded ? (
-                  <ChevronLeftIcon className="h-3 w-3" />
+                <Home className="h-5 w-5" />
+              </button>
+
+              <button
+                onClick={handleInsightsToggle}
+                className={`w-full h-10 rounded-lg flex items-center justify-center transition-all duration-200 ${
+                  activeTab === 'insights'
+                    ? 'bg-orange-500 text-white shadow-md'
+                    : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
+                }`}
+                title="Career Insights"
+              >
+                <Lightbulb className="h-5 w-5" />
+              </button>
+
+              {tabs.map((tab) => {
+                const IconComponent = tab.icon;
+                const isDisabled = tab.disabled;
+                const tabTitle = isDisabled ? `${tab.name} - Coming Soon` : tab.name;
+
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => !isDisabled && handleTabChange(tab.id)}
+                    disabled={isDisabled}
+                    className={`w-full h-10 rounded-lg flex items-center justify-center transition-all duration-200 ${
+                      isDisabled
+                        ? 'text-gray-300 cursor-not-allowed opacity-50'
+                        : activeTab === tab.id
+                        ? 'bg-orange-500 text-white shadow-md'
+                        : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
+                    }`}
+                    title={tabTitle}
+                  >
+                    <IconComponent className="h-5 w-5" />
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="space-y-1">
+              <button
+                onClick={handleDashboardToggle}
+                className={`w-full flex items-center justify-between space-x-3 px-4 py-3 rounded-lg text-left transition-all duration-200 ${
+                  activeTab === 'welcome'
+                    ? 'bg-orange-500 text-white shadow-md'
+                    : 'text-gray-700 hover:bg-gray-100'
+                }`}
+              >
+                <div className="flex items-center space-x-3">
+                  <Home className={`h-5 w-5 ${
+                    activeTab === 'welcome' ? 'text-white' : 'text-gray-500'
+                  }`} />
+                  <span className="font-medium">Dashboard</span>
+                </div>
+                {showDashboardSubTabs ? (
+                  <ChevronUp className={`h-4 w-4 ${
+                    activeTab === 'welcome' ? 'text-white' : 'text-gray-400'
+                  }`} />
                 ) : (
-                  <ChevronRightIcon className="h-3 w-3" />
+                  <ChevronDown className={`h-4 w-4 ${
+                    activeTab === 'welcome' ? 'text-white' : 'text-gray-400'
+                  }`} />
                 )}
               </button>
-            </div>
 
-            {/* Sidebar Content */}
-            <div className="px-3 py-4 h-full">
-              {!sidebarExpanded ? (
-                /* Collapsed Sidebar - Show only icons */
-                <div className="space-y-2 mt-4">
-                  {tabs.map((tab) => {
-                    const IconComponent = tab.icon;
-                    const isDisabled = tab.disabled;
-                    const tabTitle = isDisabled ? `${tab.name} - Coming Soon` : tab.name;
+              {showDashboardSubTabs && (
+                <div className="ml-3 pl-3 border-l border-gray-200 space-y-1 py-1">
+                  {dashboardTabs.map((dashTab) => {
+                    const DashIconComponent = dashTab.icon;
+                    const isDashDisabled = dashTab.disabled;
+                    const isPreview = dashTab.preview;
 
                     return (
                       <button
-                        key={tab.id}
-                        onClick={() => handleTabChange(tab.id)}
-                        disabled={isDisabled}
-                        className={`w-8 h-8 rounded-md flex items-center justify-center transition-all duration-200 group ${
-                          isDisabled
-                            ? 'text-gray-300 cursor-not-allowed opacity-50'
-                            : activeTab === tab.id
-                            ? 'bg-blue-50 text-blue-600 border border-blue-200'
-                            : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
-                        }`}
-                        title={tabTitle}
-                      >
-                        <IconComponent className="h-4 w-4" />
-                      </button>
-                    );
-                  })}
-                </div>
-              ) : (
-                /* Expanded Sidebar - All tabs at same level */
-                <div className="space-y-1 mt-4">
-                  {tabs.map((tab) => {
-                    const IconComponent = tab.icon;
-                    const isDisabled = tab.disabled;
-
-                    return (
-                      <button
-                        key={tab.id}
-                        onClick={() => handleTabChange(tab.id)}
-                        disabled={isDisabled}
-                        className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg transition-all duration-200 text-sm ${
-                          isDisabled
-                            ? 'text-gray-400 cursor-not-allowed opacity-60'
-                            : activeTab === tab.id
-                            ? 'bg-blue-50 text-blue-700 border border-blue-200'
-                            : 'text-gray-700 hover:bg-gray-100'
+                        key={dashTab.id}
+                        onClick={() => !isDashDisabled && handleDashboardTabChange(dashTab.id)}
+                        disabled={isDashDisabled}
+                        className={`w-full flex items-center space-x-3 px-3 py-2 rounded-md text-left transition-all duration-200 text-sm ${
+                          isDashDisabled
+                            ? 'text-gray-400 cursor-not-allowed opacity-50'
+                            : activeDashboardTab === dashTab.id && activeTab === 'welcome'
+                            ? `${dashTab.bgColor} ${dashTab.color} border border-current`
+                            : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
                         }`}
                       >
-                        <IconComponent className="h-4 w-4 flex-shrink-0" />
-                        <span className="font-medium text-left flex-1">{tab.name}</span>
-                        {isDisabled && (
+                        <DashIconComponent className={`h-4 w-4 flex-shrink-0 ${
+                          isDashDisabled 
+                            ? 'text-gray-300' 
+                            : activeDashboardTab === dashTab.id && activeTab === 'welcome' 
+                            ? dashTab.color 
+                            : 'text-gray-500'
+                        }`} />
+                        <span className="font-medium text-left flex-1">{dashTab.name}</span>
+                        {isDashDisabled && (
                           <span className="ml-auto text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded">
                             Coming Soon
                           </span>
                         )}
-                        {!isDisabled && activeTab === tab.id && (
-                          <div className="w-1.5 h-1.5 bg-blue-600 rounded-full"></div>
+                        {isPreview && !isDashDisabled && (
+                          <span className="ml-auto text-xs text-orange-600 bg-orange-50 px-2 py-1 rounded border border-orange-200">
+                            Preview Only
+                          </span>
                         )}
                       </button>
                     );
                   })}
                 </div>
               )}
+
+              <button
+                onClick={handleInsightsToggle}
+                className={`w-full flex items-center justify-between space-x-3 px-4 py-3 rounded-lg text-left transition-all duration-200 ${
+                  activeTab === 'insights'
+                    ? 'bg-orange-500 text-white shadow-md'
+                    : 'text-gray-700 hover:bg-gray-100'
+                }`}
+              >
+                <div className="flex items-center space-x-3">
+                  <Lightbulb className={`h-5 w-5 ${
+                    activeTab === 'insights' ? 'text-white' : 'text-gray-500'
+                  }`} />
+                  <span className="font-medium">Career Insights</span>
+                </div>
+                {showInsightsSubTabs ? (
+                  <ChevronUp className={`h-4 w-4 ${
+                    activeTab === 'insights' ? 'text-white' : 'text-gray-400'
+                  }`} />
+                ) : (
+                  <ChevronDown className={`h-4 w-4 ${
+                    activeTab === 'insights' ? 'text-white' : 'text-gray-400'
+                  }`} />
+                )}
+              </button>
+
+              {/* FIXED: Removed activeTab check for better UX */}
+              {showInsightsSubTabs && (
+                <div className="ml-3 pl-3 border-l border-gray-200 space-y-1 py-1">
+                  {insightsSubTabs.map((item) => (
+                    <button
+                      key={item.id}
+                      onClick={() => handleInsightsSubTabChange(item.id)}
+                      className={`w-full text-left px-3 py-2 rounded-md text-sm transition-all duration-200 flex items-center ${
+                        insightsTab === item.id 
+                          ? 'bg-orange-100 text-orange-600 font-semibold' 
+                          : 'text-gray-600 hover:bg-gray-100'
+                      }`}
+                    >
+                      {sectionStatus[item.section] === 'completed' ? (
+                        <svg className="w-4 h-4 text-green-500 mr-2 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                      ) : analysisProgress.isAnalyzing ? (
+                        <svg className="w-4 h-4 text-orange-500 mr-2 flex-shrink-0 animate-spin" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="m4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                      ) : null}
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {tabs.map((tab) => {
+                const IconComponent = tab.icon;
+                const isDisabled = tab.disabled;
+
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => !isDisabled && handleTabChange(tab.id)}
+                    disabled={isDisabled}
+                    className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-left transition-all duration-200 ${
+                      isDisabled
+                        ? 'text-gray-400 cursor-not-allowed opacity-50'
+                        : activeTab === tab.id
+                        ? 'bg-orange-500 text-white shadow-md'
+                        : 'text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    <IconComponent className={`h-5 w-5 ${
+                      isDisabled
+                        ? 'text-gray-300'
+                        : activeTab === tab.id ? 'text-white' : 'text-gray-500'
+                    }`} />
+                    <span className="font-medium">{tab.name}</span>
+                    {isDisabled && (
+                      <span className="ml-auto text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded">
+                        Coming Soon
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
             </div>
-          </div>
+          )}
+        </nav>
+
+        <div className={`p-4 border-t border-gray-200 ${!sidebarExpanded ? 'px-2' : ''}`}>
+          {sidebarExpanded ? (
+            <div className="text-xs text-gray-500 text-center">
+              © 2025 Idii
+            </div>
+          ) : (
+            <div className="w-full flex justify-center">
+              <div className="w-2 h-2 bg-gray-300 rounded-full"></div>
+            </div>
+          )}
+        </div>
+      </div>
 
           {/* Main Content Area */}
           <div className={`flex-1 transition-all duration-300 ${
@@ -1603,16 +1795,6 @@ const Dashboard = () => {
               </div>
             </div>
           </div>
-        </div>
-
-        {/* Personal Assistant Section */}
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-          <PersonalAssistant
-            user={userData}
-            isDialogOpen={isAssistantDialogOpen}
-            setIsDialogOpen={setIsAssistantDialogOpen}
-            onOpenAgentModal={handleOpenAgentModal}
-          />
         </div>
 
         {/* Call to Action */}
@@ -1712,12 +1894,11 @@ const Dashboard = () => {
         </footer>
       </main>
 
-      {/* Agent Design Modal */}
-      <AgentDesignModal
-        isOpen={agentModalOpen}
-        onClose={() => setAgentModalOpen(false)}
-        imageSrc={selectedAgent?.imageSrc}
-        title={selectedAgent?.title}
+      {/* Personal Assistant - Fixed Position Chatbot */}
+      <PersonalAssistant
+        user={userData}
+        isDialogOpen={isAssistantDialogOpen}
+        setIsDialogOpen={(open) => dispatch({ type: 'SET_ASSISTANT_DIALOG_OPEN', payload: open })}
       />
     </div>
   );
