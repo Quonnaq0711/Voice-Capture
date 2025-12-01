@@ -28,8 +28,7 @@ export default function TopNavigation({
                                 onClick={onMenuToggle}
                                 className="md:hidden p-2 hover:bg-gray-100 rounded-lg transition-colors"
                                 aria-label="Toggle menu"
-                            >
-                                <Menu className="h-6 w-6 text-gray-600" />
+                            >ame="h-6 w-6 text-gray-600" />
                             </button>
                         )}
 
