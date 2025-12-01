@@ -719,7 +719,7 @@ export default function UnifiedSidebarRefactored() {
     },
     {
       id: 'body-agent',
-      name: 'Wellness',
+      name: 'Body',
       icon: Activity,
       preview: true,
       disabled: false,
