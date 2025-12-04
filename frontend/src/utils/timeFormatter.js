@@ -32,27 +32,36 @@ const normalizeTimestamp = (timestamp) => {
 };
 
 /**
- * Format timestamp to display time with timezone
+ * Get user timezone
+ * @returns {string}
+ */
+ 
+ const getUserTimezone =() => {
+  return Intl.DateTimeFormat().resolvedOptions().timezone
+ };
+  
+
+/**
+ * Format timestamp to display time with timezone (user timezone)
  * @param {string|number} timestamp - ISO string or timestamp in milliseconds
  * @returns {string} Formatted time string with timezone (e.g., "2:04 PM UTC")
  */
+
 export const formatTime = (timestamp) => {
   if (!timestamp) return '';
 
   const date = normalizeTimestamp(timestamp);
   if (!date) return '';
 
-  // Get UTC time components
-  const hours = date.getUTCHours();
-  const minutes = date.getUTCMinutes();
-
-  // Convert to 12-hour format
-  const hour12 = hours % 12 || 12;
-  const ampm = hours >= 12 ? 'PM' : 'AM';
-  const minuteStr = minutes.toString().padStart(2, '0');
-
-  return `${hour12}:${minuteStr} ${ampm} UTC`;
+  return new Intl.DateTimeFormat('en-US', {
+    timezone: getUserTimezone(),
+    hour: "numeric",
+    minute: '2-digit',
+    hour12: true,
+    timeZoneName: 'short'
+  }).format(date);
 };
+
 
 /**
  * Format timestamp to display date in MM/DD/YYYY format
@@ -65,23 +74,35 @@ export const formatDate = (timestamp) => {
   const date = normalizeTimestamp(timestamp);
   if (!date) return '';
 
-  // Get UTC date components
-  const month = date.getUTCMonth() + 1;
-  const day = date.getUTCDate();
-  const year = date.getUTCFullYear();
-
-  return `${month}/${day}/${year}`;
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: getUserTimezone(),
+    month: 'numeric',
+    day: 'numeric',
+    year: 'numeric'
+  }).format(date);
 };
 
 /**
- * Format timestamp to display full date and time with timezone
+ * Format timestamp to display full date and time with timezone (users timezone)
  * @param {string|number} timestamp - ISO string or timestamp in milliseconds
  * @returns {string} Formatted datetime string (e.g., "11/24/2025, 2:04 PM UTC")
  */
 export const formatDateTime = (timestamp) => {
   if (!timestamp) return '';
 
-  return `${formatDate(timestamp)}, ${formatTime(timestamp)}`;
+  const date = normalizeTimestamp(timestamp);
+  if (!date) return '';
+
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: getUserTimezone(),
+    month: 'numeric',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: 'numeric',
+    hour12: true,
+    timeZoneName: 'short'
+  }).formatDate(date);
 };
 
 /**
@@ -114,7 +135,11 @@ export const formatRelativeTime = (timestamp) => {
  * @returns {string} Timezone abbreviation (e.g., "UTC", "EST", "PST")
  */
 export const getTimezoneAbbr = () => {
-  // For now, always return UTC since backend stores in UTC
-  // In the future, this could detect user's timezone
-  return 'UTC';
-};
+  const Formatted = new Intl.DateTimeFormat('en-US', {
+    timeZone: getUserTimezone(),
+    timeZoneName: 'short',
+  }).format(new Date());
+
+  const match = Formatted.match(/([A-Z]{3,5})$/);
+  return match ? match[1] : getUserTimezone();
+}
