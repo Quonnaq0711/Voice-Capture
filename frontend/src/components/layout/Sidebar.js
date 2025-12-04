@@ -216,7 +216,9 @@ export default function Sidebar({
             <div className="text-xs font-medium text-gray-500">
               © 2025 Idii.
             </div>
-            <button className="text-xs font-medium text-white hover:text-orange-600 px-3 py-1.5 rounded-lg border bg-black border-orange-400 hover:border-orange-300 hover:shadow-md transition-all duration-300 whitespace-nowrap group">
+            <button className="text-xs font-medium text-white hover:text-orange-600 px-3 py-1.5 rounded-lg border bg-black border-orange-400 hover:border-orange-300 hover:shadow-md transition-all duration-300 whitespace-nowrap group"
+              data-tally-open="PdRqlB" data-tally-layout="modal" data-tally-emoji-text="👋🏽" data-tally-emoji-animation="wave"
+            >
               <span className="group-hover:scale-105 inline-block transition-transform">Report Bugs</span>
             </button>
           </div>
