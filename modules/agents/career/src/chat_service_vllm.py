@@ -486,7 +486,7 @@ class ChatServiceVLLM(BaseChatService):
                 profile_data = await self.get_user_profile(user_id, db)
 
             # Run generation in thread pool
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
 
             task = loop.run_in_executor(
                 self.executor,
@@ -878,7 +878,7 @@ class ChatServiceVLLM(BaseChatService):
             )
 
             # Generate follow-up questions
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             task = loop.run_in_executor(
                 self.executor,
                 self._generate_follow_up_sync,
@@ -1018,7 +1018,7 @@ class ChatServiceVLLM(BaseChatService):
             optimization_prompt = OPTIMIZE_QUERY_PROMPT.format(user_query=user_query)
 
             # Run optimization in thread pool
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
 
             task = loop.run_in_executor(
                 self.executor,
@@ -1422,7 +1422,10 @@ class ChatServiceVLLM(BaseChatService):
 
             finally:
                 if should_close_db:
-                    db.close()
+                    try:
+                        db.close()
+                    except Exception as close_error:
+                        logger.warning(f"[vLLM] Error closing database session: {close_error}")
 
         except Exception as e:
             logger.error(f"[vLLM] Error getting user profile: {str(e)}")
@@ -1475,7 +1478,10 @@ class ChatServiceVLLM(BaseChatService):
 
             finally:
                 if should_close_db:
-                    db.close()
+                    try:
+                        db.close()
+                    except Exception as close_error:
+                        logger.warning(f"[vLLM Career] Error closing database session: {close_error}")
 
         except Exception as e:
             logger.error(f"[vLLM Career] Error getting latest career insights: {str(e)}")

@@ -165,7 +165,7 @@ async def generate_recommendations_for_all_users(
     This endpoint is for testing the scheduler functionality.
     """
     try:
-        from services.scheduler_service import daily_scheduler
+        from backend.services.scheduler_service import daily_scheduler
 
         # Only allow admin users to trigger this (you can add admin check here)
         logger.info(f"Manual trigger of daily recommendations by user {current_user.id}")

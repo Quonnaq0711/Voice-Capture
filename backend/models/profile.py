@@ -1,7 +1,8 @@
 from datetime import datetime, timezone
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, JSON
+from sqlalchemy import Column, Integer, String, ForeignKey, Text, JSON
 from sqlalchemy.orm import relationship
 from backend.db.database import Base
+from backend.db.types import TZDateTime
 from backend.models.user import User
 
 def utc_now():
@@ -94,8 +95,9 @@ class UserProfile(Base):
     # Avatar field
     avatar_url = Column(String)
 
-    created_at = Column(DateTime, default=utc_now)
-    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
+    # Timestamps with timezone awareness
+    created_at = Column(TZDateTime, default=utc_now)
+    updated_at = Column(TZDateTime, default=utc_now, onupdate=utc_now)
 
     # Relationship with User model
     user = relationship("User", back_populates="profile")

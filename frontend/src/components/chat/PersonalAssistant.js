@@ -740,12 +740,21 @@ export const getAssistantNavigationState = () => {
   if (pendingStateRequest) return pendingStateRequest;
 
   pendingStateRequest = new Promise((resolve) => {
+    let resolved = false;  // Prevent double resolution from race condition
+    let timeoutId = null;
+
     const cleanup = () => {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+        timeoutId = null;
+      }
       document.removeEventListener('assistant:stateResponse', handler);
       pendingStateRequest = null;
     };
 
     const handler = (event) => {
+      if (resolved) return;  // Already resolved by timeout
+      resolved = true;
       cleanup();
       resolve(event.detail);
     };
@@ -753,7 +762,9 @@ export const getAssistantNavigationState = () => {
     document.addEventListener('assistant:stateResponse', handler);
     dispatchNavigationEvent('getState', {});
 
-    setTimeout(() => {
+    timeoutId = setTimeout(() => {
+      if (resolved) return;  // Already resolved by handler
+      resolved = true;
       cleanup();
       resolve(null);
     }, STATE_REQUEST_TIMEOUT_MS);

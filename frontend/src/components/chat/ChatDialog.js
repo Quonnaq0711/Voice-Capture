@@ -454,7 +454,9 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
     // Event handler for section start
     const handleSectionStart = async (event) => {
       const { section, display_name, description, progress } = event.detail;
-      console.log('ChatDialog: Section started:', { section, display_name, description, progress });
+      if (process.env.NODE_ENV === 'development') {
+        console.log('ChatDialog: Section started:', { section, display_name, description, progress });
+      }
 
       // Add current session to generating sessions when section starts
       if (currentSession?.id) {
@@ -469,7 +471,9 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
     // Event handler for section completion
     const handleSectionComplete = async (event) => {
       const { section, data, error } = event.detail;
-      console.log('ChatDialog: Section completed:', { section, hasData: !!data, error });
+      if (process.env.NODE_ENV === 'development') {
+        console.log('ChatDialog: Section completed:', { section, hasData: !!data, error });
+      }
 
       // Note: Toast notifications are handled by CareerAgent component
       // No need to add chat messages here
@@ -480,7 +484,9 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
     // No need to show them in the chat dialog anymore
     const handleAnalysisComplete = async (event) => {
       const { success, error } = event.detail;
-      console.log('ChatDialog: Analysis workflow completed:', { success, error });
+      if (process.env.NODE_ENV === 'development') {
+        console.log('ChatDialog: Analysis workflow completed:', { success, error });
+      }
 
       // Remove current session from generating sessions when analysis completes
       if (currentSession?.id) {
@@ -648,6 +654,7 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
       try {
         // Load sessions first to ensure we have the latest list
         const sessionsData = await sessions.getSessions();
+        if (!isMountedRef.current) return;  // Check if component is still mounted
         setSessionsList(sessionsData);
 
         // Check if the session exists in the loaded list
@@ -663,6 +670,7 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
           console.warn('[ChatDialog] Session not found:', initialSessionId);
         }
       } catch (error) {
+        if (!isMountedRef.current) return;
         console.error('[ChatDialog] Failed to load sessions:', error);
       }
     };
@@ -676,20 +684,23 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
       let sessionToUse = currentSession;
       let newSessionCreated = false;
       const agentType = getAgentType();
-      
+
       // If no current session and this is the first user message, create a new session
       if (!sessionToUse && sender === 'user') {
         const sessionName = messageText.length > 50 ? messageText.substring(0, 50) + '...' : messageText;
         await sessions.createSession(sessionName, new Date().getTime());
+        if (!isMountedRef.current) return { message: null, newSession: null };
         const activeSession = await sessions.getActiveSession();
+        if (!isMountedRef.current) return { message: null, newSession: null };
         setCurrentSession(activeSession);
         sessionToUse = activeSession;
         newSessionCreated = true;
       }
-      
+
       // Only call saveMessage if we have a valid session
       if (sessionToUse?.id) {
         const savedMessage = await chat.saveMessage(messageText, sender, sessionToUse.id, agentType);
+        if (!isMountedRef.current) return { message: null, newSession: null };
         const messageData = {
           text: savedMessage.message_text,
           sender: savedMessage.sender,
@@ -703,7 +714,9 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
         return { message: null, newSession: null };
       }
     } catch (error) {
-      console.error('Failed to save message:', error);
+      if (isMountedRef.current) {
+        console.error('Failed to save message:', error);
+      }
       return { message: null, newSession: null };
     }
   };
@@ -743,7 +756,7 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
       textArea.select();
       try {
         document.execCommand('copy');
-        console.log('Message copied to clipboard (fallback)');
+        // Fallback copy succeeded - no logging needed in production
       } catch (fallbackError) {
         console.error('Failed to copy message:', fallbackError);
       }
@@ -861,8 +874,6 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
       // Backend doesn't store welcome messages, so we need to adjust the index
       const welcomeMessagesBeforeIndex = messages.slice(0, index).filter(m => m.isWelcome).length;
       const backendIndex = index - welcomeMessagesBeforeIndex;
-
-      console.log('[ChatDialog] Edit message - frontend index:', index, 'backend index:', backendIndex, 'welcome messages before:', welcomeMessagesBeforeIndex);
 
       // Sync with personal assistant backend: Remove all messages after the edited message index
       try {
@@ -1071,7 +1082,7 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
 
           } else {
             // User switched sessions, save response to the original session's database
-            console.log('User switched sessions during response generation for edited message. Response saved to database but not displayed.');
+            // Response saved to database but not displayed since user is now in a different session
             if (currentSessionAtSendTime?.id) {
               await chat.saveMessage(fullResponse, 'assistant', currentSessionAtSendTime.id, getAgentType());
               // Mark session as unread by calling the backend
@@ -1147,8 +1158,7 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
 
       // Check if the error is due to cancellation
       if (error.message === 'Request cancelled' || error.name === 'AbortError') {
-        console.log('Edit request was cancelled by user');
-        // Don't show error message for cancelled requests
+        // Don't show error message for cancelled requests - this is expected user behavior
       } else {
         const errorMessage = handleApiError(error);
 
@@ -1480,7 +1490,6 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
         });
         
         if (response.ok) {
-          console.log('Career analysis cancelled successfully');
           // Add a system message to indicate cancellation
           addSystemMessage('🛑 Career analysis cancelled by user.');
         } else {
@@ -2272,10 +2281,11 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
               onClick={handleNewSession}
               className="p-1 hover:bg-blue-600 rounded-full transition-colors"
               title="New Session"
+              aria-label="Start new session"
             >
               <PlusIcon className="w-5 h-5" />
             </button>
-            
+
             {/* History Sessions Button */}
             <button
               onClick={() => {
@@ -2284,23 +2294,27 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
               }}
               className="p-1 hover:bg-blue-600 rounded-full transition-colors"
               title="Session History"
+              aria-label="View session history"
             >
               <ClockIcon className="w-5 h-5" />
             </button>
-            
+
             {/* Settings Button */}
             <button
               onClick={() => setShowSettings(!showSettings)}
               className="p-1 hover:bg-blue-600 rounded-full transition-colors"
               title="Settings"
+              aria-label="Open settings"
             >
               <Cog6ToothIcon className="w-5 h-5" />
             </button>
-            
+
             {/* Close Button */}
             <button
               onClick={onClose}
               className="p-1 hover:bg-blue-600 rounded-full transition-colors"
+              title="Close"
+              aria-label="Close chat dialog"
             >
               <XMarkIcon className="w-6 h-6" />
             </button>

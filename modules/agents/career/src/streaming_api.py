@@ -48,10 +48,26 @@ async def analyze_resume_streaming(
 
             # Stream analysis results with session_id for cancellation support
             resume_id = int(request.resume_id) if request.resume_id else None
+
             async for result in streaming_analyzer.analyze_resume_streaming(user_id, resume_id, session_id):
-                # Format as JSON and add newline for streaming
+                # Format as JSON and add newline for streaming (SSE format)
                 yield f"data: {json.dumps(result)}\n\n"
 
+                # Check if this is the stream_end marker - add extra delay for graceful close
+                if result.get("type") == "stream_end":
+                    # Give time for the client to receive the final event
+                    await asyncio.sleep(0.2)
+                    break
+
+        except asyncio.CancelledError:
+            # Client disconnected - clean shutdown
+            cancel_result = {
+                "type": "cancelled",
+                "message": "Connection closed by client",
+                "session_id": session_id,
+                "timestamp": datetime.now().isoformat()
+            }
+            yield f"data: {json.dumps(cancel_result)}\n\n"
         except Exception as e:
             error_result = {
                 "type": "error",
@@ -61,12 +77,16 @@ async def analyze_resume_streaming(
             }
             yield f"data: {json.dumps(error_result)}\n\n"
 
+        # Final delay before closing stream to ensure all data is flushed
+        await asyncio.sleep(0.1)
+
     return StreamingResponse(
         generate_stream(),
-        media_type="text/plain",
+        media_type="text/event-stream",  # Correct SSE media type
         headers={
-            "Cache-Control": "no-cache",
+            "Cache-Control": "no-cache, no-store, must-revalidate",
             "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",  # Disable nginx buffering
             "Access-Control-Allow-Origin": "*",
             "Access-Control-Allow-Headers": "*",
             "Access-Control-Expose-Headers": "X-Analysis-Session-ID",

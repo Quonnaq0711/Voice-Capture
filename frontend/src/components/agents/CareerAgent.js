@@ -3,9 +3,8 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { profile as profileAPI, sessions as sessionsAPI, auth, activities as activitiesAPI, streamingFetch } from '../../services/api';
 import { getCareerInsights, hasCareerInsights, getCareerInsightsByResume } from '../../services/chatApi';
+import { formatDateTime, formatDate } from '../../utils/timeFormatter';
 import PersonalAssistant from '../chat/PersonalAssistant';
-// Progress tracking is now handled in ChatDialog
-// import ProgressTracker from './ProgressTracker';
 import NotificationPanel from '../ui/NotificationPanel';
 import AgentDesignModal from '../AgentDesignModal';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, LineChart, Line, ResponsiveContainer, RadialBarChart, RadialBar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar } from 'recharts';
@@ -788,15 +787,8 @@ const DocumentManager = ({ analysisProgress, startGlobalAnalysisStream, cancelAn
     setConfirmDialog({ isOpen: false, document: null });
   };
 
-  const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
+  // Use centralized time formatter for consistent timezone handling
+  const formatDate = (dateString) => formatDateTime(dateString);
 
   const getFileIcon = (fileType) => {
     return <DocumentIcon className="h-5 w-5 text-red-500" />;
@@ -1151,12 +1143,12 @@ const CareerAgent = ({
     // Event handler for streaming analysis progress
     const handleAnalysisProgress = (event) => {
       const { section, status, progress, totalSections } = event.detail;
-      console.log('Analysis progress update:', { section, status, progress });
+      if (process.env.NODE_ENV === 'development' && window.memoryMonitor?.verbose) console.log('Analysis progress update:', { section, status, progress });
       
       // If new analysis is starting, clear stored data flag and reset professional data
       if (status === 'starting' || (status === 'analyzing' && !analysisProgress.isAnalyzing)) {
         setIsLoadingStoredData(false);
-        console.log('New analysis started - clearing stored data to prepare for fresh results');
+        if (process.env.NODE_ENV === 'development' && window.memoryMonitor?.verbose) console.log('New analysis started - clearing stored data to prepare for fresh results');
       }
       
       setAnalysisProgress(prev => ({
@@ -1171,7 +1163,7 @@ const CareerAgent = ({
         // Prevent resetting completed sections unless it's a new analysis starting
         const currentStatus = prev[section];
         if (currentStatus === 'completed' && status !== 'analyzing' && status !== 'starting') {
-          console.log(`Preserving completed status for section ${section}, ignoring status change to ${status}`);
+          if (process.env.NODE_ENV === 'development' && window.memoryMonitor?.verbose) console.log(`Preserving completed status for section ${section}, ignoring status change to ${status}`);
           return prev;
         }
         return {
@@ -1197,8 +1189,10 @@ const CareerAgent = ({
     // Event handler for section completion with data
     const handleSectionComplete = (event) => {
       const { section, data, error } = event.detail;
-      console.log('Section completed:', { section, hasData: !!data, error });
-      console.log('Section data received:', data);
+      if (process.env.NODE_ENV === 'development' && window.memoryMonitor?.verbose) {
+        console.log('Section completed:', { section, hasData: !!data, error });
+        console.log('Section data received:', data);
+      }
       
       if (error) {
         setAnalysisProgress(prev => ({
@@ -1222,18 +1216,20 @@ const CareerAgent = ({
               ...prev,
               [section]: sectionData
             };
-            console.log('Updated professional data with new analysis:', newData);
-            console.log(`Section ${section} data:`, sectionData);
+            if (process.env.NODE_ENV === 'development' && window.memoryMonitor?.verbose) {
+              console.log('Updated professional data with new analysis:', newData);
+              console.log(`Section ${section} data:`, sectionData);
+            }
             return newData;
           });
         } else {
-          console.log('Skipping data update - currently loading stored data');
+          if (process.env.NODE_ENV === 'development' && window.memoryMonitor?.verbose) console.log('Skipping data update - currently loading stored data');
         }
 
         // Update section status and progress
         setSectionStatus(prev => {
           const newStatus = { ...prev, [section]: 'completed' };
-          console.log('Updated section status:', newStatus);
+          if (process.env.NODE_ENV === 'development' && window.memoryMonitor?.verbose) console.log('Updated section status:', newStatus);
           return newStatus;
         });
         setAnalysisProgress(prev => {
@@ -1242,7 +1238,7 @@ const CareerAgent = ({
           const isAnalysisComplete = newCompletedSections.length >= prev.totalSections;
           
           if (isAnalysisComplete) {
-            console.log('Analysis fully completed - preserving all data and section statuses');
+            if (process.env.NODE_ENV === 'development' && window.memoryMonitor?.verbose) console.log('Analysis fully completed - preserving all data and section statuses');
           }
           
           return {
@@ -1267,7 +1263,7 @@ const CareerAgent = ({
     // Event handler for analysis completion
     const handleAnalysisComplete = (event) => {
       const { success, error } = event.detail;
-      console.log('Analysis workflow completed:', { success, error });
+      if (process.env.NODE_ENV === 'development' && window.memoryMonitor?.verbose) console.log('Analysis workflow completed:', { success, error });
       
       setAnalysisProgress(prev => ({
         ...prev,
@@ -1361,13 +1357,13 @@ const CareerAgent = ({
   const loadStoredCareerInsights = async () => {
     try {
       if (!user?.id) {
-        console.log('No user ID available, skipping career insights load');
+        if (process.env.NODE_ENV === 'development' && window.memoryMonitor?.verbose) console.log('No user ID available, skipping career insights load');
         return;
       }
 
       // Don't load stored data if we're currently analyzing or have fresh analysis data
       if (analysisProgress.isAnalyzing) {
-        console.log('Analysis in progress, skipping stored data load to avoid overwriting fresh data');
+        if (process.env.NODE_ENV === 'development' && window.memoryMonitor?.verbose) console.log('Analysis in progress, skipping stored data load to avoid overwriting fresh data');
         return;
       }
 
@@ -1385,12 +1381,12 @@ const CareerAgent = ({
       });
       
       if (hasCurrentData) {
-        console.log('Already have professional data, skipping stored data load to preserve current analysis');
+        if (process.env.NODE_ENV === 'development' && window.memoryMonitor?.verbose) console.log('Already have professional data, skipping stored data load to preserve current analysis');
         return;
       }
 
       if (hasLoadedStoredInsights) {
-        console.log('Stored insights have already been loaded. Skipping notification.');
+        if (process.env.NODE_ENV === 'development' && window.memoryMonitor?.verbose) console.log('Stored insights have already been loaded. Skipping notification.');
         return;
       }
 
@@ -1400,37 +1396,37 @@ const CareerAgent = ({
       
       // Try to load insights for the last analyzed document first
       if (lastAnalyzedDocumentId) {
-        console.log('Loading career insights for last analyzed document:', lastAnalyzedDocumentId);
+        if (process.env.NODE_ENV === 'development' && window.memoryMonitor?.verbose) console.log('Loading career insights for last analyzed document:', lastAnalyzedDocumentId);
         try {
           response = await getCareerInsightsByResume(lastAnalyzedDocumentId);
           if (response.success && response.has_data) {
-            console.log('Found insights for last analyzed document');
+            if (process.env.NODE_ENV === 'development' && window.memoryMonitor?.verbose) console.log('Found insights for last analyzed document');
           } else {
-            console.log('No insights found for last analyzed document, falling back to latest insights');
+            if (process.env.NODE_ENV === 'development' && window.memoryMonitor?.verbose) console.log('No insights found for last analyzed document, falling back to latest insights');
             response = await getCareerInsights(user.id);
           }
         } catch (error) {
-          console.log('Error loading insights for specific document, falling back to latest:', error);
+          if (process.env.NODE_ENV === 'development' && window.memoryMonitor?.verbose) console.log('Error loading insights for specific document, falling back to latest:', error);
           response = await getCareerInsights(user.id);
         }
       } else {
-        console.log('No last analyzed document tracked, loading latest career insights for user:', user.id);
+        if (process.env.NODE_ENV === 'development' && window.memoryMonitor?.verbose) console.log('No last analyzed document tracked, loading latest career insights for user:', user.id);
         response = await getCareerInsights(user.id);
       }
       
       if (response.success && response.has_data && response.professional_data) {
         // Check again if analysis started during the async call - use ref for real-time state
         if (isAnalyzingRef.current) {
-          console.log('Analysis started during data fetch, discarding stored data to avoid overwriting fresh analysis');
+          if (process.env.NODE_ENV === 'development' && window.memoryMonitor?.verbose) console.log('Analysis started during data fetch, discarding stored data to avoid overwriting fresh analysis');
           return;
         }
 
-        console.log('Found stored career insights:', response.professional_data);
+        if (process.env.NODE_ENV === 'development' && window.memoryMonitor?.verbose) console.log('Found stored career insights:', response.professional_data);
         const rawData = response.professional_data;
         const unnestedData = { ...rawData };
         for (const key in unnestedData) {
             if (unnestedData[key] && typeof unnestedData[key] === 'object' && !Array.isArray(unnestedData[key]) && unnestedData[key][key]) {
-                console.log(`Un-nesting ${key} data from DB.`);
+                if (process.env.NODE_ENV === 'development' && window.memoryMonitor?.verbose) console.log(`Un-nesting ${key} data from DB.`);
                 unnestedData[key] = unnestedData[key][key];
             }
         }
@@ -1450,7 +1446,7 @@ const CareerAgent = ({
         });
         setHasLoadedStoredInsights(true);
       } else {
-        console.log('No stored career insights found or data is empty');
+        if (process.env.NODE_ENV === 'development' && window.memoryMonitor?.verbose) console.log('No stored career insights found or data is empty');
       }
     } catch (error) {
       console.error('Error loading stored career insights:', error);
@@ -1514,7 +1510,7 @@ const CareerAgent = ({
     }
 
     if (analysisProgress.isAnalyzing) {
-      console.log('Analysis already in progress, ignoring request');
+      if (process.env.NODE_ENV === 'development' && window.memoryMonitor?.verbose) console.log('Analysis already in progress, ignoring request');
       return;
     }
 
@@ -1562,7 +1558,9 @@ const CareerAgent = ({
       // CRITICAL: Use externalStartGlobalAnalysisStream when available
       // This ensures proper cancellation support via UnifiedSidebar's generation counter
       if (externalStartGlobalAnalysisStream) {
-        console.log('Using externalStartGlobalAnalysisStream for analysis with cancellation support');
+        if (process.env.NODE_ENV === 'development') {
+          console.log('Using externalStartGlobalAnalysisStream for analysis with cancellation support');
+        }
         await externalStartGlobalAnalysisStream(
           user.id,
           mostRecentDoc.id,
@@ -4475,7 +4473,7 @@ const careerInsights = {
                             <div className="flex-1">
                               <h4 className="font-semibold text-gray-900 mb-1">{action.title}</h4>
                               <div className="flex items-center space-x-4 text-sm text-gray-600">
-                                <span>Due: {new Date(action.deadline).toLocaleDateString()}</span>
+                                <span>Due: {formatDate(action.deadline)}</span>
                                 <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                                   action.priority === 'high' 
                                     ? 'bg-red-100 text-red-700' 

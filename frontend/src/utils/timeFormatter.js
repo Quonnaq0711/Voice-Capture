@@ -32,21 +32,18 @@ const normalizeTimestamp = (timestamp) => {
 };
 
 /**
- * Get user timezone
- * @returns {string}
+ * Get user timezone from browser
+ * @returns {string} IANA timezone identifier (e.g., "America/New_York")
  */
- 
- const getUserTimezone =() => {
-  return Intl.DateTimeFormat().resolvedOptions().timezone
- };
-  
+const getUserTimezone = () => {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone;
+};
 
 /**
  * Format timestamp to display time with timezone (user timezone)
  * @param {string|number} timestamp - ISO string or timestamp in milliseconds
- * @returns {string} Formatted time string with timezone (e.g., "2:04 PM UTC")
+ * @returns {string} Formatted time string with timezone (e.g., "2:04 PM EST")
  */
-
 export const formatTime = (timestamp) => {
   if (!timestamp) return '';
 
@@ -54,14 +51,13 @@ export const formatTime = (timestamp) => {
   if (!date) return '';
 
   return new Intl.DateTimeFormat('en-US', {
-    timezone: getUserTimezone(),
-    hour: "numeric",
+    timeZone: getUserTimezone(),
+    hour: 'numeric',
     minute: '2-digit',
     hour12: true,
     timeZoneName: 'short'
   }).format(date);
 };
-
 
 /**
  * Format timestamp to display date in MM/DD/YYYY format
@@ -99,10 +95,10 @@ export const formatDateTime = (timestamp) => {
     day: 'numeric',
     year: 'numeric',
     hour: 'numeric',
-    minute: 'numeric',
+    minute: '2-digit',
     hour12: true,
     timeZoneName: 'short'
-  }).formatDate(date);
+  }).format(date);
 };
 
 /**
@@ -135,11 +131,11 @@ export const formatRelativeTime = (timestamp) => {
  * @returns {string} Timezone abbreviation (e.g., "UTC", "EST", "PST")
  */
 export const getTimezoneAbbr = () => {
-  const Formatted = new Intl.DateTimeFormat('en-US', {
+  const formatted = new Intl.DateTimeFormat('en-US', {
     timeZone: getUserTimezone(),
-    timeZoneName: 'short',
+    timeZoneName: 'short'
   }).format(new Date());
 
-  const match = Formatted.match(/([A-Z]{3,5})$/);
+  const match = formatted.match(/([A-Z]{3,5})$/);
   return match ? match[1] : getUserTimezone();
-}
+};

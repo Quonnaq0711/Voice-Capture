@@ -31,7 +31,7 @@ import {
   SparklesIcon
 } from '@heroicons/react/24/outline';
 import { sessions as sessionsAPI, activities as activitiesAPIService } from '../../services/api';
-import { formatTime as formatTimeUTC } from '../../utils/timeFormatter';
+import { formatTime as formatTimeUTC, formatDate as formatDateUTC } from '../../utils/timeFormatter';
 
 // Animated Counter Component - Fixed: Use ref to track start value and avoid dependency issues
 const AnimatedCounter = ({ value, duration = 1000 }) => {
@@ -468,7 +468,7 @@ const UsageAnalytics = React.forwardRef((props, ref) => {
       {/* Footer */}
       <div className="bg-gray-50 rounded-xl p-3 text-center">
         <p className="text-[10px] text-gray-400">
-          {new Date(analyticsData.period_start).toLocaleDateString()} - {new Date(analyticsData.period_end).toLocaleDateString()}
+          {formatDateUTC(analyticsData.period_start)} - {formatDateUTC(analyticsData.period_end)}
         </p>
       </div>
     </div>
@@ -951,8 +951,8 @@ export default function ChatHistoryActivities({ activitiesAPI, onTrackActivity, 
     if (diffDays === 0) return 'Today';
     if (diffDays === 1) return 'Yesterday';
     if (diffDays < 7) return `${diffDays} days ago`;
-    
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+    return formatDateUTC(dateString);
   };
 
   // Format time - Use unified UTC formatter

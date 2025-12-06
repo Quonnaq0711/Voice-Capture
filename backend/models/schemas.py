@@ -111,7 +111,7 @@ class OTPResponse(UserBase):
     requested_at: datetime
     valid_time: int
 class ResetPasswordConfirm(UserBase):
-    resset_at: datetime
+    reset_at: datetime
 
 # User Profile schemas
 class UserProfileBase(BaseModel):

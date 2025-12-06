@@ -517,6 +517,11 @@ export default function UnifiedSidebarRefactored() {
 
                 activeReaderRef.current = null;
                 break;
+
+              } else if (data.type === 'stream_end') {
+                // Graceful end-of-stream marker - clean shutdown
+                activeReaderRef.current = null;
+                break;
               }
             } catch (parseError) {
               // Skip malformed streaming data

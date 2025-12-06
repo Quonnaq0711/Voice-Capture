@@ -28,10 +28,11 @@ else:
 os.makedirs(AVATAR_DIR, exist_ok=True)
 
 @router.get("/me", response_model=schemas.UserWithProfile)
-async def get_current_user_profile(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+async def get_current_user_profile(current_user: User = Depends(get_current_user)):
     """Get current user information with profile"""
-    user = db.query(User).filter(User.id == current_user.id).first()
-    return user
+    # current_user already contains the full user object from get_current_user dependency
+    # No need to query again - this eliminates the N+1 query
+    return current_user
 
 @router.get("/profile", response_model=schemas.UserProfile)
 async def get_user_profile(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):

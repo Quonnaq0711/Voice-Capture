@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Dict, Any
 from sqlalchemy.orm import Session
-from sqlalchemy import desc, and_
+from sqlalchemy import desc, and_, func
 from backend.models.activity import UserActivity
 from backend.models.user import User
 
@@ -149,23 +149,31 @@ class ActivityService:
         """
         cutoff_date = datetime.now(timezone.utc) - timedelta(days=days_back)
 
-        activities = db.query(UserActivity).filter(
-            and_(
-                UserActivity.user_id == user_id,
-                UserActivity.created_at >= cutoff_date
-            )
-        ).all()
+        # Use database aggregation instead of loading all records into memory
+        base_filter = and_(
+            UserActivity.user_id == user_id,
+            UserActivity.created_at >= cutoff_date
+        )
 
-        # Count activities by type
-        activity_counts = {}
-        source_counts = {}
+        # Count total activities
+        total_count = db.query(func.count(UserActivity.id)).filter(base_filter).scalar() or 0
 
-        for activity in activities:
-            activity_counts[activity.activity_type] = activity_counts.get(activity.activity_type, 0) + 1
-            source_counts[activity.activity_source] = source_counts.get(activity.activity_source, 0) + 1
+        # Count by activity type using GROUP BY
+        type_counts = db.query(
+            UserActivity.activity_type,
+            func.count(UserActivity.id)
+        ).filter(base_filter).group_by(UserActivity.activity_type).all()
+        activity_counts = {t: c for t, c in type_counts}
+
+        # Count by activity source using GROUP BY
+        source_counts_query = db.query(
+            UserActivity.activity_source,
+            func.count(UserActivity.id)
+        ).filter(base_filter).group_by(UserActivity.activity_source).all()
+        source_counts = {s: c for s, c in source_counts_query}
 
         return {
-            "total_activities": len(activities),
+            "total_activities": total_count,
             "activity_types": activity_counts,
             "activity_sources": source_counts,
             "days_analyzed": days_back,

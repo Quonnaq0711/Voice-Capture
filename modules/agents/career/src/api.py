@@ -1,16 +1,19 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from typing import Optional, Dict, Any
-from chat_service_factory import get_chat_service
-from base_chat_service import BaseChatService
-from resume_analyzer_factory import get_resume_analyzer
-from base_resume_analyzer import BaseResumeAnalyzer
 from sqlalchemy.orm import Session
 import sys
 import os
 
 # Add project root to path for imports
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', '..', '..'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '..'))
+# Add current directory to path for local imports
+sys.path.insert(0, os.path.dirname(__file__))
+
+from chat_service_factory import get_chat_service
+from base_chat_service import BaseChatService
+from resume_analyzer_factory import get_resume_analyzer
+from base_resume_analyzer import BaseResumeAnalyzer
 
 from backend.db.database import get_db
 from backend.utils.auth import get_current_user, get_current_user_from_query

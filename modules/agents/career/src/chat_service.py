@@ -12,8 +12,13 @@ import httpx
 import json
 from datetime import datetime
 import asyncio
+import atexit
+import weakref
 from concurrent.futures import ThreadPoolExecutor
 from sqlalchemy.orm import Session
+
+# Track all ChatService instances for cleanup on exit
+_active_services = weakref.WeakSet()
 from backend.db.database import SessionLocal
 from backend.utils.db_session import get_db_session
 from backend.models.profile import UserProfile
@@ -38,6 +43,10 @@ class ChatService(BaseChatService):
         self.base_url = base_url
         self.store = {}
         self.executor = ThreadPoolExecutor(max_workers=4)
+        self._shutdown_called = False
+
+        # Register this instance for cleanup on exit
+        _active_services.add(self)
 
         try:
             self.llm = OllamaLLM(
@@ -65,6 +74,9 @@ class ChatService(BaseChatService):
             )
             logger.info(f"Career ChatService initialized with model: {model_name} at {base_url}")
         except Exception as e:
+            # Clean up executor if initialization fails
+            if self.executor:
+                self.executor.shutdown(wait=False)
             logger.error(f"Failed to initialize Career ChatService: {e}")
             raise
 
@@ -75,13 +87,31 @@ class ChatService(BaseChatService):
         This method should be called when the application is shutting down to ensure
         all resources (ThreadPoolExecutor) are properly released.
         """
+        if self._shutdown_called:
+            return  # Prevent double shutdown
+        self._shutdown_called = True
+
         try:
             if self.executor:
                 logger.info("Shutting down Career Agent ThreadPoolExecutor...")
                 self.executor.shutdown(wait=True, cancel_futures=True)
+                self.executor = None
                 logger.info("Career Agent ThreadPoolExecutor shut down successfully")
         except Exception as e:
             logger.error(f"Error during Career ChatService shutdown: {str(e)}", exc_info=True)
+
+    def __del__(self):
+        """Destructor to ensure resources are released."""
+        self.shutdown()
+
+    def __enter__(self):
+        """Context manager entry."""
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit - ensures shutdown is called."""
+        self.shutdown()
+        return False
 
     def get_session_history(self, session_id: str) -> BaseChatMessageHistory:
         """Return chat history for a given session.
@@ -172,8 +202,6 @@ class ChatService(BaseChatService):
         try:
             logger.info(f"Generating streaming response for message: {user_message[:50]}...")
 
-            print("session_id=", session_id)
-            
             # Use default session if none provided
             if session_id is None:
                 session_id = "default"
@@ -228,8 +256,6 @@ class ChatService(BaseChatService):
                 # streaming process is cancelled before completion.
                 self.get_session_history(session_id).add_user_message(user_message)
 
-            print("messages=",messages)
-            
             # Prepare the request payload for Ollama's generate API
             payload = {
                 "model": self.model_name,
@@ -358,7 +384,7 @@ class ChatService(BaseChatService):
             logger.error(f"Error getting conversation history: {str(e)}")
             return []
 
-    async def get_user_profile(self, user_id: int, db: Optional[Session] = None) -> Optional[Dict[str, any]]:
+    async def get_user_profile(self, user_id: int, db: Optional[Session] = None) -> Optional[Dict[str, Any]]:
         """
         Get user profile data from database to provide personalized context.
         
@@ -466,13 +492,16 @@ class ChatService(BaseChatService):
                 
             finally:
                 if should_close_db:
-                    db.close()
-                
+                    try:
+                        db.close()
+                    except Exception as close_error:
+                        logger.warning(f"Error closing database session: {close_error}")
+
         except Exception as e:
             logger.error(f"Error getting user profile: {str(e)}")
             return None
 
-    async def get_latest_career_insights(self, user_id: int, db: Optional[Session] = None) -> Optional[Dict[str, any]]:
+    async def get_latest_career_insights(self, user_id: int, db: Optional[Session] = None) -> Optional[Dict[str, Any]]:
         """
         Get the latest career insights from database to provide context about recent resume analysis.
         
@@ -515,13 +544,16 @@ class ChatService(BaseChatService):
                 
             finally:
                 if should_close_db:
-                    db.close()
-                
+                    try:
+                        db.close()
+                    except Exception as close_error:
+                        logger.warning(f"Error closing database session: {close_error}")
+
         except Exception as e:
             logger.error(f"Error getting latest career insights: {str(e)}")
             return None
 
-    async def generate_follow_up_questions(self, user_message: str, ai_response: str, session_id: str = "default", profile_data: Optional[Dict[str, any]] = None, cancellation_event: Optional[asyncio.Event] = None) -> List[str]:
+    async def generate_follow_up_questions(self, user_message: str, ai_response: str, session_id: str = "default", profile_data: Optional[Dict[str, Any]] = None, cancellation_event: Optional[asyncio.Event] = None) -> List[str]:
         """
         Generate 3 follow-up questions based on the user's original message and AI response.
         
@@ -547,15 +579,13 @@ class ChatService(BaseChatService):
             
             # Create a specialized prompt for generating follow-up questions
             follow_up_prompt = FOLLOW_UP_PROMPT.format(
-                user_message=user_message, 
+                user_message=user_message,
                 ai_response=ai_response,
                 profile_context=profile_context
             )
-            
-            print("follow_up_prompt=",follow_up_prompt)
 
             # Generate follow-up questions using the LLM
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             task = loop.run_in_executor(
                 self.executor,
                 self._generate_follow_up_sync,
@@ -722,3 +752,25 @@ def get_chat_service():
     if _chat_service is None:
         _chat_service = ChatService()
     return _chat_service
+
+
+def _cleanup_all_services():
+    """Cleanup all active ChatService instances on program exit."""
+    global _chat_service
+    logger.info("Cleaning up ChatService instances on exit...")
+
+    # Shutdown the global singleton if it exists
+    if _chat_service is not None:
+        _chat_service.shutdown()
+        _chat_service = None
+
+    # Shutdown any other tracked instances
+    for service in list(_active_services):
+        try:
+            service.shutdown()
+        except Exception as e:
+            logger.error(f"Error cleaning up ChatService: {e}")
+
+
+# Register cleanup function to run on program exit
+atexit.register(_cleanup_all_services)

@@ -603,6 +603,21 @@ User message: {user_message}
 Response (only CAREER_INSIGHTS or NORMAL_CONVERSATION):
 """
 
+# Query optimization prompt for improving user queries
+OPTIMIZE_QUERY_PROMPT = """
+You are a career query optimizer. Your task is to refine and enhance the user's career-related query to get better, more targeted advice.
+
+Original User Query: {user_query}
+
+Please optimize this query by:
+1. Clarifying ambiguous terms
+2. Adding relevant context if missing
+3. Making the question more specific and actionable
+4. Keeping the core intent intact
+
+Return ONLY the optimized query, nothing else.
+"""
+
 # Follow-up questions prompt for career conversations
 FOLLOW_UP_PROMPT = """
 Based on the following career conversation and user profile, generate exactly 3 simple, practical follow-up questions that the USER is most likely to ask next. These should be questions from the USER's perspective focused on career development.

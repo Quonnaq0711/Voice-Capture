@@ -85,8 +85,43 @@ class LRUSessionCache:
             return len(self._cache)
 
     def clear(self) -> None:
+        """Clear all entries from cache."""
         with self._lock:
             self._cache.clear()
+
+    def clear_session(self, key: str) -> bool:
+        """Clear a specific session's history. Returns True if session existed."""
+        with self._lock:
+            if key in self._cache:
+                self._cache[key].clear()
+                return True
+            return False
+
+    def remove(self, key: str) -> bool:
+        """Remove a session from cache entirely. Returns True if session existed."""
+        with self._lock:
+            if key in self._cache:
+                del self._cache[key]
+                return True
+            return False
+
+    def __delitem__(self, key: str) -> None:
+        """Support del operator for removing sessions."""
+        with self._lock:
+            if key in self._cache:
+                del self._cache[key]
+
+    def __getitem__(self, key: str) -> InMemoryChatMessageHistory:
+        """Support dictionary-style access for getting sessions."""
+        with self._lock:
+            if key in self._cache:
+                self._cache.move_to_end(key)
+                return self._cache[key]
+            raise KeyError(key)
+
+    def __setitem__(self, key: str, value: InMemoryChatMessageHistory) -> None:
+        """Support dictionary-style access for setting sessions."""
+        self.set(key, value)
 
 
 class ChatServiceVLLM(BaseChatService):
@@ -1248,8 +1283,7 @@ class ChatServiceVLLM(BaseChatService):
             True if memory was cleared successfully
         """
         try:
-            if session_id in self.store:
-                self.store[session_id].clear()
+            if self.store.clear_session(session_id):
                 logger.info(f"[vLLM] Conversation memory cleared for session: {session_id}")
             return True
         except Exception as e:

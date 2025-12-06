@@ -7,6 +7,7 @@ import {
   BellIcon
 } from '@heroicons/react/24/outline';
 import { BellIcon as BellIconSolid } from '@heroicons/react/24/solid';
+import { formatDate } from '../../utils/timeFormatter';
 
 const NotificationPanel = ({ notifications = [], onDismiss }) => {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -62,9 +63,9 @@ const NotificationPanel = ({ notifications = [], onDismiss }) => {
     const diffHours = Math.floor(diffMs / 3600000);
     
     if (diffMins < 1) return 'Just now';
-     if (diffMins < 60) return `${diffMins}m ago`;
-     if (diffHours < 24) return `${diffHours}h ago`;
-     return date.toLocaleDateString();
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    return formatDate(timestamp);
   };
 
   const handleDismiss = (notificationId) => {

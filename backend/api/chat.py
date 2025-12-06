@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import text
-from typing import List
+from typing import List, Optional
 from datetime import datetime, timezone
 
 from backend.models import schemas
@@ -71,7 +71,7 @@ async def create_chat_message(
 
 @router.get("/messages", response_model=schemas.ChatHistoryResponse)
 async def get_chat_history(
-    session_id: int = None,
+    session_id: Optional[int] = None,
     limit: int = 50,
     offset: int = 0,
     current_user: User = Depends(get_current_user),
@@ -146,36 +146,61 @@ async def delete_messages_after_index(
         text("SELECT id FROM chat_sessions WHERE user_id = :user_id AND is_active = TRUE"),
         {"user_id": current_user.id}
     ).fetchone()
-    
-    session_id = None
-    if active_session:
-        session_id = active_session[0]
-    
-    # Get all messages for the session, ordered by creation time
-    query = db.query(ChatMessage).filter(ChatMessage.user_id == current_user.id)
-    if session_id:
-        query = query.filter(ChatMessage.session_id == session_id)
-    else:
-        query = query.filter(ChatMessage.session_id.is_(None))
-    
-    messages = query.order_by(ChatMessage.created_at.asc()).all()
-    
-    # Delete messages after the specified index
-    if message_index < len(messages):
-        messages_to_delete = messages[message_index + 1:]
-        for msg in messages_to_delete:
-            db.delete(msg)
-        try:
-            db.commit()
-        except Exception as e:
-            db.rollback()
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to delete messages: {str(e)}"
-            )
-        return {"message": f"Deleted {len(messages_to_delete)} messages after index {message_index}"}
 
-    return {"message": "No messages to delete"}
+    session_id = active_session[0] if active_session else None
+
+    # Get the ID of the message at the specified index (to delete everything after it)
+    # Use separate parameterized queries based on session_id to avoid SQL injection risk
+    if session_id:
+        boundary_query = text("""
+            SELECT id FROM chat_messages
+            WHERE user_id = :user_id AND session_id = :session_id
+            ORDER BY created_at ASC
+            LIMIT 1 OFFSET :offset
+        """)
+        boundary_params = {"user_id": current_user.id, "session_id": session_id, "offset": message_index}
+    else:
+        boundary_query = text("""
+            SELECT id FROM chat_messages
+            WHERE user_id = :user_id AND session_id IS NULL
+            ORDER BY created_at ASC
+            LIMIT 1 OFFSET :offset
+        """)
+        boundary_params = {"user_id": current_user.id, "offset": message_index}
+
+    boundary_result = db.execute(boundary_query, boundary_params).fetchone()
+
+    if not boundary_result:
+        return {"message": "No messages to delete"}
+
+    boundary_id = boundary_result[0]
+
+    # Bulk delete all messages with ID greater than the boundary
+    # This is more efficient than loading all messages and deleting one by one
+    if session_id:
+        delete_query = text("""
+            DELETE FROM chat_messages
+            WHERE user_id = :user_id AND session_id = :session_id AND id > :boundary_id
+        """)
+        delete_params = {"user_id": current_user.id, "session_id": session_id, "boundary_id": boundary_id}
+    else:
+        delete_query = text("""
+            DELETE FROM chat_messages
+            WHERE user_id = :user_id AND session_id IS NULL AND id > :boundary_id
+        """)
+        delete_params = {"user_id": current_user.id, "boundary_id": boundary_id}
+
+    try:
+        result = db.execute(delete_query, delete_params)
+        deleted_count = result.rowcount
+        db.commit()
+        return {"message": f"Deleted {deleted_count} messages after index {message_index}"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete messages: {str(e)}"
+        )
 
 @router.delete("/messages")
 async def clear_chat_history(

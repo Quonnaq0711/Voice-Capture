@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import AutoLogoutProvider from './contexts/AutoLogoutProvider';
@@ -42,7 +42,7 @@ function App() {
 
   return (
     <ErrorBoundary>
-      <Router>
+      <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <AuthProvider>
           <AutoLogoutProvider>
             <Routes>

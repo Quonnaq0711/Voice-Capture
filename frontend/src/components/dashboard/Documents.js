@@ -12,6 +12,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { Search, Filter, X, FileText, FileType, File } from 'lucide-react';
 import { activities as activitiesAPI, auth as authAPI } from '../../services/api';
+import { formatDate } from '../../utils/timeFormatter';
 
 export default function Documents({
   onUploadClick // Optional callback when upload is initiated
@@ -285,15 +286,7 @@ export default function Documents({
     }
   };
 
-  // Format date
-  const formatDate = (dateString) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { 
-      year: 'numeric', 
-      month: 'short', 
-      day: 'numeric' 
-    });
-  };
+  // Format date - using centralized timezone-aware formatter
 
   // Get file icon based on type
   const getFileIcon = (fileType) => {

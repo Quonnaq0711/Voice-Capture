@@ -1,4 +1,5 @@
-import os, sys
+import os
+import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 
 from langchain_ollama import OllamaLLM
@@ -7,7 +8,7 @@ from langchain_core.chat_history import BaseChatMessageHistory, InMemoryChatMess
 from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.runnables import RunnablePassthrough
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 import logging
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
@@ -333,7 +334,7 @@ class ChatService(BaseChatService):
                 "error": str(e)
             }
     
-    def _generate_sync_response(self, user_message: str, session_id: str = "default", profile_data: Optional[Dict[str, any]] = None, cancellation_event: Optional[asyncio.Event] = None) -> str:
+    def _generate_sync_response(self, user_message: str, session_id: str = "default", profile_data: Optional[Dict[str, Any]] = None, cancellation_event: Optional[asyncio.Event] = None) -> str:
         """
         Synchronous method to generate response using the conversation chain.
         
@@ -497,7 +498,7 @@ class ChatService(BaseChatService):
             logger.error(f"Error getting conversation history: {str(e)}")
             return []
     
-    async def get_user_profile(self, user_id: int, db: Optional[Session] = None) -> Optional[Dict[str, any]]:
+    async def get_user_profile(self, user_id: int, db: Optional[Session] = None) -> Optional[Dict[str, Any]]:
         """
         Get user profile data from database to provide personalized context.
 
@@ -512,7 +513,7 @@ class ChatService(BaseChatService):
         Returns:
             Dictionary containing user profile data or None if not found
         """
-        def _fetch_profile(session: Session) -> Optional[Dict[str, any]]:
+        def _fetch_profile(session: Session) -> Optional[Dict[str, Any]]:
             """Inner function to fetch and process profile data"""
             # Query user profile
             profile = session.query(UserProfile).filter(UserProfile.user_id == user_id).first()
@@ -593,7 +594,7 @@ class ChatService(BaseChatService):
             logger.error(f"Error getting user profile for user_id {user_id}: {str(e)}", exc_info=True)
             return None
     
-    def _format_profile_for_context(self, profile_data: Dict[str, any]) -> str:
+    def _format_profile_for_context(self, profile_data: Dict[str, Any]) -> str:
         """
         Format user profile data into a readable context string for the LLM.
         
@@ -897,7 +898,7 @@ class ChatService(BaseChatService):
         except Exception as e:
             logger.error(f"Error adding to history: {str(e)}")
     
-    async def generate_follow_up_questions(self, user_message: str, ai_response: str, session_id: str = "default", profile_data: Optional[Dict[str, any]] = None, cancellation_event: Optional[asyncio.Event] = None) -> List[str]:
+    async def generate_follow_up_questions(self, user_message: str, ai_response: str, session_id: str = "default", profile_data: Optional[Dict[str, Any]] = None, cancellation_event: Optional[asyncio.Event] = None) -> List[str]:
         """
         Generate 3 follow-up questions based on the user's original message and AI response.
         

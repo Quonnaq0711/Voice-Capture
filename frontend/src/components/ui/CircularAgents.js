@@ -46,10 +46,23 @@ const CircularAgents = ({ agents, avatarUrl, user, triggerAnimation = false, onA
       }
     };
 
-    updateRadius();
-    window.addEventListener('resize', updateRadius);
+    // Throttle resize handler to prevent excessive recalculations
+    let resizeTimeout = null;
+    const throttledUpdateRadius = () => {
+      if (resizeTimeout) return;
+      resizeTimeout = setTimeout(() => {
+        updateRadius();
+        resizeTimeout = null;
+      }, 100);
+    };
 
-    return () => window.removeEventListener('resize', updateRadius);
+    updateRadius();
+    window.addEventListener('resize', throttledUpdateRadius);
+
+    return () => {
+      window.removeEventListener('resize', throttledUpdateRadius);
+      if (resizeTimeout) clearTimeout(resizeTimeout);
+    };
   }, []);
 
   // Animation trigger effect
@@ -90,7 +103,7 @@ const CircularAgents = ({ agents, avatarUrl, user, triggerAnimation = false, onA
               className="h-full w-full rounded-full object-cover border-4 border-white shadow-lg"
             />
           ) : (
-            <UserCircleIcon className="h-24 w-24 text-grey-400" />
+            <UserCircleIcon className="h-24 w-24 text-gray-400" />
           )}
           
         </div>

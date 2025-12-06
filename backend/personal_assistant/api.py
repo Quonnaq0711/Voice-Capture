@@ -611,10 +611,10 @@ async def send_message_stream(
                         break
                         
             except Exception as e:
-                logger.error(f"Error in event generator: {str(e)}")
+                logger.error(f"Error in event generator: {str(e)}", exc_info=True)
                 error_chunk = {
                     "type": "error",
-                    "content": f"Error generating response: {str(e)}"
+                    "content": "An error occurred while generating the response. Please try again."
                 }
                 yield {
                     "event": "message",

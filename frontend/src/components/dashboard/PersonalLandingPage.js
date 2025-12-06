@@ -29,10 +29,10 @@ export default function PersonalLandingPage({ onUploadResume, onCustomizeProfile
       if (response.recommendations && response.recommendations.length > 0) {
         setDailyRecommendations(response.recommendations);
         setRecommendationsLastFetched(new Date());
-        if (process.env.NODE_ENV === 'development') console.log(`Loaded ${response.recommendations.length} recommendations`);
+        if (process.env.NODE_ENV === 'development' && window.memoryMonitor?.verbose) console.log(`Loaded ${response.recommendations.length} recommendations`);
       } else {
         // Fallback to static recommendations if API fails
-        if (process.env.NODE_ENV === 'development') console.log('No recommendations received, using fallback');
+        if (process.env.NODE_ENV === 'development' && window.memoryMonitor?.verbose) console.log('No recommendations received, using fallback');
         setDailyRecommendations(getStaticFallbackRecommendations());
       }
     } catch (error) {
@@ -54,10 +54,10 @@ export default function PersonalLandingPage({ onUploadResume, onCustomizeProfile
       if (response.recommendations && response.recommendations.length > 0) {
         setDailyRecommendations(response.recommendations);
         setRecommendationsLastFetched(new Date());
-        if (process.env.NODE_ENV === 'development') console.log(`Generated ${response.recommendations.length} new recommendations (${response.status})`);
+        if (process.env.NODE_ENV === 'development' && window.memoryMonitor?.verbose) console.log(`Generated ${response.recommendations.length} new recommendations (${response.status})`);
       } else {
         // Fallback to static recommendations if API fails
-        if (process.env.NODE_ENV === 'development') console.log('No recommendations generated, using static fallback');
+        if (process.env.NODE_ENV === 'development' && window.memoryMonitor?.verbose) console.log('No recommendations generated, using static fallback');
         setDailyRecommendations(getStaticFallbackRecommendations());
       }
     } catch (error) {
@@ -117,7 +117,7 @@ export default function PersonalLandingPage({ onUploadResume, onCustomizeProfile
     
     // Handler for priority action "Get Started" button
   const handlePriorityActionStart = (recommendation) => {
-    if (process.env.NODE_ENV === 'development') console.log('Starting priority action:', recommendation);
+    if (process.env.NODE_ENV === 'development' && window.memoryMonitor?.verbose) console.log('Starting priority action:', recommendation);
     // Add your custom logic here (e.g., navigate to specific page, open modal, etc.)
   };
 

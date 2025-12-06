@@ -31,6 +31,13 @@ services:
       # SQLite backup kept for migration reference
       - /home/idii/data/database:/app/db-backup:ro
     # Use default CMD from Dockerfile (backend.main:app with PYTHONPATH)
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
+        reservations:
+          memory: 512M
       
   
   personal-assistant-staging:
@@ -59,6 +66,13 @@ services:
       # SQLite backup kept for migration reference
       - /home/idii/data/database:/app/db-backup:ro
     # Use default CMD from Dockerfile (gunicorn with 4 workers)
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.5'
+        reservations:
+          memory: 1G
 
   frontend-staging:
     build:
@@ -66,8 +80,8 @@ services:
       dockerfile: Dockerfile.prod
       args:
         REACT_APP_BACKEND_URL: https://staging.idii.co/api
-        REACT_APP_PA_URL: https://staging.idii.co/pa-api 
-        REACT_ENVIRONMENT: staging 
+        REACT_APP_PA_URL: https://staging.idii.co/pa-api
+        REACT_ENVIRONMENT: staging
     container_name: idii-frontend-staging
     # ports:
       # - "3000:80"
@@ -77,6 +91,13 @@ services:
     # volumes:
     #   - ./frontend:/app
     # command: npm start
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+        reservations:
+          memory: 128M
 
   db-staging:
     image: postgres:15
@@ -111,8 +132,9 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
       POSTGRES_DB: ${DB_NAME:-idii-staging}
       POSTGRES_INITDB_ARGS: "-E UTF8 --locale=en_US.UTF-8"
-    ports:
-      - "5432:5432"
+    # Port removed for security - access via Docker network only (db-staging)
+    # ports:
+    #   - "5432:5432"
     volumes:
       # Data persistence - survives container updates
       - /home/idii/data/postgres-staging:/var/lib/postgresql/data
@@ -152,6 +174,17 @@ services:
       - "--dtype"
       - "${VLLM_DTYPE:-bfloat16}"
       - "--trust-remote-code"
+      # ===== Concurrency Optimization =====
+      # Allow multiple concurrent sequences (PA chat + Career analysis)
+      - "--max-num-seqs"
+      - "8"
+      # Enable chunked prefill for better handling of mixed long/short requests
+      - "--enable-chunked-prefill"
+      # Limit batch tokens to prevent long requests from blocking short ones
+      - "--max-num-batched-tokens"
+      - "4096"
+      # Enable prefix caching for repeated system prompts
+      - "--enable-prefix-caching"
     volumes:
       - /home/idii/data/vllm-cache:/root/.cache/huggingface
     networks:
@@ -169,7 +202,7 @@ services:
           memory: 12G
     runtime: nvidia
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8888/health || exit 1"]
+      test: ["CMD-SHELL", "curl -f http://localhost:8888/v1/models || exit 1"]
       interval: 30s
       timeout: 10s
       start_period: 120s
@@ -266,9 +299,16 @@ services:
       # SQLite backup kept for migration reference
       - /home/idii/data/database:/app/db-backup:ro
     # Use default CMD from Dockerfile (gunicorn with 4 workers)
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.5'
+        reservations:
+          memory: 1G
 
   nginx-staging:
-    build: 
+    build:
       context: .
       dockerfile: nginx.Dockerfile
     container_name: idii-nginx-staging
@@ -285,6 +325,13 @@ services:
       - frontend-staging
       - backend-staging
       - personal-assistant-staging
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+        reservations:
+          memory: 64M
 
 volumes:
   postgres_data:

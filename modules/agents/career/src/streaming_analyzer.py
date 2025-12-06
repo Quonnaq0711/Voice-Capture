@@ -8,6 +8,7 @@ import asyncio
 import json
 import logging
 import os
+import threading
 from typing import Dict, Any, Optional, AsyncGenerator, Callable, List
 from datetime import datetime, timedelta
 import httpx
@@ -32,6 +33,9 @@ class StreamingResumeAnalyzer:
     # Track active sessions per user to prevent concurrent analyses
     # Maps user_id -> session_id
     _active_user_sessions: Dict[int, str] = {}
+
+    # Thread lock for thread-safe access to class-level dictionaries
+    _lock: threading.Lock = threading.Lock()
 
     def __init__(self,
                  notification_service_url: str = "http://localhost:8001",
@@ -98,7 +102,7 @@ class StreamingResumeAnalyzer:
             **kwargs: Additional notification data
         """
         try:
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(timeout=30.0) as client:
                 # Prepare notification URL and data based on type
                 if notification_type == "progress":
                     url = f"{self.notification_service_url}/api/notifications/career-progress"
@@ -150,10 +154,11 @@ class StreamingResumeAnalyzer:
         Returns:
             True if the session was found and cancelled, False otherwise
         """
-        if session_id in cls._cancellation_tokens:
-            cls._cancellation_tokens[session_id].set()
-            logger.info(f"Analysis cancelled for session: {session_id}")
-            return True
+        with cls._lock:
+            if session_id in cls._cancellation_tokens:
+                cls._cancellation_tokens[session_id].set()
+                logger.info(f"Analysis cancelled for session: {session_id}")
+                return True
         logger.warning(f"No active session found for cancellation: {session_id}")
         return False
 
@@ -169,13 +174,17 @@ class StreamingResumeAnalyzer:
         Returns:
             The old session_id if found and cancelled, None otherwise
         """
-        if user_id in cls._active_user_sessions:
-            old_session_id = cls._active_user_sessions[user_id]
-            logger.info(f"Cancelling previous analysis for user {user_id}: {old_session_id}")
-            cls.cancel_analysis(old_session_id)
-            # Remove from active sessions immediately to prevent interference
-            del cls._active_user_sessions[user_id]
-            return old_session_id
+        with cls._lock:
+            if user_id in cls._active_user_sessions:
+                old_session_id = cls._active_user_sessions[user_id]
+                logger.info(f"Cancelling previous analysis for user {user_id}: {old_session_id}")
+                # Set cancellation token while holding lock
+                if old_session_id in cls._cancellation_tokens:
+                    cls._cancellation_tokens[old_session_id].set()
+                    logger.info(f"Analysis cancelled for session: {old_session_id}")
+                # Remove from active sessions immediately to prevent interference
+                del cls._active_user_sessions[user_id]
+                return old_session_id
         return None
 
     @classmethod
@@ -188,8 +197,9 @@ class StreamingResumeAnalyzer:
         Returns:
             True if the session is cancelled, False otherwise
         """
-        if session_id in cls._cancellation_tokens:
-            return cls._cancellation_tokens[session_id].is_set()
+        with cls._lock:
+            if session_id in cls._cancellation_tokens:
+                return cls._cancellation_tokens[session_id].is_set()
         return False
 
     async def analyze_resume_streaming(self, user_id: int, resume_id: Optional[int] = None, session_id: Optional[str] = None) -> AsyncGenerator[Dict[str, Any], None]:
@@ -220,7 +230,12 @@ class StreamingResumeAnalyzer:
             max_wait = 5.0  # Maximum wait time in seconds
             wait_interval = 0.2
             total_wait = 0
-            while old_session_id in self._cancellation_tokens and total_wait < max_wait:
+
+            # Use lock while checking token existence to prevent race condition
+            while total_wait < max_wait:
+                with self._lock:
+                    if old_session_id not in self._cancellation_tokens:
+                        break
                 await asyncio.sleep(wait_interval)
                 total_wait += wait_interval
                 logger.debug(f"Waiting for old session {old_session_id} to clean up... ({total_wait:.1f}s)")
@@ -228,18 +243,19 @@ class StreamingResumeAnalyzer:
             # IMPORTANT: Do NOT delete the old token!
             # If we delete it, is_cancelled() returns False and old analysis continues.
             # The old analysis needs the token to remain (and be set) so it can detect cancellation.
-            if old_session_id in self._cancellation_tokens:
-                # Ensure it's set (cancelled) but don't delete - old analysis needs to see it
-                self._cancellation_tokens[old_session_id].set()
-                logger.warning(f"Old session {old_session_id} still running after {total_wait:.1f}s - keeping token set")
+            with self._lock:
+                if old_session_id in self._cancellation_tokens:
+                    # Ensure it's set (cancelled) but don't delete - old analysis needs to see it
+                    self._cancellation_tokens[old_session_id].set()
+                    logger.warning(f"Old session {old_session_id} still running after {total_wait:.1f}s - keeping token set")
 
         # Register cancellation token for this session (fresh Event, not set)
-        self._cancellation_tokens[session_id] = asyncio.Event()
-        logger.info(f"Created new cancellation token for session: {session_id}, is_set={self._cancellation_tokens[session_id].is_set()}")
-
-        # Register this session as active for this user
-        self._active_user_sessions[user_id] = session_id
-        logger.info(f"Registered active session for user {user_id}: {session_id}")
+        with self._lock:
+            self._cancellation_tokens[session_id] = asyncio.Event()
+            logger.info(f"Created new cancellation token for session: {session_id}, is_set={self._cancellation_tokens[session_id].is_set()}")
+            # Register this session as active for this user
+            self._active_user_sessions[user_id] = session_id
+            logger.info(f"Registered active session for user {user_id}: {session_id}")
 
         # Set up cancellation check callback for workflow
         # This allows the workflow to check for cancellation between sections
@@ -476,10 +492,16 @@ class StreamingResumeAnalyzer:
                 
                 # Yield the result to frontend
                 yield result
-                
+
                 # Add small delay to prevent overwhelming the frontend
                 await asyncio.sleep(0.1)
-            
+
+            # IMPORTANT: Add delay after last section to ensure frontend
+            # has time to render the section notification before analysis_complete
+            # This fixes the issue where "Skills Analysis Complete" notification
+            # was being skipped and only "Resume Analysis Complete" was shown
+            await asyncio.sleep(0.5)
+
             # Store the complete analysis in database
             if all_results:
                 try:
@@ -517,14 +539,23 @@ class StreamingResumeAnalyzer:
                         "performance_metrics": performance_metrics,
                         "timestamp": datetime.now().isoformat()
                     }
-                    
+
+                    # Small delay to ensure data is flushed before connection closes
+                    await asyncio.sleep(0.1)
+
+                    # Send end-of-stream marker to signal clean shutdown
+                    yield {
+                        "type": "stream_end",
+                        "timestamp": datetime.now().isoformat()
+                    }
+
                 except Exception as e:
                     logger.error(f"Error storing career insight: {str(e)}")
                     # Get performance metrics even on save failure
                     performance_metrics = {}
                     if hasattr(self.workflow, 'get_performance_metrics'):
                         performance_metrics = self.workflow.get_performance_metrics()
-                    
+
                     yield {
                         "type": "warning",
                         "message": "Analysis completed but failed to save. Results are still available.",
@@ -533,7 +564,10 @@ class StreamingResumeAnalyzer:
                         "performance_metrics": performance_metrics,
                         "timestamp": datetime.now().isoformat()
                     }
-            
+
+                    # Small delay to ensure data is flushed
+                    await asyncio.sleep(0.1)
+
             logger.info(f"Completed streaming analysis for user {user_id}")
 
         except Exception as e:
@@ -570,12 +604,12 @@ class StreamingResumeAnalyzer:
 
         finally:
             logger.info(f"Cleaning up session {session_id} for user {user_id}")
-            # Clean up cancellation token
-            if session_id in self._cancellation_tokens:
-                del self._cancellation_tokens[session_id]
+            # Clean up cancellation token (thread-safe using pop with default)
+            removed_token = self._cancellation_tokens.pop(session_id, None)
+            if removed_token is not None:
                 logger.info(f"Cleaned up cancellation token for session: {session_id}")
             else:
-                logger.info(f"Cancellation token already cleaned for session: {session_id}")
+                logger.debug(f"Cancellation token already cleaned for session: {session_id}")
 
             # Clean up user session tracking (only if this session is still the active one)
             if user_id in self._active_user_sessions:
