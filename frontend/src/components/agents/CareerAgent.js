@@ -8,7 +8,7 @@ import PersonalAssistant from '../chat/PersonalAssistant';
 import NotificationPanel from '../ui/NotificationPanel';
 import AgentDesignModal from '../AgentDesignModal';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, LineChart, Line, ResponsiveContainer, RadialBarChart, RadialBar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar } from 'recharts';
-import { Search, Filter, X, FileText, FileType, File } from 'lucide-react';
+import { Search, Filter, X, FileText, FileType, File, Image } from 'lucide-react';
 
 // Import Heroicons
 import {
@@ -151,14 +151,18 @@ const DocumentUpload = ({ onUploadSuccess }) => {
   const handleFileUpload = async (file) => {
     if (!file) return;
 
-    // Validate file type - Support PDF, DOCX, and TXT
+    // Validate file type - Support PDF, DOCX, TXT and images
     const allowedTypes = [
       'application/pdf',
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      'text/plain'
+      'text/plain',
+      'image/jpeg',
+      'image/png',
+      'image/gif',
+      'image/webp'
     ];
     if (!allowedTypes.includes(file.type)) {
-      showToast('Please upload a PDF, DOCX, or TXT file', 'error');
+      showToast('Please upload a PDF, DOCX, TXT, or image file', 'error');
       return;
     }
 
@@ -298,7 +302,7 @@ const DocumentUpload = ({ onUploadSuccess }) => {
         <input
           ref={fileInputRef}
           type="file"
-          accept=".pdf,.docx,.txt"
+          accept=".pdf,.docx,.txt,.jpg,.jpeg,.png,.gif,.webp"
           onChange={handleFileSelect}
           className="hidden"
         />
@@ -328,7 +332,7 @@ const DocumentUpload = ({ onUploadSuccess }) => {
                   Click to upload or drag and drop
                 </div>
                 <div className="text-sm text-gray-500">
-                  PDF, DOCX, TXT up to 10MB
+                  PDF, DOCX, TXT, JPG, PNG up to 10MB
                 </div>
               </div>
             </div>
@@ -367,9 +371,16 @@ const DocumentList = ({ documents, loading, onPreview, onDelete, onAnalyze, onCa
 
     // Apply document type filter
     if (docTypeFilter !== 'all') {
-      filtered = filtered.filter(doc =>
-        doc.file_type?.toLowerCase() === docTypeFilter.toLowerCase()
-      );
+      if (docTypeFilter === 'image') {
+        const imageTypes = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+        filtered = filtered.filter(doc =>
+          imageTypes.includes(doc.file_type?.toLowerCase())
+        );
+      } else {
+        filtered = filtered.filter(doc =>
+          doc.file_type?.toLowerCase() === docTypeFilter.toLowerCase()
+        );
+      }
     }
 
     // Apply search query filter
@@ -497,7 +508,8 @@ const DocumentList = ({ documents, loading, onPreview, onDelete, onAnalyze, onCa
                       { value: 'all', label: 'All', icon: null, color: 'gray' },
                       { value: 'pdf', label: 'PDF', icon: FileText, color: 'red' },
                       { value: 'docx', label: 'DOCX', icon: File, color: 'blue' },
-                      { value: 'txt', label: 'TXT', icon: File, color: 'green' }
+                      { value: 'txt', label: 'TXT', icon: File, color: 'green' },
+                      { value: 'image', label: 'Image', icon: Image, color: 'purple' }
                     ].map((filter) => {
                       const isActive = docTypeFilter === filter.value;
                       const IconComponent = filter.icon;
@@ -505,7 +517,8 @@ const DocumentList = ({ documents, loading, onPreview, onDelete, onAnalyze, onCa
                         gray: isActive ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300',
                         red: isActive ? 'bg-red-600 text-white border-red-600' : 'bg-white text-red-600 border-red-200 hover:border-red-300',
                         blue: isActive ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-blue-600 border-blue-200 hover:border-blue-300',
-                        green: isActive ? 'bg-green-600 text-white border-green-600' : 'bg-white text-green-600 border-green-200 hover:border-green-300'
+                        green: isActive ? 'bg-green-600 text-white border-green-600' : 'bg-white text-green-600 border-green-200 hover:border-green-300',
+                        purple: isActive ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-purple-600 border-purple-200 hover:border-purple-300'
                       };
                       return (
                         <button
@@ -725,13 +738,12 @@ const DocumentManager = ({ analysisProgress, startGlobalAnalysisStream, cancelAn
     fetchDocuments(); // Refresh the list after successful upload
   };
 
-  const handlePreview = (document) => {
-    // Open document in new tab for preview
-    // Use relative path (proxied through Nginx in production)
-    const documentUrl = process.env.NODE_ENV === 'production'
-      ? `/resumes/${document.user_id}/${document.filename}`
-      : `${process.env.REACT_APP_BACKEND_URL || 'http://localhost:5000'}/resumes/${document.user_id}/${document.filename}`;
-    window.open(documentUrl, '_blank');
+  const handlePreview = (doc) => {
+    const newTab = window.open('', '_blank');
+    fetch(doc.url)
+      .then(r => r.blob())
+      .then(blob => { newTab.location = URL.createObjectURL(blob); })
+      .catch(() => { newTab.location = doc.url; });
   };
 
   const handleAnalyze = async (document) => {

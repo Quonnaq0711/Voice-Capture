@@ -1,0 +1,56 @@
+# Work Agent API Dependencies
+
+# Core FastAPI and web framework
+fastapi
+uvicorn[standard]
+gunicorn
+
+# Langchain and LLM integration
+langchain
+langchain-community
+langchain-core
+langchain-ollama
+langgraph
+ollama
+
+# HTTP client
+httpx
+requests
+
+# Server-Sent Events support
+sse-starlette
+
+# Data validation and serialization
+pydantic
+python-multipart
+
+# Authentication and security
+python-jose[cryptography]
+passlib[bcrypt]
+python-dotenv
+
+# Google APIs
+google-api-python-client
+google-auth
+google-auth-oauthlib
+google-auth-httplib2
+
+# Database
+sqlalchemy
+psycopg2-binary
+
+# Async support
+aiofiles
+
+# OpenAI-compatible LLM support (vLLM)
+langchain-openai>=0.2.0
+openai>=1.0.0
+tiktoken>=0.5.0
+
+# Document parsing (for AI Solver attachment reading)
+PyPDF2>=3.0.1
+python-docx>=1.1.0
+
+# Development and testing
+pytest
+pytest-asyncio

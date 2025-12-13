@@ -15,6 +15,14 @@ from backend.models.chat import ChatMessage
 from backend.models.activity import UserActivity
 from backend.models.profile import UserProfile
 from backend.models.daily_recommendation import DailyRecommendation
+from backend.models.todo import Todo
+from backend.models.oauth_token import OAuthToken
+from backend.models.extracted_task import ExtractedTask, ProcessedSource, ScannedDateRange
+from backend.models.notebook import Notebook
+from backend.models.note import Note
+from backend.models.todo_comment import TodoComment
+from backend.models.solver_session import SolverSession
+from backend.models.solver_message import SolverMessage
 
 # Export all models
 __all__ = [
@@ -27,5 +35,15 @@ __all__ = [
     "ChatMessage",
     "UserActivity",
     "UserProfile",
-    "DailyRecommendation"
+    "DailyRecommendation",
+    "Todo",
+    "OAuthToken",
+    "ExtractedTask",
+    "ProcessedSource",
+    "ScannedDateRange",
+    "Notebook",
+    "Note",
+    "TodoComment",
+    "SolverSession",
+    "SolverMessage",
 ]

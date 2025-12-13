@@ -1126,27 +1126,31 @@ class ChatService(BaseChatService):
             if cancellation_event and cancellation_event.is_set():
                 raise asyncio.CancelledError("Request was cancelled")
             
-            # Clean up the response - remove any extra formatting
-            optimized_query = response.strip()
-            
-            # Remove common prefixes that might be added by the LLM
-            prefixes_to_remove = [
-                "Optimized Query:",
-                "Optimized:",
-                "Here's the optimized query:",
-                "The optimized query is:"
-            ]
-            
-            for prefix in prefixes_to_remove:
-                if optimized_query.startswith(prefix):
-                    optimized_query = optimized_query[len(prefix):].strip()
-                    break
-
-            # Remove wrapping quotation marks that the LLM might add
+            # Clean up LLM response — extract just the optimized query
             import re
+            optimized_query = response.strip()
+
+            # Strategy 1: If the response contains a quoted string, extract it
+            # Handles: 'Sure! Here\'s the optimized version:\n\n"The actual query"'
+            quoted_match = re.search(r'["\u201c](.+?)["\u201d]', optimized_query, re.DOTALL)
+            if quoted_match and len(quoted_match.group(1).strip()) > 10:
+                optimized_query = quoted_match.group(1).strip()
+            else:
+                # Strategy 2: Strip known preamble patterns (case-insensitive)
+                optimized_query = re.sub(
+                    r'^(?:sure[!,.]?\s*)?(?:here\'?s?\s+(?:an?\s+)?(?:the\s+)?optimized\s+(?:version\s+(?:of\s+)?(?:your\s+)?(?:query|input|message)|query)\s*[:\.!\-]\s*)',
+                    '', optimized_query, flags=re.IGNORECASE
+                ).strip()
+                # Also strip simple prefixes
+                optimized_query = re.sub(
+                    r'^(?:optimized\s+query\s*:|optimized\s*:|the\s+optimized\s+query\s+is\s*:)\s*',
+                    '', optimized_query, flags=re.IGNORECASE
+                ).strip()
+
+            # Remove wrapping quotation marks
+            optimized_query = re.sub(r'^[\"\'\u201c\u201d`]+', '', optimized_query)
+            optimized_query = re.sub(r'[\"\'\u201c\u201d`]+$', '', optimized_query)
             optimized_query = optimized_query.strip()
-            optimized_query = re.sub(r'^[\"“\'`]+', '', optimized_query)
-            optimized_query = re.sub(r'[\"”\'`]+$', '', optimized_query)
 
             return optimized_query
             

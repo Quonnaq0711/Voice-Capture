@@ -1,0 +1,7 @@
+{
+  "id": "daily_standup",
+  "name": "Daily Standup",
+  "description": "Quick daily standup format with what you did, what you'll do, and blockers",
+  "icon": "calendar-days",
+  "content": "<h2>Daily Standup</h2><p><strong>Date:</strong> </p><hr><h3>What I Did Yesterday</h3><ul><li></li></ul><h3>What I'll Do Today</h3><ul><li></li></ul><h3>Blockers / Issues</h3><ul><li></li></ul><hr><p><em>Mood:</em> </p>"
+}
