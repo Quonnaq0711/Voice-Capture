@@ -12,7 +12,8 @@ import logging
 import asyncio
 import json
 from sse_starlette.sse import EventSourceResponse
-from backend.personal_assistant.chat_service import get_chat_service, ChatService
+from backend.personal_assistant.chat_service_factory import get_chat_service
+from backend.personal_assistant.base_chat_service import BaseChatService
 from backend.db.database import get_db
 from backend.utils.auth import get_current_user_from_query
 from backend.models.user import User
@@ -104,18 +105,36 @@ class OptimizeQueryResponse(BaseModel):
             }
         }
 
+def verify_internal_api_key(api_key: str = Query(None, alias="api_key")):
+    """
+    Verify internal API key for service-to-service communication.
+
+    This endpoint is internal-only and requires the INTERNAL_API_KEY.
+    """
+    internal_api_key = os.getenv("INTERNAL_API_KEY", "dev-internal-key-change-in-production")
+
+    if not api_key or api_key != internal_api_key:
+        logger.warning("Internal API call rejected: invalid or missing API key")
+        raise HTTPException(
+            status_code=403,
+            detail="Invalid or missing internal API key"
+        )
+    return True
+
+
 @router.post("/message", response_model=ChatResponse)
 async def send_message(
     chat_request: ChatRequest,
     request: Request,
-    chat_service: ChatService = Depends(get_chat_service),
-    db: Session = Depends(get_db)
+    chat_service: BaseChatService = Depends(get_chat_service),
+    db: Session = Depends(get_db),
+    _: bool = Depends(verify_internal_api_key)
 ):
     """
     Send a message to the AI assistant and get a response.
 
-    Internal service - called by Backend API which handles user authentication.
-    Trusts Backend to validate user permissions.
+    Internal service - protected by internal API key.
+    Only trusted backend services with valid INTERNAL_API_KEY can call this endpoint.
 
     Args:
         chat_request: Chat request containing the user message and user_id
@@ -185,7 +204,7 @@ async def send_message(
 
 @router.get("/health", response_model=HealthResponse)
 async def health_check(
-    chat_service: ChatService = Depends(get_chat_service)
+    chat_service: BaseChatService = Depends(get_chat_service)
 ):
     """
     Check the health status of the chat service.
@@ -232,7 +251,7 @@ async def health_check(
 
 @router.get("/health/deep", response_model=HealthResponse)
 async def deep_health_check(
-    chat_service: ChatService = Depends(get_chat_service)
+    chat_service: BaseChatService = Depends(get_chat_service)
 ):
     """
     Perform a deep health check of the chat service.
@@ -260,7 +279,7 @@ async def deep_health_check(
 @router.delete("/memory")
 async def clear_conversation_memory(
     session_id: Optional[str] = None,
-    chat_service: ChatService = Depends(get_chat_service)
+    chat_service: BaseChatService = Depends(get_chat_service)
 ):
     """
     Clear the conversation memory for a specific session.
@@ -300,7 +319,7 @@ async def clear_conversation_memory(
 @router.get("/history", response_model=ConversationHistoryResponse)
 async def get_conversation_history(
     session_id: Optional[str] = None,
-    chat_service: ChatService = Depends(get_chat_service)
+    chat_service: BaseChatService = Depends(get_chat_service)
 ):
     """
     Get the current conversation history for a specific session.
@@ -341,7 +360,7 @@ async def get_conversation_history(
 async def remove_messages_after_index(
     message_index: int,
     session_id: Optional[str] = None,
-    chat_service: ChatService = Depends(get_chat_service)
+    chat_service: BaseChatService = Depends(get_chat_service)
 ):
     """
     Remove all messages after a specific index in the conversation history.
@@ -387,7 +406,7 @@ async def update_message_at_index(
     message_index: int,
     new_content: str = Query(..., description="New content for the message"),
     session_id: Optional[str] = Query(None, description="Session ID"),
-    chat_service: ChatService = Depends(get_chat_service)
+    chat_service: BaseChatService = Depends(get_chat_service)
 ):
     """
     Update a specific message in the conversation history.
@@ -456,7 +475,7 @@ async def get_available_models():
 async def optimize_query(
     optimize_request: OptimizeQueryRequest,
     request: Request,
-    chat_service: ChatService = Depends(get_chat_service)
+    chat_service: BaseChatService = Depends(get_chat_service)
 ):
     """
     Optimize a user query to make it clearer and more structured.
@@ -534,8 +553,9 @@ async def optimize_query(
 async def send_message_stream(
     message: str = Query(..., description="Message to send to the AI"),
     session_id: Optional[str] = Query(None, description="Session ID"),
+    user_id: Optional[int] = Query(None, description="User ID for profile context"),
     current_user: User = Depends(get_current_user_from_query),
-    chat_service: ChatService = Depends(get_chat_service),
+    chat_service: BaseChatService = Depends(get_chat_service),
     db: Session = Depends(get_db)
 ):
     """
@@ -591,10 +611,10 @@ async def send_message_stream(
                         break
                         
             except Exception as e:
-                logger.error(f"Error in event generator: {str(e)}")
+                logger.error(f"Error in event generator: {str(e)}", exc_info=True)
                 error_chunk = {
                     "type": "error",
-                    "content": f"Error generating response: {str(e)}"
+                    "content": "An error occurred while generating the response. Please try again."
                 }
                 yield {
                     "event": "message",
@@ -614,18 +634,19 @@ async def send_message_stream(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error in streaming endpoint: {str(e)}")
-        
+        error_message = str(e)  # Capture error message in local variable
+        logger.error(f"Error in streaming endpoint: {error_message}")
+
         async def error_generator():
             error_chunk = {
                 "type": "error",
-                "content": f"Error: {str(e)}"
+                "content": f"Error: {error_message}"
             }
             yield {
                 "event": "message",
                 "data": json.dumps(error_chunk)
             }
-        
+
         return EventSourceResponse(
             error_generator(),
             headers={

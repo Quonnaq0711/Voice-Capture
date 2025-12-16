@@ -1,7 +1,8 @@
 from datetime import datetime, timezone
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, ForeignKey
+from sqlalchemy import Column, Integer, String, Boolean, ForeignKey
 from sqlalchemy.orm import relationship
 from backend.db.database import Base
+from backend.db.types import TZDateTime
 
 def utc_now():
     """Return current UTC time as timezone-aware datetime"""
@@ -13,9 +14,9 @@ class ChatSession(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)  # Index for user queries
     session_name = Column(String(255), nullable=False)
-    first_message_time = Column(DateTime, nullable=False)
-    created_at = Column(DateTime, default=utc_now, index=True)  # Index for time-based queries
-    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
+    first_message_time = Column(TZDateTime, nullable=False)
+    created_at = Column(TZDateTime, default=utc_now, index=True)  # Index for time-based queries
+    updated_at = Column(TZDateTime, default=utc_now, onupdate=utc_now)
     is_active = Column(Boolean, default=False, index=True)  # Index for active session queries
     unread = Column(Boolean, default=False, nullable=False)
 

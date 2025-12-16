@@ -2,7 +2,7 @@ import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { BrowserRouter } from 'react-router-dom';
-import Register from '../src/components/Register';
+import Register from '../src/components/auth/Register';
 import { useAuth } from '../src/contexts/AuthContext';
 
 // Mock the AuthContext
@@ -26,11 +26,11 @@ const RegisterWrapper = ({ children }) => (
 
 describe('Register Component', () => {
   const mockRegister = jest.fn();
-  
+
   beforeEach(() => {
     jest.clearAllMocks();
     localStorage.clear();
-    
+
     // Default mock implementation
     useAuth.mockReturnValue({
       register: mockRegister,
@@ -46,92 +46,99 @@ describe('Register Component', () => {
       </RegisterWrapper>
     );
 
-    expect(screen.getByText('Sign Up for Sadaora')).toBeInTheDocument();
-    expect(screen.getByPlaceholderText('Username')).toBeInTheDocument();
-    expect(screen.getByPlaceholderText('Email address')).toBeInTheDocument();
+    expect(screen.getByText('Sign Up for Idii')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('First Name')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Last Name')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Email Address')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('Password')).toBeInTheDocument();
-    expect(screen.getByPlaceholderText('Confirm password')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Confirm Password')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /sign up/i })).toBeInTheDocument();
     expect(screen.getByText('Already have an account?')).toBeInTheDocument();
     expect(screen.getByText('Sign in')).toBeInTheDocument();
   });
 
   it('should update input fields when user types', async () => {
-    
     render(
       <RegisterWrapper>
         <Register />
       </RegisterWrapper>
     );
 
-    const usernameInput = screen.getByPlaceholderText('Username');
-    const emailInput = screen.getByPlaceholderText('Email address');
+    const firstNameInput = screen.getByPlaceholderText('First Name');
+    const lastNameInput = screen.getByPlaceholderText('Last Name');
+    const emailInput = screen.getByPlaceholderText('Email Address');
     const passwordInput = screen.getByPlaceholderText('Password');
-    const confirmPasswordInput = screen.getByPlaceholderText('Confirm password');
+    const confirmPasswordInput = screen.getByPlaceholderText('Confirm Password');
 
-    await userEvent.type(usernameInput, 'testuser');
+    await userEvent.type(firstNameInput, 'Test');
+    await userEvent.type(lastNameInput, 'User');
     await userEvent.type(emailInput, 'test@example.com');
-    await userEvent.type(passwordInput, 'password123');
-    await userEvent.type(confirmPasswordInput, 'password123');
+    await userEvent.type(passwordInput, 'Password123!');
+    await userEvent.type(confirmPasswordInput, 'Password123!');
 
-    expect(usernameInput).toHaveValue('testuser');
+    expect(firstNameInput).toHaveValue('Test');
+    expect(lastNameInput).toHaveValue('User');
     expect(emailInput).toHaveValue('test@example.com');
-    expect(passwordInput).toHaveValue('password123');
-    expect(confirmPasswordInput).toHaveValue('password123');
+    expect(passwordInput).toHaveValue('Password123!');
+    expect(confirmPasswordInput).toHaveValue('Password123!');
   });
 
   it('should call register function when form is submitted with valid data', async () => {
     mockRegister.mockResolvedValue({ message: 'User registered successfully' });
-    
+
     render(
       <RegisterWrapper>
         <Register />
       </RegisterWrapper>
     );
 
-    const usernameInput = screen.getByPlaceholderText('Username');
-    const emailInput = screen.getByPlaceholderText('Email address');
+    const firstNameInput = screen.getByPlaceholderText('First Name');
+    const lastNameInput = screen.getByPlaceholderText('Last Name');
+    const emailInput = screen.getByPlaceholderText('Email Address');
     const passwordInput = screen.getByPlaceholderText('Password');
-    const confirmPasswordInput = screen.getByPlaceholderText('Confirm password');
+    const confirmPasswordInput = screen.getByPlaceholderText('Confirm Password');
     const submitButton = screen.getByRole('button', { name: /sign up/i });
 
-    await userEvent.type(usernameInput, 'testuser');
+    await userEvent.type(firstNameInput, 'Test');
+    await userEvent.type(lastNameInput, 'User');
     await userEvent.type(emailInput, 'test@example.com');
-    await userEvent.type(passwordInput, 'password123');
-    await userEvent.type(confirmPasswordInput, 'password123');
+    await userEvent.type(passwordInput, 'Password123!');
+    await userEvent.type(confirmPasswordInput, 'Password123!');
     await userEvent.click(submitButton);
 
     await waitFor(() => {
-      expect(mockRegister).toHaveBeenCalledWith('testuser', 'test@example.com', 'password123');
+      expect(mockRegister).toHaveBeenCalledWith('Test', 'User', 'test@example.com', 'Password123!');
     });
   });
 
-  it('should navigate to login page after successful registration', async () => {
+  it('should navigate to confirm-registration page after successful registration', async () => {
     mockRegister.mockResolvedValue({ message: 'User registered successfully' });
-    
+
     render(
       <RegisterWrapper>
         <Register />
       </RegisterWrapper>
     );
 
-    const usernameInput = screen.getByPlaceholderText('Username');
-    const emailInput = screen.getByPlaceholderText('Email address');
+    const firstNameInput = screen.getByPlaceholderText('First Name');
+    const lastNameInput = screen.getByPlaceholderText('Last Name');
+    const emailInput = screen.getByPlaceholderText('Email Address');
     const passwordInput = screen.getByPlaceholderText('Password');
-    const confirmPasswordInput = screen.getByPlaceholderText('Confirm password');
+    const confirmPasswordInput = screen.getByPlaceholderText('Confirm Password');
     const submitButton = screen.getByRole('button', { name: /sign up/i });
 
-    await userEvent.type(usernameInput, 'testuser');
+    await userEvent.type(firstNameInput, 'Test');
+    await userEvent.type(lastNameInput, 'User');
     await userEvent.type(emailInput, 'test@example.com');
-    await userEvent.type(passwordInput, 'password123');
-    await userEvent.type(confirmPasswordInput, 'password123');
+    await userEvent.type(passwordInput, 'Password123!');
+    await userEvent.type(confirmPasswordInput, 'Password123!');
     await userEvent.click(submitButton);
 
     await waitFor(() => {
       expect(localStorage.setItem).toHaveBeenCalledWith('isFirstTimeUser', 'true');
-      expect(mockNavigate).toHaveBeenCalledWith('/login', {
+      expect(mockNavigate).toHaveBeenCalledWith('/confirm-registration', {
         state: {
-          message: 'Registration successful! Please sign in to continue.',
+          email: 'test@example.com',
           isFirstTime: true,
         },
       });
@@ -139,23 +146,24 @@ describe('Register Component', () => {
   });
 
   it('should display error when passwords do not match', async () => {
-    
     render(
       <RegisterWrapper>
         <Register />
       </RegisterWrapper>
     );
 
-    const usernameInput = screen.getByPlaceholderText('Username');
-    const emailInput = screen.getByPlaceholderText('Email address');
+    const firstNameInput = screen.getByPlaceholderText('First Name');
+    const lastNameInput = screen.getByPlaceholderText('Last Name');
+    const emailInput = screen.getByPlaceholderText('Email Address');
     const passwordInput = screen.getByPlaceholderText('Password');
-    const confirmPasswordInput = screen.getByPlaceholderText('Confirm password');
+    const confirmPasswordInput = screen.getByPlaceholderText('Confirm Password');
     const submitButton = screen.getByRole('button', { name: /sign up/i });
 
-    await userEvent.type(usernameInput, 'testuser');
+    await userEvent.type(firstNameInput, 'Test');
+    await userEvent.type(lastNameInput, 'User');
     await userEvent.type(emailInput, 'test@example.com');
-    await userEvent.type(passwordInput, 'password123');
-    await userEvent.type(confirmPasswordInput, 'differentpassword');
+    await userEvent.type(passwordInput, 'Password123!');
+    await userEvent.type(confirmPasswordInput, 'DifferentPassword123!');
     await userEvent.click(submitButton);
 
     expect(screen.getByText('Passwords do not match')).toBeInTheDocument();
@@ -171,23 +179,25 @@ describe('Register Component', () => {
       },
     };
     mockRegister.mockRejectedValue(mockError);
-    
+
     render(
       <RegisterWrapper>
         <Register />
       </RegisterWrapper>
     );
 
-    const usernameInput = screen.getByPlaceholderText('Username');
-    const emailInput = screen.getByPlaceholderText('Email address');
+    const firstNameInput = screen.getByPlaceholderText('First Name');
+    const lastNameInput = screen.getByPlaceholderText('Last Name');
+    const emailInput = screen.getByPlaceholderText('Email Address');
     const passwordInput = screen.getByPlaceholderText('Password');
-    const confirmPasswordInput = screen.getByPlaceholderText('Confirm password');
+    const confirmPasswordInput = screen.getByPlaceholderText('Confirm Password');
     const submitButton = screen.getByRole('button', { name: /sign up/i });
 
-    await userEvent.type(usernameInput, 'testuser');
+    await userEvent.type(firstNameInput, 'Test');
+    await userEvent.type(lastNameInput, 'User');
     await userEvent.type(emailInput, 'existing@example.com');
-    await userEvent.type(passwordInput, 'password123');
-    await userEvent.type(confirmPasswordInput, 'password123');
+    await userEvent.type(passwordInput, 'Password123!');
+    await userEvent.type(confirmPasswordInput, 'Password123!');
     await userEvent.click(submitButton);
 
     await waitFor(() => {
@@ -198,23 +208,25 @@ describe('Register Component', () => {
   it('should display generic error message when error has no detail', async () => {
     const mockError = new Error('Network error');
     mockRegister.mockRejectedValue(mockError);
-    
+
     render(
       <RegisterWrapper>
         <Register />
       </RegisterWrapper>
     );
 
-    const usernameInput = screen.getByPlaceholderText('Username');
-    const emailInput = screen.getByPlaceholderText('Email address');
+    const firstNameInput = screen.getByPlaceholderText('First Name');
+    const lastNameInput = screen.getByPlaceholderText('Last Name');
+    const emailInput = screen.getByPlaceholderText('Email Address');
     const passwordInput = screen.getByPlaceholderText('Password');
-    const confirmPasswordInput = screen.getByPlaceholderText('Confirm password');
+    const confirmPasswordInput = screen.getByPlaceholderText('Confirm Password');
     const submitButton = screen.getByRole('button', { name: /sign up/i });
 
-    await userEvent.type(usernameInput, 'testuser');
+    await userEvent.type(firstNameInput, 'Test');
+    await userEvent.type(lastNameInput, 'User');
     await userEvent.type(emailInput, 'test@example.com');
-    await userEvent.type(passwordInput, 'password123');
-    await userEvent.type(confirmPasswordInput, 'password123');
+    await userEvent.type(passwordInput, 'Password123!');
+    await userEvent.type(confirmPasswordInput, 'Password123!');
     await userEvent.click(submitButton);
 
     await waitFor(() => {
@@ -229,23 +241,25 @@ describe('Register Component', () => {
       resolveRegister = resolve;
     });
     mockRegister.mockReturnValue(registerPromise);
-    
+
     render(
       <RegisterWrapper>
         <Register />
       </RegisterWrapper>
     );
 
-    const usernameInput = screen.getByPlaceholderText('Username');
-    const emailInput = screen.getByPlaceholderText('Email address');
+    const firstNameInput = screen.getByPlaceholderText('First Name');
+    const lastNameInput = screen.getByPlaceholderText('Last Name');
+    const emailInput = screen.getByPlaceholderText('Email Address');
     const passwordInput = screen.getByPlaceholderText('Password');
-    const confirmPasswordInput = screen.getByPlaceholderText('Confirm password');
+    const confirmPasswordInput = screen.getByPlaceholderText('Confirm Password');
     const submitButton = screen.getByRole('button', { name: /sign up/i });
 
-    await userEvent.type(usernameInput, 'testuser');
+    await userEvent.type(firstNameInput, 'Test');
+    await userEvent.type(lastNameInput, 'User');
     await userEvent.type(emailInput, 'test@example.com');
-    await userEvent.type(passwordInput, 'password123');
-    await userEvent.type(confirmPasswordInput, 'password123');
+    await userEvent.type(passwordInput, 'Password123!');
+    await userEvent.type(confirmPasswordInput, 'Password123!');
     await userEvent.click(submitButton);
 
     // Check loading state
@@ -254,7 +268,7 @@ describe('Register Component', () => {
 
     // Resolve the registration
     resolveRegister({ message: 'User registered successfully' });
-    
+
     await waitFor(() => {
       expect(screen.getByText('Sign Up')).toBeInTheDocument();
       expect(submitButton).not.toBeDisabled();
@@ -262,24 +276,25 @@ describe('Register Component', () => {
   });
 
   it('should clear error when new registration attempt is made', async () => {
-    
     render(
       <RegisterWrapper>
         <Register />
       </RegisterWrapper>
     );
 
-    const usernameInput = screen.getByPlaceholderText('Username');
-    const emailInput = screen.getByPlaceholderText('Email address');
+    const firstNameInput = screen.getByPlaceholderText('First Name');
+    const lastNameInput = screen.getByPlaceholderText('Last Name');
+    const emailInput = screen.getByPlaceholderText('Email Address');
     const passwordInput = screen.getByPlaceholderText('Password');
-    const confirmPasswordInput = screen.getByPlaceholderText('Confirm password');
+    const confirmPasswordInput = screen.getByPlaceholderText('Confirm Password');
     const submitButton = screen.getByRole('button', { name: /sign up/i });
 
     // First attempt with mismatched passwords
-    await userEvent.type(usernameInput, 'testuser');
+    await userEvent.type(firstNameInput, 'Test');
+    await userEvent.type(lastNameInput, 'User');
     await userEvent.type(emailInput, 'test@example.com');
-    await userEvent.type(passwordInput, 'password123');
-    await userEvent.type(confirmPasswordInput, 'differentpassword');
+    await userEvent.type(passwordInput, 'Password123!');
+    await userEvent.type(confirmPasswordInput, 'DifferentPassword123!');
     await userEvent.click(submitButton);
 
     expect(screen.getByText('Passwords do not match')).toBeInTheDocument();
@@ -287,7 +302,7 @@ describe('Register Component', () => {
     // Second attempt with matching passwords
     mockRegister.mockResolvedValue({ message: 'User registered successfully' });
     await userEvent.clear(confirmPasswordInput);
-    await userEvent.type(confirmPasswordInput, 'password123');
+    await userEvent.type(confirmPasswordInput, 'Password123!');
     await userEvent.click(submitButton);
 
     await waitFor(() => {
@@ -302,12 +317,14 @@ describe('Register Component', () => {
       </RegisterWrapper>
     );
 
-    const usernameInput = screen.getByPlaceholderText('Username');
-    const emailInput = screen.getByPlaceholderText('Email address');
+    const firstNameInput = screen.getByPlaceholderText('First Name');
+    const lastNameInput = screen.getByPlaceholderText('Last Name');
+    const emailInput = screen.getByPlaceholderText('Email Address');
     const passwordInput = screen.getByPlaceholderText('Password');
-    const confirmPasswordInput = screen.getByPlaceholderText('Confirm password');
+    const confirmPasswordInput = screen.getByPlaceholderText('Confirm Password');
 
-    expect(usernameInput).toBeRequired();
+    expect(firstNameInput).toBeRequired();
+    expect(lastNameInput).toBeRequired();
     expect(emailInput).toBeRequired();
     expect(passwordInput).toBeRequired();
     expect(confirmPasswordInput).toBeRequired();
@@ -323,18 +340,52 @@ describe('Register Component', () => {
       </RegisterWrapper>
     );
 
-    const usernameInput = screen.getByPlaceholderText('Username');
-    const emailInput = screen.getByPlaceholderText('Email address');
+    const firstNameInput = screen.getByPlaceholderText('First Name');
+    const lastNameInput = screen.getByPlaceholderText('Last Name');
+    const emailInput = screen.getByPlaceholderText('Email Address');
     const passwordInput = screen.getByPlaceholderText('Password');
-    const confirmPasswordInput = screen.getByPlaceholderText('Confirm password');
+    const confirmPasswordInput = screen.getByPlaceholderText('Confirm Password');
 
-    expect(usernameInput).toHaveAttribute('id', 'username');
+    expect(firstNameInput).toHaveAttribute('id', 'firstname');
+    expect(lastNameInput).toHaveAttribute('id', 'lastname');
     expect(emailInput).toHaveAttribute('id', 'email-address');
     expect(passwordInput).toHaveAttribute('id', 'password');
     expect(confirmPasswordInput).toHaveAttribute('id', 'confirm-password');
-    expect(usernameInput).toHaveAttribute('autoComplete', 'username');
     expect(emailInput).toHaveAttribute('autoComplete', 'email');
     expect(passwordInput).toHaveAttribute('autoComplete', 'new-password');
     expect(confirmPasswordInput).toHaveAttribute('autoComplete', 'new-password');
+  });
+
+  it('should show password strength meter when typing password', async () => {
+    render(
+      <RegisterWrapper>
+        <Register />
+      </RegisterWrapper>
+    );
+
+    const passwordInput = screen.getByPlaceholderText('Password');
+
+    // Type a weak password
+    await userEvent.type(passwordInput, 'weak');
+    expect(screen.getByText('Weak')).toBeInTheDocument();
+
+    // Type a stronger password
+    await userEvent.clear(passwordInput);
+    await userEvent.type(passwordInput, 'Password123!');
+    expect(screen.getByText('Strong')).toBeInTheDocument();
+  });
+
+  it('should show password validation errors', async () => {
+    render(
+      <RegisterWrapper>
+        <Register />
+      </RegisterWrapper>
+    );
+
+    const passwordInput = screen.getByPlaceholderText('Password');
+
+    // Type a password without uppercase
+    await userEvent.type(passwordInput, 'password123!');
+    expect(screen.getByText('Password must include an uppercase letter.')).toBeInTheDocument();
   });
 });

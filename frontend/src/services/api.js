@@ -10,6 +10,41 @@ const api = axios.create({
   },
 });
 
+// ==================== RATE LIMITER ====================
+// Prevents brute force attacks with exponential backoff
+const rateLimiter = {
+  attempts: new Map(), // endpoint -> { count, lastAttempt, blockedUntil }
+
+  canProceed(endpoint) {
+    const now = Date.now();
+    const state = this.attempts.get(endpoint);
+    if (!state) return { allowed: true };
+    if (state.blockedUntil && now < state.blockedUntil) {
+      const waitSeconds = Math.ceil((state.blockedUntil - now) / 1000);
+      return { allowed: false, waitSeconds };
+    }
+    return { allowed: true };
+  },
+
+  recordFailure(endpoint) {
+    const now = Date.now();
+    const state = this.attempts.get(endpoint) || { count: 0, lastAttempt: 0 };
+    // Reset if last attempt was 5+ minutes ago
+    if (now - state.lastAttempt > 300000) state.count = 0;
+    state.count++;
+    state.lastAttempt = now;
+    // Block after 5 failures: 30s, 60s, 120s... (max 5 min)
+    if (state.count >= 5) {
+      state.blockedUntil = now + Math.min(30000 * Math.pow(2, state.count - 5), 300000);
+    }
+    this.attempts.set(endpoint, state);
+  },
+
+  recordSuccess(endpoint) {
+    this.attempts.delete(endpoint);
+  }
+};
+
 // Request interceptor: add token to headers
 api.interceptors.request.use(
   (config) => {
@@ -110,22 +145,31 @@ api.interceptors.response.use(
           return;
         }
 
-        console.log('Access token expired, refreshing...');
+        if (process.env.NODE_ENV === 'development') {
+          console.log('Access token expired, refreshing...');
+        }
 
         auth.refreshToken().then(data => {
           const newToken = data.access_token;
-          console.log('Token refresh successful');
+          // Validate token before using
+          if (typeof newToken !== 'string' || newToken.length === 0) {
+            throw new Error('Invalid token received from refresh');
+          }
+          if (process.env.NODE_ENV === 'development') {
+            console.log('Token refresh successful');
+          }
           api.defaults.headers.common['Authorization'] = 'Bearer ' + newToken;
           originalRequest.headers['Authorization'] = 'Bearer ' + newToken;
+          // Reset isRefreshing before processQueue to prevent race conditions
+          isRefreshing = false;
           processQueue(null, newToken);
           resolve(api(originalRequest));
         }).catch((err) => {
           console.error('Token refresh failed:', err.response?.data?.detail || err.message);
+          isRefreshing = false;
           processQueue(err, null);
           handleAuthenticationFailure(); // Use centralized logout function
           reject(err);
-        }).finally(() => {
-          isRefreshing = false;
         });
       });
     }
@@ -158,21 +202,38 @@ export const auth = {
       },
     });
 
-    // Store both new tokens
-    if (response.data.access_token) {
-      localStorage.setItem('token', response.data.access_token);
+    // Store both new tokens with validation
+    const accessToken = response.data.access_token;
+    const refreshTokenNew = response.data.refresh_token;
+
+    if (typeof accessToken === 'string' && accessToken.length > 0) {
+      localStorage.setItem('token', accessToken);
+    } else {
+      throw new Error('Invalid access token received');
     }
-    if (response.data.refresh_token) {
-      localStorage.setItem('refresh_token', response.data.refresh_token);
+    if (typeof refreshTokenNew === 'string' && refreshTokenNew.length > 0) {
+      localStorage.setItem('refresh_token', refreshTokenNew);
     }
 
     return response.data;
   },
 
-  // User registration
+  // User registration with rate limiting
   register: async (first_name, last_name, email, password) => {
-    const response = await api.post('/auth/signup', { first_name, last_name, email, password });
-    return response.data;
+    const endpoint = 'register';
+    const { allowed, waitSeconds } = rateLimiter.canProceed(endpoint);
+    if (!allowed) {
+      throw new Error(`Too many registration attempts. Please wait ${waitSeconds} seconds.`);
+    }
+
+    try {
+      const response = await api.post('/auth/signup', { first_name, last_name, email, password });
+      rateLimiter.recordSuccess(endpoint);
+      return response.data;
+    } catch (error) {
+      rateLimiter.recordFailure(endpoint);
+      throw error;
+    }
   },
   
   
@@ -195,27 +256,42 @@ resendRegistrationOTP: async (email) => {
     return response.data;
   },
 
-  // User login
+  // User login with rate limiting
   login: async (email, password) => {
-    const formData = new FormData();
-    formData.append('username', email);  // OAuth2 standard uses 'username' field (contains email)
-    formData.append('password', password);
-
-    const response = await api.post('/auth/token', formData, {
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-    });
-
-    // Store both access token and refresh token
-    if (response.data.access_token) {
-      localStorage.setItem('token', response.data.access_token);
-    }
-    if (response.data.refresh_token) {
-      localStorage.setItem('refresh_token', response.data.refresh_token);
+    const endpoint = 'login';
+    const { allowed, waitSeconds } = rateLimiter.canProceed(endpoint);
+    if (!allowed) {
+      throw new Error(`Too many login attempts. Please wait ${waitSeconds} seconds.`);
     }
 
-    return response.data;
+    try {
+      const formData = new FormData();
+      formData.append('username', email);
+      formData.append('password', password);
+
+      const response = await api.post('/auth/token', formData, {
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      });
+
+      // Store tokens on success with validation
+      const accessToken = response.data.access_token;
+      const refreshTokenVal = response.data.refresh_token;
+
+      if (typeof accessToken === 'string' && accessToken.length > 0) {
+        localStorage.setItem('token', accessToken);
+      } else {
+        throw new Error('Invalid access token received');
+      }
+      if (typeof refreshTokenVal === 'string' && refreshTokenVal.length > 0) {
+        localStorage.setItem('refresh_token', refreshTokenVal);
+      }
+
+      rateLimiter.recordSuccess(endpoint);
+      return response.data;
+    } catch (error) {
+      rateLimiter.recordFailure(endpoint);
+      throw error;
+    }
   },
 
   // Password Reset Request
@@ -234,20 +310,46 @@ resendRegistrationOTP: async (email) => {
     return response.data;
   },
 
-  // Logout
+  // Logout with retry mechanism for server-side token revocation
   logout: async () => {
-    try {
-      // Call backend to revoke all refresh tokens
-      await api.post('/auth/logout');
-      console.log('Successfully revoked refresh tokens on server');
-    } catch (error) {
-      // Even if backend call fails, still clear local tokens
-      console.warn('Failed to revoke tokens on server:', error.message);
-    } finally {
-      // Always clear local storage
-      localStorage.removeItem('token');
-      localStorage.removeItem('refresh_token');
+    const maxRetries = 2;
+    let serverRevoked = false;
+
+    // Attempt server-side token revocation with retries
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        await api.post('/auth/logout');
+        serverRevoked = true;
+        break;
+      } catch (error) {
+        // Only retry on network errors, not auth errors
+        const isNetworkError = !error.response;
+        const isAuthError = error.response?.status === 401;
+
+        if (isAuthError) {
+          // Token already invalid - no need to revoke
+          serverRevoked = true;
+          break;
+        }
+
+        if (attempt === maxRetries || !isNetworkError) {
+          // Final attempt failed or non-retryable error
+          if (process.env.NODE_ENV === 'development') {
+            console.warn(`Server token revocation failed after ${attempt} attempt(s)`);
+          }
+          break;
+        }
+
+        // Wait before retry (exponential backoff: 500ms, 1000ms)
+        await new Promise(resolve => setTimeout(resolve, 500 * attempt));
+      }
     }
+
+    // Always clear local storage for security
+    localStorage.removeItem('token');
+    localStorage.removeItem('refresh_token');
+
+    return { serverRevoked };
   },
 
   // Upload resume
@@ -292,9 +394,9 @@ export const chat = {
 
   // Get chat history
   getHistory: async (sessionId = null, limit = 50, offset = 0) => {
-    let url = `/chat/messages?limit=${limit}&offset=${offset}`;
+    let url = `/chat/messages?limit=${encodeURIComponent(limit)}&offset=${encodeURIComponent(offset)}`;
     if (sessionId) {
-      url += `&session_id=${sessionId}`;
+      url += `&session_id=${encodeURIComponent(sessionId)}`;
     }
     const response = await api.get(url);
     return response.data;
@@ -470,7 +572,7 @@ export const profile = {
 // Activities related API
 export const activities = {
   // Get recent activities
-  getRecentActivities: async (limit = 10) => {
+  getRecentActivities: async (limit = 1000) => {
     const response = await api.get(`/activities/recent?limit=${limit}`);
     return response.data;
   },
@@ -478,16 +580,16 @@ export const activities = {
   // Get all user activities with filtering
   getUserActivities: async (options = {}) => {
     const {
-      limit = 20,
+      limit = 1000,
       offset = 0,
       activityType = null,
       activitySource = null,
       daysBack = 30
     } = options;
 
-    let url = `/activities/?limit=${limit}&offset=${offset}&days_back=${daysBack}`;
-    if (activityType) url += `&activity_type=${activityType}`;
-    if (activitySource) url += `&activity_source=${activitySource}`;
+    let url = `/activities/?limit=${encodeURIComponent(limit)}&offset=${encodeURIComponent(offset)}&days_back=${encodeURIComponent(daysBack)}`;
+    if (activityType) url += `&activity_type=${encodeURIComponent(activityType)}`;
+    if (activitySource) url += `&activity_source=${encodeURIComponent(activitySource)}`;
 
     const response = await api.get(url);
     return response.data;
@@ -495,7 +597,13 @@ export const activities = {
 
   // Get activity summary
   getActivitySummary: async (daysBack = 7) => {
-    const response = await api.get(`/activities/summary?days_back=${daysBack}`);
+    const response = await api.get(`/activities/summary?days_back=${encodeURIComponent(daysBack)}`);
+    return response.data;
+  },
+
+  // Get comprehensive usage analytics
+  getUsageAnalytics: async (daysBack = 30) => {
+    const response = await api.get(`/activities/analytics?days_back=${encodeURIComponent(daysBack)}`);
     return response.data;
   },
 
@@ -507,10 +615,10 @@ export const activities = {
 
   // Track specific activity types
   trackChatActivity: async (source, sessionId = null, messageId = null, agentType = null) => {
-    let url = `/activities/track/chat?source=${source}`;
-    if (sessionId) url += `&session_id=${sessionId}`;
-    if (messageId) url += `&message_id=${messageId}`;
-    if (agentType) url += `&agent_type=${agentType}`;
+    let url = `/activities/track/chat?source=${encodeURIComponent(source)}`;
+    if (sessionId) url += `&session_id=${encodeURIComponent(sessionId)}`;
+    if (messageId) url += `&message_id=${encodeURIComponent(messageId)}`;
+    if (agentType) url += `&agent_type=${encodeURIComponent(agentType)}`;
 
     const response = await api.post(url);
     return response.data;
@@ -518,14 +626,14 @@ export const activities = {
 
   trackResumeAnalysis: async (resumeFilename = null) => {
     let url = '/activities/track/resume-analysis';
-    if (resumeFilename) url += `?resume_filename=${resumeFilename}`;
+    if (resumeFilename) url += `?resume_filename=${encodeURIComponent(resumeFilename)}`;
 
     const response = await api.post(url);
     return response.data;
   },
 
   trackAgentInteraction: async (agentType, interactionType = 'general') => {
-    const response = await api.post(`/activities/track/agent-interaction?agent_type=${agentType}&interaction_type=${interactionType}`);
+    const response = await api.post(`/activities/track/agent-interaction?agent_type=${encodeURIComponent(agentType)}&interaction_type=${encodeURIComponent(interactionType)}`);
     return response.data;
   }
 };
@@ -546,7 +654,7 @@ export const careerInsights = {
 
   // Get all career insights
   getAll: async (limit = 10) => {
-    const response = await api.get(`/career-insights/all?limit=${limit}`);
+    const response = await api.get(`/career-insights/all?limit=${encodeURIComponent(limit)}`);
     return response.data;
   }
 };
@@ -556,7 +664,7 @@ export const dailyRecommendations = {
   // Get today's recommendations (or generate if not exists)
   getRecommendations: async (date = null) => {
     let url = '/daily-recommendations';
-    if (date) url += `?date=${date}`;
+    if (date) url += `?date=${encodeURIComponent(date)}`;
 
     const response = await api.get(url);
     return response.data;
@@ -570,9 +678,58 @@ export const dailyRecommendations = {
 
   // Get recommendations history
   getHistory: async (limit = 7) => {
-    const response = await api.get(`/daily-recommendations/history?limit=${limit}`);
+    const response = await api.get(`/daily-recommendations/history?limit=${encodeURIComponent(limit)}`);
     return response.data;
   }
+};
+
+// ==================== STREAMING FETCH HELPER ====================
+// For streaming endpoints that require ReadableStream (can't use axios)
+// Provides consistent token handling and 401 error management
+export const streamingFetch = async (url, options = {}) => {
+  const token = localStorage.getItem('token');
+  if (!token) {
+    throw new Error('Not authenticated');
+  }
+
+  const response = await fetch(url, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+      ...options.headers,
+    },
+  });
+
+  // Handle 401 by triggering auth failure flow
+  if (response.status === 401) {
+    // Try to refresh token first
+    try {
+      await auth.refreshToken();
+      // Retry with new token
+      const newToken = localStorage.getItem('token');
+      return fetch(url, {
+        ...options,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${newToken}`,
+          ...options.headers,
+        },
+      });
+    } catch {
+      // Refresh failed, redirect to login
+      localStorage.removeItem('token');
+      localStorage.removeItem('refresh_token');
+      window.location.href = '/login';
+      throw new Error('Authentication failed');
+    }
+  }
+
+  if (!response.ok) {
+    throw new Error(`HTTP error! status: ${response.status}`);
+  }
+
+  return response;
 };
 
 export default api;

@@ -21,7 +21,7 @@ else:
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from backend.personal_assistant.api import router as chat_router
-from backend.personal_assistant.chat_service import get_chat_service
+from backend.personal_assistant.chat_service_factory import get_chat_service
 from backend.personal_assistant.notification_service import router as notification_router
 
 # Configure logging

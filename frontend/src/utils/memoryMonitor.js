@@ -9,6 +9,12 @@ class MemoryMonitor {
     this.eventListeners = new Map();
     this.isMonitoring = false;
     this.memoryLog = [];
+    this.verbose = false; // Set to true to enable detailed logging
+  }
+
+  // Enable/disable verbose logging
+  setVerbose(enabled) {
+    this.verbose = enabled;
   }
 
   // Start monitoring memory usage
@@ -21,7 +27,7 @@ class MemoryMonitor {
     }, intervalMs);
     
     this.intervals.add(monitorInterval);
-    console.log('🔍 Memory monitoring started');
+    if (this.verbose) console.log('🔍 Memory monitoring started');
   }
 
   // Stop monitoring
@@ -29,7 +35,7 @@ class MemoryMonitor {
     this.intervals.forEach(interval => clearInterval(interval));
     this.intervals.clear();
     this.isMonitoring = false;
-    console.log('🛑 Memory monitoring stopped');
+    if (this.verbose) console.log('🛑 Memory monitoring stopped');
   }
 
   // Log current memory usage
@@ -136,16 +142,16 @@ class MemoryMonitor {
 
   // Clean up all tracked resources
   cleanup() {
-    console.log('🧹 Cleaning up all tracked resources...');
-    
+    if (this.verbose) console.log('🧹 Cleaning up all tracked resources...');
+
     // Clear all intervals
     this.intervals.forEach(interval => clearInterval(interval));
     this.intervals.clear();
-    
+
     // Clear all timeouts
     this.timeouts.forEach(timeout => clearTimeout(timeout));
     this.timeouts.clear();
-    
+
     // Close all EventSources
     this.eventSources.forEach(eventSource => {
       if (eventSource && typeof eventSource.close === 'function') {
@@ -153,12 +159,12 @@ class MemoryMonitor {
       }
     });
     this.eventSources.clear();
-    
+
     // Clear event listeners map
     this.eventListeners.clear();
-    
+
     this.isMonitoring = false;
-    console.log('✅ All resources cleaned up');
+    if (this.verbose) console.log('✅ All resources cleaned up');
   }
 
   // Get current resource counts
@@ -221,17 +227,17 @@ export const closeTrackedEventSource = (eventSource) => {
 if (process.env.NODE_ENV === 'development') {
   // Expose to window for debugging
   window.memoryMonitor = memoryMonitor;
-  
-  // Auto-start monitoring in development
+
+  // Auto-start monitoring in development (silent by default)
   memoryMonitor.startMonitoring();
-  
-  // Log memory report every 2 minutes
-  setInterval(() => {
-    memoryMonitor.printMemoryReport();
+
+  // Log memory report every 2 minutes (tracked to allow cleanup)
+  const reportIntervalId = setInterval(() => {
+    if (memoryMonitor.verbose) memoryMonitor.printMemoryReport();
   }, 120000);
-  
-  console.log('🔧 Memory monitoring enabled in development mode');
-  console.log('Use window.memoryMonitor to access monitoring functions');
+  memoryMonitor.trackInterval(reportIntervalId);
+
+  // Silent startup - use window.memoryMonitor.setVerbose(true) to enable logging
 }
 
 export default memoryMonitor;

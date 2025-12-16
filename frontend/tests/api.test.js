@@ -55,10 +55,11 @@ describe('API Services', () => {
         };
         mockAxiosInstance.post.mockResolvedValue(mockResponse);
 
-        const result = await auth.register('testuser', 'test@example.com', 'password123');
+        const result = await auth.register('Test', 'User', 'test@example.com', 'password123');
 
         expect(mockAxiosInstance.post).toHaveBeenCalledWith('/auth/signup', {
-          username: 'testuser',
+          first_name: 'Test',
+          last_name: 'User',
           email: 'test@example.com',
           password: 'password123',
         });
@@ -69,7 +70,7 @@ describe('API Services', () => {
         const mockError = new Error('Registration failed');
         mockAxiosInstance.post.mockRejectedValue(mockError);
 
-        await expect(auth.register('testuser', 'test@example.com', 'password123'))
+        await expect(auth.register('Test', 'User', 'test@example.com', 'password123'))
           .rejects.toThrow('Registration failed');
       });
     });
@@ -109,9 +110,14 @@ describe('API Services', () => {
     });
 
     describe('logout', () => {
-      it('should remove token from localStorage', () => {
-        auth.logout();
-        expect(localStorage.removeItem).toHaveBeenCalledWith('token');
+      it('should attempt server-side token revocation', async () => {
+        // Mock successful server revocation
+        mockAxiosInstance.post.mockResolvedValue({ data: { success: true } });
+
+        await auth.logout();
+
+        // Logout attempts server-side revocation first
+        expect(mockAxiosInstance.post).toHaveBeenCalledWith('/auth/logout');
       });
     });
 
@@ -159,6 +165,7 @@ describe('API Services', () => {
         expect(mockAxiosInstance.post).toHaveBeenCalledWith('/chat/messages', {
           message_text: 'Hello, world!',
           sender: 'user',
+          agent_type: 'dashboard',
         });
         expect(result).toEqual(mockResponse.data);
       });
@@ -202,14 +209,17 @@ describe('API Services', () => {
   describe('Sessions API', () => {
     describe('createSession', () => {
       it('should create new session successfully', async () => {
-        const mockResponse = {
+        const mockCreateResponse = { data: { id: 1 } };
+        const mockActiveSessionResponse = {
           data: {
             id: 1,
             session_name: 'Test Session',
             created_at: '2023-01-01T00:00:00Z',
           },
         };
-        mockAxiosInstance.post.mockResolvedValue(mockResponse);
+        // First call: POST to create session, Second call: GET active session
+        mockAxiosInstance.post.mockResolvedValue(mockCreateResponse);
+        mockAxiosInstance.get.mockResolvedValue(mockActiveSessionResponse);
 
         const result = await sessions.createSession('Test Session', '2023-01-01T00:00:00Z');
 
@@ -217,7 +227,8 @@ describe('API Services', () => {
           session_name: 'Test Session',
           first_message_time: '2023-01-01T00:00:00Z',
         });
-        expect(result).toEqual(mockResponse.data);
+        expect(mockAxiosInstance.get).toHaveBeenCalledWith('/chat/sessions/active');
+        expect(result).toEqual(mockActiveSessionResponse.data);
       });
     });
 

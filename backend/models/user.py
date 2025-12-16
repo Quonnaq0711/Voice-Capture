@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from sqlalchemy import Column, Integer, Nullable, String, DateTime, Boolean, true
+from sqlalchemy import Column, Integer, String, Boolean
 from sqlalchemy.orm import relationship
 from backend.db.database import Base
 from backend.db.types import TZDateTime
@@ -31,12 +31,12 @@ class User(Base):
     updated_at = Column(TZDateTime, default=utc_now, onupdate=utc_now)
     last_login = Column(TZDateTime, nullable=True)  # Track last login for active user detection
 
-    # Relationships
-    resumes = relationship("Resume", back_populates="user")
-    chat_messages = relationship("ChatMessage", back_populates="user")
-    chat_sessions = relationship("ChatSession", back_populates="user")
-    profile = relationship("UserProfile", back_populates="user", uselist=False)
-    career_insights = relationship("CareerInsight", back_populates="user")
-    activities = relationship("UserActivity", back_populates="user")
-    daily_recommendations = relationship("DailyRecommendation", back_populates="user", lazy="dynamic")
+    # Relationships - all with cascade delete to prevent orphaned records
+    resumes = relationship("Resume", back_populates="user", cascade="all, delete-orphan")
+    chat_messages = relationship("ChatMessage", back_populates="user", cascade="all, delete-orphan")
+    chat_sessions = relationship("ChatSession", back_populates="user", cascade="all, delete-orphan")
+    profile = relationship("UserProfile", back_populates="user", uselist=False, cascade="all, delete-orphan")
+    career_insights = relationship("CareerInsight", back_populates="user", cascade="all, delete-orphan")
+    activities = relationship("UserActivity", back_populates="user", cascade="all, delete-orphan")
+    daily_recommendations = relationship("DailyRecommendation", back_populates="user", cascade="all, delete-orphan", lazy="dynamic")
     refresh_tokens = relationship("RefreshToken", back_populates="user", cascade="all, delete-orphan")

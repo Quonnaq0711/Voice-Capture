@@ -2,9 +2,10 @@
 Model to track all user activities across the platform
 """
 from datetime import datetime, timezone
-from sqlalchemy import Column, Integer, String, DateTime, Text, ForeignKey, JSON
+from sqlalchemy import Column, Integer, String, Text, ForeignKey, JSON
 from sqlalchemy.orm import relationship
 from backend.db.database import Base
+from backend.db.types import TZDateTime
 
 def utc_now():
     """Return current UTC time as timezone-aware datetime"""
@@ -28,13 +29,13 @@ class UserActivity(Base):
     # Context data (JSON field for flexible storage)
     activity_metadata = Column(JSON, nullable=True)  # Store additional context like agent type, session info, etc.
 
-    # References to related entities
-    session_id = Column(Integer, ForeignKey("chat_sessions.id"), nullable=True)
-    message_id = Column(Integer, ForeignKey("chat_messages.id"), nullable=True)
+    # References to related entities (SET NULL on delete to preserve activity history)
+    session_id = Column(Integer, ForeignKey("chat_sessions.id", ondelete="SET NULL"), nullable=True, index=True)
+    message_id = Column(Integer, ForeignKey("chat_messages.id", ondelete="SET NULL"), nullable=True, index=True)
 
     # Timestamps
-    created_at = Column(DateTime, default=utc_now, nullable=False, index=True)  # Index for time-based queries
-    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
+    created_at = Column(TZDateTime, default=utc_now, nullable=False, index=True)  # Index for time-based queries
+    updated_at = Column(TZDateTime, default=utc_now, onupdate=utc_now)
 
     # Relationships
     user = relationship("User", back_populates="activities")

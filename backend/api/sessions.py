@@ -1,3 +1,4 @@
+import logging
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import text
@@ -6,9 +7,10 @@ from datetime import datetime, timezone
 
 from backend.db.database import get_db
 from backend.models.user import User
-from backend.models.chat import ChatMessage
 from backend.utils.auth import get_current_user
 from pydantic import BaseModel
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -50,10 +52,12 @@ async def create_session(
         )
 
         # Create new session as active
-        cursor = db.execute(
+        # Use RETURNING id for PostgreSQL compatibility (lastrowid only works with SQLite/MySQL)
+        result = db.execute(
             text("""
             INSERT INTO chat_sessions (user_id, session_name, first_message_time, created_at, is_active, unread)
             VALUES (:user_id, :session_name, :first_message_time, :created_at, TRUE, FALSE)
+            RETURNING id
             """),
             {
                 "user_id": current_user.id,
@@ -63,7 +67,7 @@ async def create_session(
             }
         )
 
-        session_id = cursor.lastrowid
+        session_id = result.fetchone()[0]
         db.commit()
 
         return {
@@ -130,9 +134,8 @@ async def get_user_sessions(
                 active_session['unread'] = False
             except Exception as e:
                 db.rollback()
-                # Don't fail the entire request if marking as read fails, just log it
-                # Still return the sessions list
-                pass
+                # Don't fail the entire request if marking as read fails, but log it
+                logger.warning(f"Failed to mark session {active_session['id']} as read: {str(e)}")
 
         return sessions
 

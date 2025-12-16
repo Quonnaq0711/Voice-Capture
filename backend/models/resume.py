@@ -1,7 +1,8 @@
 from datetime import datetime, timezone
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, ForeignKey
 from sqlalchemy.orm import relationship
 from backend.db.database import Base
+from backend.db.types import TZDateTime
 from backend.models.career_insight import CareerInsight
 
 def utc_now():
@@ -17,9 +18,9 @@ class Resume(Base):
     file_path = Column(String)  # Full path to the resume file
     file_type = Column(String)  # File extension (pdf or txt)
     user_id = Column(Integer, ForeignKey("users.id"), index=True)  # Index for user queries
-    created_at = Column(DateTime, default=utc_now, index=True)  # Index for time-based queries
-    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
+    created_at = Column(TZDateTime, default=utc_now, index=True)  # Index for time-based queries
+    updated_at = Column(TZDateTime, default=utc_now, onupdate=utc_now)
 
     # Relationships
     user = relationship("User", back_populates="resumes")
-    career_insights = relationship("CareerInsight", back_populates="resume")
+    career_insights = relationship("CareerInsight", back_populates="resume", cascade="all, delete-orphan")

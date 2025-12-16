@@ -8,14 +8,15 @@ import asyncio
 import json
 import logging
 import os
-from typing import Dict, Any, Optional, AsyncGenerator, Callable
+import threading
+from typing import Dict, Any, Optional, AsyncGenerator, Callable, List
 from datetime import datetime, timedelta
 import httpx
 
 from workflow_engine import ResumeAnalysisWorkflow, WorkflowProgress
 from parallel_workflow_engine import ParallelResumeAnalysisWorkflow, ParallelConfig, ParallelStrategy
-from resume_analyzer import ResumeAnalyzer
-from chat_service import get_chat_service, ChatService
+from resume_analyzer_factory import get_resume_analyzer
+from base_resume_analyzer import BaseResumeAnalyzer
 from error_handler import RetryConfig, ErrorSeverity
 
 # Configure logging
@@ -24,27 +25,31 @@ logger = logging.getLogger(__name__)
 
 class StreamingResumeAnalyzer:
     """Streaming resume analyzer with real-time progress updates."""
-    
-    def __init__(self, chat_service: Optional[ChatService] = None,
-                 notification_service_url: Optional[str] = None,
+
+    # Class-level cancellation tokens storage
+    # Maps session_id -> asyncio.Event (set when cancelled)
+    _cancellation_tokens: Dict[str, asyncio.Event] = {}
+
+    # Track active sessions per user to prevent concurrent analyses
+    # Maps user_id -> session_id
+    _active_user_sessions: Dict[int, str] = {}
+
+    # Thread lock for thread-safe access to class-level dictionaries
+    _lock: threading.Lock = threading.Lock()
+
+    def __init__(self,
+                 notification_service_url: str = "http://localhost:8001",
                  retry_config: Optional[RetryConfig] = None,
                  parallel_config: Optional[ParallelConfig] = None,
                  enable_parallel: bool = False):
         """Initialize the streaming analyzer.
 
         Args:
-            chat_service: Optional ChatService instance
             notification_service_url: URL of the personal assistant notification service
             retry_config: Configuration for error handling and retries
             parallel_config: Configuration for parallel processing
             enable_parallel: Whether to use parallel processing
         """
-        self.chat_service = chat_service or ChatService()
-
-        # Get notification service URL from environment variable or use default
-        if notification_service_url is None:
-            notification_service_url = os.getenv("PA_NOTIFICATION_SERVICE_URL", "http://localhost:8001")
-        
         # Configure retry settings for analysis (optimized for local LLM)
         if retry_config is None:
             retry_config = RetryConfig(
@@ -66,32 +71,39 @@ class StreamingResumeAnalyzer:
                 timeout_per_section=300.0  # 5 minutes for local LLM processing
             )
         
+        # Initialize resume analyzer using factory pattern FIRST
+        # This automatically selects Ollama or vLLM based on LLM_PROVIDER
+        self.resume_analyzer = get_resume_analyzer()
+
         # Choose workflow engine based on parallel setting
+        # Pass resume_analyzer to workflow (not chat_service) for schema support
         if enable_parallel:
             self.workflow = ParallelResumeAnalysisWorkflow(
-                self.chat_service, retry_config, parallel_config
+                self.resume_analyzer, retry_config, parallel_config
             )
             logger.info(f"Initialized with parallel workflow: {parallel_config.strategy.value}")
         else:
-            self.workflow = ResumeAnalysisWorkflow(self.chat_service, retry_config)
+            self.workflow = ResumeAnalysisWorkflow(self.resume_analyzer, retry_config)
             logger.info("Initialized with sequential workflow")
-        
-        self.resume_analyzer = ResumeAnalyzer(self.chat_service)
         self.notification_service_url = notification_service_url
         self.retry_config = retry_config
         self.parallel_config = parallel_config
         self.enable_parallel = enable_parallel
         
     async def _send_notification(self, user_id: int, notification_type: str, **kwargs):
-        """Send notification to the personal assistant notification service.
-        
+        """Send notification to the personal assistant notification service via HTTP.
+
+        In microservices architecture, services communicate via HTTP APIs.
+        This method sends notifications to Personal Assistant's notification endpoints.
+
         Args:
             user_id: Target user ID
             notification_type: Type of notification (progress, complete, error)
             **kwargs: Additional notification data
         """
         try:
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                # Prepare notification URL and data based on type
                 if notification_type == "progress":
                     url = f"{self.notification_service_url}/api/notifications/career-progress"
                     data = {
@@ -120,64 +132,145 @@ class StreamingResumeAnalyzer:
                 else:
                     logger.warning(f"Unknown notification type: {notification_type}")
                     return
-                
-                # Send notification via direct service call instead of HTTP
-                # This is more efficient for internal communication
-                try:
-                    from personal_assistant.notification_service import notification_service
-                    
-                    if notification_type == "progress":
-                        await notification_service.send_career_analysis_progress(
-                            user_id=user_id,
-                            session_id=kwargs.get("session_id"),
-                            current_section=kwargs.get("current_section"),
-                            progress=kwargs.get("progress"),
-                            total_sections=kwargs.get("total_sections"),
-                            status=kwargs.get("status", "analyzing")
-                        )
-                    elif notification_type == "complete":
-                        await notification_service.send_career_analysis_complete(
-                            user_id=user_id,
-                            session_id=kwargs.get("session_id"),
-                            sections_completed=kwargs.get("sections_completed")
-                        )
-                    elif notification_type == "error":
-                        await notification_service.send_career_analysis_error(
-                            user_id=user_id,
-                            session_id=kwargs.get("session_id"),
-                            error_message=kwargs.get("error_message"),
-                            current_section=kwargs.get("current_section")
-                        )
-                    
-                    logger.info(f"Notification sent: {notification_type} for user {user_id}")
-                    
-                except ImportError:
-                    # Fallback to HTTP if direct import fails
-                    logger.warning("Direct notification service import failed, using HTTP fallback")
-                    response = await client.post(url, json=data, timeout=5.0)
-                    if response.status_code == 200:
-                        logger.info(f"Notification sent via HTTP: {notification_type} for user {user_id}")
-                    else:
-                        logger.error(f"Failed to send notification via HTTP: {response.status_code}")
-                        
+
+                # Send notification via HTTP API (microservices communication)
+                response = await client.post(url, json=data, timeout=5.0)
+                if response.status_code == 200:
+                    logger.debug(f"Notification sent: {notification_type} for user {user_id}")
+                else:
+                    logger.error(f"Failed to send notification: HTTP {response.status_code}")
+
         except Exception as e:
             logger.error(f"Failed to send notification: {e}")
-            # Don't raise the exception to avoid breaking the analysis flow
+            # Don't raise - notifications are non-critical, analysis should continue
         
-    async def analyze_resume_streaming(self, user_id: int, resume_id: Optional[int] = None) -> AsyncGenerator[Dict[str, Any], None]:
+    @classmethod
+    def cancel_analysis(cls, session_id: str) -> bool:
+        """Cancel an ongoing analysis by session ID.
+
+        Args:
+            session_id: The session ID to cancel
+
+        Returns:
+            True if the session was found and cancelled, False otherwise
+        """
+        with cls._lock:
+            if session_id in cls._cancellation_tokens:
+                cls._cancellation_tokens[session_id].set()
+                logger.info(f"Analysis cancelled for session: {session_id}")
+                return True
+        logger.warning(f"No active session found for cancellation: {session_id}")
+        return False
+
+    @classmethod
+    def cancel_user_analysis(cls, user_id: int) -> str:
+        """Cancel any active analysis for a specific user.
+
+        This prevents multiple concurrent analyses for the same user.
+
+        Args:
+            user_id: The user ID to cancel analysis for
+
+        Returns:
+            The old session_id if found and cancelled, None otherwise
+        """
+        with cls._lock:
+            if user_id in cls._active_user_sessions:
+                old_session_id = cls._active_user_sessions[user_id]
+                logger.info(f"Cancelling previous analysis for user {user_id}: {old_session_id}")
+                # Set cancellation token while holding lock
+                if old_session_id in cls._cancellation_tokens:
+                    cls._cancellation_tokens[old_session_id].set()
+                    logger.info(f"Analysis cancelled for session: {old_session_id}")
+                # Remove from active sessions immediately to prevent interference
+                del cls._active_user_sessions[user_id]
+                return old_session_id
+        return None
+
+    @classmethod
+    def is_cancelled(cls, session_id: str) -> bool:
+        """Check if a session has been cancelled.
+
+        Args:
+            session_id: The session ID to check
+
+        Returns:
+            True if the session is cancelled, False otherwise
+        """
+        with cls._lock:
+            if session_id in cls._cancellation_tokens:
+                return cls._cancellation_tokens[session_id].is_set()
+        return False
+
+    async def analyze_resume_streaming(self, user_id: int, resume_id: Optional[int] = None, session_id: Optional[str] = None) -> AsyncGenerator[Dict[str, Any], None]:
         """Analyze resume with streaming progress updates.
-        
+
         Args:
             user_id: The user's ID
             resume_id: Optional specific resume ID to analyze. If None, analyzes the latest resume.
-            
+            session_id: Optional session ID for cancellation support. If None, one will be generated.
+
         Yields:
             Streaming analysis results and progress updates
         """
-        session_id = f"analysis_{user_id}_{int(datetime.now().timestamp())}"
-        
+        # Generate session_id if not provided
+        # Use microseconds to avoid collision if user clicks quickly
+        if session_id is None:
+            import time
+            session_id = f"analysis_{user_id}_{int(time.time() * 1000)}"
+
+        logger.info(f"New analysis request: user={user_id}, session={session_id}")
+
+        # CRITICAL: Cancel any previous analysis for this user before starting new one
+        # This prevents multiple concurrent analyses from running simultaneously
+        old_session_id = self.cancel_user_analysis(user_id)
+        if old_session_id:
+            logger.info(f"Cancelled previous analysis for user {user_id}: {old_session_id}")
+            # Wait for old analysis to fully clean up its cancellation token
+            max_wait = 5.0  # Maximum wait time in seconds
+            wait_interval = 0.2
+            total_wait = 0
+
+            # Use lock while checking token existence to prevent race condition
+            while total_wait < max_wait:
+                with self._lock:
+                    if old_session_id not in self._cancellation_tokens:
+                        break
+                await asyncio.sleep(wait_interval)
+                total_wait += wait_interval
+                logger.debug(f"Waiting for old session {old_session_id} to clean up... ({total_wait:.1f}s)")
+
+            # IMPORTANT: Do NOT delete the old token!
+            # If we delete it, is_cancelled() returns False and old analysis continues.
+            # The old analysis needs the token to remain (and be set) so it can detect cancellation.
+            with self._lock:
+                if old_session_id in self._cancellation_tokens:
+                    # Ensure it's set (cancelled) but don't delete - old analysis needs to see it
+                    self._cancellation_tokens[old_session_id].set()
+                    logger.warning(f"Old session {old_session_id} still running after {total_wait:.1f}s - keeping token set")
+
+        # Register cancellation token for this session (fresh Event, not set)
+        with self._lock:
+            self._cancellation_tokens[session_id] = asyncio.Event()
+            logger.info(f"Created new cancellation token for session: {session_id}, is_set={self._cancellation_tokens[session_id].is_set()}")
+            # Register this session as active for this user
+            self._active_user_sessions[user_id] = session_id
+            logger.info(f"Registered active session for user {user_id}: {session_id}")
+
+        # Set up cancellation check callback for workflow
+        # This allows the workflow to check for cancellation between sections
+        def cancellation_check() -> bool:
+            is_cancelled = self.is_cancelled(session_id)
+            if is_cancelled:
+                logger.info(f"Cancellation check for session {session_id}: CANCELLED")
+            return is_cancelled
+
+        if hasattr(self.workflow, 'cancellation_check'):
+            self.workflow.cancellation_check = cancellation_check
+            logger.info(f"Set cancellation_check callback for session: {session_id}")
+
         try:
-            logger.info(f"Starting streaming analysis for user {user_id}")
+            logger.info(f"Starting streaming analysis for user {user_id}, session {session_id}")
             
             # Send initial progress notification
             await self._send_notification(
@@ -186,15 +279,16 @@ class StreamingResumeAnalyzer:
                 session_id=session_id,
                 current_section="initialization",
                 progress=0,
-                total_sections=8,
+                total_sections=len(self.workflow.sections),  # Dynamic count
                 status="starting"
             )
             
-            # Initial status
+            # Initial status - include session_id for frontend to use for cancellation
             yield {
                 "type": "status",
                 "message": "Initializing analysis...",
                 "progress": 0,
+                "session_id": session_id,
                 "timestamp": datetime.now().isoformat()
             }
             
@@ -270,12 +364,24 @@ class StreamingResumeAnalyzer:
             
             # Process sections using selected workflow engine
             section_count = 0
-            total_sections = 8  # Based on workflow sections
+            total_sections = len(self.workflow.sections)  # Dynamic count from workflow
             
             async for result in analysis_method(resume_content, current_year):
+                # Check for cancellation before processing each result
+                if self.is_cancelled(session_id):
+                    logger.info(f"Analysis cancelled for session {session_id}")
+                    yield {
+                        "type": "cancelled",
+                        "message": "Analysis cancelled by user",
+                        "session_id": session_id,
+                        "sections_completed": section_count,
+                        "timestamp": datetime.now().isoformat()
+                    }
+                    return
+
                 # Add timestamp to all results
                 result["timestamp"] = datetime.now().isoformat()
-                
+
                 # Handle progress updates and send notifications
                 if result.get("type") == "progress":
                     progress_data = result.get("data", {})
@@ -322,8 +428,20 @@ class StreamingResumeAnalyzer:
                 if result.get("type") == "section_complete":
                     section_data = result.get("data", {})
                     section_name = result.get("section", "unknown")
-                    all_results[section_name] = section_data
+
+                    # CRITICAL FIX: Use update() instead of direct assignment
+                    # section_data contains both section analysis AND summary:
+                    # {"professionalIdentity": {...}, "professionalIdentity_summary": "..."}
+                    # We need to merge these into all_results, not nest them
+                    all_results.update(section_data)
                     section_count += 1
+
+                    # Log to verify summary is preserved
+                    summary_key = f"{section_name}_summary"
+                    if summary_key in section_data:
+                        logger.info(f"[STREAMING] Summary preserved for {section_name}: {section_data[summary_key][:50]}...")
+                    else:
+                        logger.warning(f"[STREAMING] No summary found in section_data for {section_name}")
                     
                     # Send section completion notification
                     await self._send_notification(
@@ -374,10 +492,16 @@ class StreamingResumeAnalyzer:
                 
                 # Yield the result to frontend
                 yield result
-                
+
                 # Add small delay to prevent overwhelming the frontend
                 await asyncio.sleep(0.1)
-            
+
+            # IMPORTANT: Add delay after last section to ensure frontend
+            # has time to render the section notification before analysis_complete
+            # This fixes the issue where "Skills Analysis Complete" notification
+            # was being skipped and only "Resume Analysis Complete" was shown
+            await asyncio.sleep(0.5)
+
             # Store the complete analysis in database
             if all_results:
                 try:
@@ -415,14 +539,23 @@ class StreamingResumeAnalyzer:
                         "performance_metrics": performance_metrics,
                         "timestamp": datetime.now().isoformat()
                     }
-                    
+
+                    # Small delay to ensure data is flushed before connection closes
+                    await asyncio.sleep(0.1)
+
+                    # Send end-of-stream marker to signal clean shutdown
+                    yield {
+                        "type": "stream_end",
+                        "timestamp": datetime.now().isoformat()
+                    }
+
                 except Exception as e:
                     logger.error(f"Error storing career insight: {str(e)}")
                     # Get performance metrics even on save failure
                     performance_metrics = {}
                     if hasattr(self.workflow, 'get_performance_metrics'):
                         performance_metrics = self.workflow.get_performance_metrics()
-                    
+
                     yield {
                         "type": "warning",
                         "message": "Analysis completed but failed to save. Results are still available.",
@@ -431,9 +564,12 @@ class StreamingResumeAnalyzer:
                         "performance_metrics": performance_metrics,
                         "timestamp": datetime.now().isoformat()
                     }
-            
+
+                    # Small delay to ensure data is flushed
+                    await asyncio.sleep(0.1)
+
             logger.info(f"Completed streaming analysis for user {user_id}")
-            
+
         except Exception as e:
             logger.error(f"Streaming analysis failed for user {user_id}: {str(e)}")
             
@@ -465,7 +601,24 @@ class StreamingResumeAnalyzer:
                 "original_error": str(e),
                 "timestamp": datetime.now().isoformat()
             }
-    
+
+        finally:
+            logger.info(f"Cleaning up session {session_id} for user {user_id}")
+            # Clean up cancellation token (thread-safe using pop with default)
+            removed_token = self._cancellation_tokens.pop(session_id, None)
+            if removed_token is not None:
+                logger.info(f"Cleaned up cancellation token for session: {session_id}")
+            else:
+                logger.debug(f"Cancellation token already cleaned for session: {session_id}")
+
+            # Clean up user session tracking (only if this session is still the active one)
+            if user_id in self._active_user_sessions:
+                if self._active_user_sessions[user_id] == session_id:
+                    del self._active_user_sessions[user_id]
+                    logger.info(f"Cleaned up active session tracking for user: {user_id}")
+                else:
+                    logger.info(f"Skipping cleanup: active session is {self._active_user_sessions[user_id]}, not {session_id}")
+
     async def get_analysis_status(self) -> Dict[str, Any]:
         """Get current analysis status.
         
@@ -536,7 +689,7 @@ class StreamingResumeAnalyzer:
         # Recreate workflow with new config if it's a parallel workflow
         if hasattr(self.workflow, 'parallel_config'):
             self.workflow = ParallelResumeAnalysisWorkflow(
-                self.chat_service, self.retry_config, parallel_config
+                self.resume_analyzer, self.retry_config, parallel_config
             )
             logger.info(f"Updated parallel config: strategy={parallel_config.strategy.value}, max_concurrent={parallel_config.max_concurrent_sections}")
     
@@ -554,9 +707,9 @@ class StreamingResumeAnalyzer:
             self.parallel_config = parallel_config
         elif not self.parallel_config:
             self.parallel_config = ParallelConfig()
-        
+
         self.workflow = ParallelResumeAnalysisWorkflow(
-            self.chat_service, self.retry_config, self.parallel_config
+            self.resume_analyzer, self.retry_config, self.parallel_config
         )
         self.enable_parallel = True
         logger.info(f"Switched to parallel processing: {self.parallel_config.strategy.value}")
@@ -566,8 +719,8 @@ class StreamingResumeAnalyzer:
         if not self.enable_parallel:
             logger.info("Already using sequential processing")
             return
-        
-        self.workflow = ResumeAnalysisWorkflow(self.chat_service, self.retry_config)
+
+        self.workflow = ResumeAnalysisWorkflow(self.resume_analyzer, self.retry_config)
         self.enable_parallel = False
         logger.info("Switched to sequential processing")
     
@@ -664,15 +817,136 @@ class ProgressNotificationService:
     
     def get_session_status(self, session_id: str) -> Optional[Dict[str, Any]]:
         """Get status for a specific session.
-        
+
         Args:
             session_id: Session identifier
-            
+
         Returns:
             Session status information or None if not found
         """
         return self.active_sessions.get(session_id)
-    
+
+    def get_active_sessions(self) -> List[str]:
+        """Get list of active session IDs.
+
+        Returns:
+            List of active session IDs
+        """
+        return list(self.active_sessions.keys())
+
+    def session_exists(self, session_id: str) -> bool:
+        """Check if a session exists.
+
+        Args:
+            session_id: Session identifier
+
+        Returns:
+            True if session exists, False otherwise
+        """
+        return session_id in self.active_sessions
+
+    def cancel_session(self, session_id: str) -> bool:
+        """Cancel a session.
+
+        Args:
+            session_id: Session identifier
+
+        Returns:
+            True if session was cancelled, False if not found
+        """
+        if session_id in self.active_sessions:
+            self.active_sessions[session_id]["status"] = "cancelled"
+            logger.info(f"Session {session_id} cancelled")
+            return True
+        return False
+
+    def complete_analysis(self, session_id: str, success: bool = True, error: Optional[str] = None):
+        """Mark analysis as complete.
+
+        Args:
+            session_id: Session identifier
+            success: Whether analysis completed successfully
+            error: Error message if failed
+        """
+        if session_id in self.active_sessions:
+            self.active_sessions[session_id]["status"] = "completed" if success else "failed"
+            self.active_sessions[session_id]["end_time"] = datetime.now()
+            if error:
+                self.active_sessions[session_id]["error"] = error
+            logger.info(f"Analysis {session_id} {'completed' if success else 'failed'}")
+
+    def cleanup_session(self, session_id: str):
+        """Clean up a specific session.
+
+        Args:
+            session_id: Session identifier
+        """
+        if session_id in self.active_sessions:
+            del self.active_sessions[session_id]
+            logger.info(f"Cleaned up session {session_id}")
+
+    def update_progress(self, session_id: str, section: str, status: str,
+                       data: Optional[Dict[str, Any]] = None, error: Optional[str] = None):
+        """Update progress for a session.
+
+        Args:
+            session_id: Session identifier
+            section: Current section name
+            status: Current status
+            data: Optional section data
+            error: Optional error message
+        """
+        if session_id in self.active_sessions:
+            self.active_sessions[session_id]["current_section"] = section
+            self.active_sessions[session_id]["status"] = status
+            self.active_sessions[session_id]["last_update"] = datetime.now()
+            if data:
+                self.active_sessions[session_id]["data"] = data
+            if error:
+                self.active_sessions[session_id]["error"] = error
+
+    def get_progress(self, session_id: str) -> Optional[Dict[str, Any]]:
+        """Get progress for a session.
+
+        Args:
+            session_id: Session identifier
+
+        Returns:
+            Progress information or None if not found
+        """
+        return self.active_sessions.get(session_id)
+
+    async def stream_updates(self, session_id: str) -> AsyncGenerator[Dict[str, Any], None]:
+        """Stream updates for a session.
+
+        Args:
+            session_id: Session identifier
+
+        Yields:
+            Progress updates
+        """
+        if session_id not in self.active_sessions:
+            return
+
+        while True:
+            session = self.active_sessions.get(session_id)
+            if not session:
+                break
+
+            yield {
+                "type": "progress",
+                "session_id": session_id,
+                "status": session.get("status"),
+                "current_section": session.get("current_section"),
+                "last_update": session.get("last_update", datetime.now()).isoformat()
+            }
+
+            if session.get("status") in ["completed", "failed", "cancelled"]:
+                yield {"type": "complete", "session_id": session_id}
+                break
+
+            await asyncio.sleep(1)
+
     def cleanup_old_sessions(self, max_age_hours: int = 24):
         """Clean up old sessions.
         

@@ -1,11 +1,19 @@
-import email
+import logging
 import os
-from fastapi import APIRouter, Body, Depends, HTTPException, status, UploadFile, File
+import re
+from fastapi import APIRouter, Body, Depends, HTTPException, status, UploadFile, File, Request
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from datetime import timedelta, datetime, timezone
 from typing import List
 import aiofiles
+
+from backend.utils.rate_limiter import (
+    login_limiter, signup_limiter, password_reset_limiter, otp_limiter,
+    get_client_ip, check_rate_limit
+)
+
+logger = logging.getLogger(__name__)
 
 from backend.services.email_service import EmailService
 from backend.services.otp_service import OTPService
@@ -40,10 +48,15 @@ def get_password_reset_service() -> PasswordResetService:
 
 @router.post("/signup", response_model=schemas.User)
 async def create_user(
+    request: Request,
     user: schemas.UserCreate,
     db: Session = Depends(get_db),
     email_validation_service: EmailValidationService = Depends(get_email_validation_service)
 ):
+    # Rate limiting - prevent brute force registration attempts
+    client_ip = get_client_ip(request)
+    check_rate_limit(signup_limiter, client_ip, "Too many signup attempts. Please try again later.")
+
     # Check if email already exists
     db_user = db.query(User).filter(User.email == user.email).first()
     if db_user:
@@ -86,9 +99,8 @@ async def confirm_registration_otp(
     db: Session = Depends(get_db),
     email_validation_service: EmailValidationService = Depends(get_email_validation_service)
 ):
-    print(f"Received request: {request}") 
-
     # Verify the registration OTP and activate the user account.
+    logger.debug(f"Verify registration request for email: {request.email}")
 
     try:
         result = await email_validation_service.verify_email_validation (
@@ -105,10 +117,6 @@ async def confirm_registration_otp(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="An error occurred during verification")
 
 # Resend verification OTP for users who didn't receive it or it expired.
-import logging
-
-logger = logging.getLogger(__name__)
-
 @router.post("/resend-verification-otp")
 async def resend_verification_otp(
     request: schemas.ResendOTPRequest,  # Assuming you're using request body
@@ -150,7 +158,15 @@ async def resend_verification_otp(
         )
 
 @router.post("/token", response_model=schemas.Token)
-async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+async def login(
+    request: Request,
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    db: Session = Depends(get_db)
+):
+    # Rate limiting - prevent brute force login attempts
+    client_ip = get_client_ip(request)
+    check_rate_limit(login_limiter, client_ip, "Too many login attempts. Please try again later.")
+
     # Verify user (OAuth2PasswordRequestForm uses 'username' field, which contains the email)
     user = db.query(User).filter(User.email == form_data.username).first()
     if not user:
@@ -203,9 +219,10 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = 
         db.commit()
     except Exception as e:
         db.rollback()
+        logger.error(f"Failed to store refresh token: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to store refresh token: {str(e)}"
+            detail="Failed to complete login. Please try again."
         )
 
     return {
@@ -217,13 +234,17 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = 
 # Password reset endpoints
 @router.post("/reset-password-request", response_model=schemas.PasswordResetResponse)
 async def reset_password_request(
-    request: schemas.PasswordResetRequestModel,  
+    http_request: Request,
+    request: schemas.PasswordResetRequestModel,
     db: Session = Depends(get_db),
     password_reset_service: PasswordResetService = Depends(get_password_reset_service)
 ):
-    
-   # Request a password reset OTP for the given email address.
-    
+    # Rate limiting - prevent password reset abuse
+    client_ip = get_client_ip(http_request)
+    check_rate_limit(password_reset_limiter, f"{client_ip}:{request.email}",
+                    "Too many password reset attempts. Please try again later.")
+
+    # Request a password reset OTP for the given email address.
     try:
         result = await password_reset_service.password_reset_request(db, request.email)
         return result
@@ -237,24 +258,36 @@ async def reset_password_request(
             detail="Failed to send password reset email"
         )
 
-import logging
-
-logger = logging.getLogger(__name__)
+def validate_password_complexity(password: str) -> tuple[bool, str]:
+    """
+    Validate password complexity requirements.
+    Returns (is_valid, error_message).
+    """
+    if len(password) < 8:
+        return False, "Password must be at least 8 characters long"
+    if not re.search(r'[A-Z]', password):
+        return False, "Password must contain at least one uppercase letter"
+    if not re.search(r'[a-z]', password):
+        return False, "Password must contain at least one lowercase letter"
+    if not re.search(r'[0-9]', password):
+        return False, "Password must contain at least one digit"
+    return True, ""
 
 @router.post("/reset-password-confirm", response_model=schemas.PasswordResetResponse)
 async def reset_password_confirm(
-    request: schemas.PasswordResetConfirmModel,  
+    request: schemas.PasswordResetConfirmModel,
     db: Session = Depends(get_db),
     password_reset_service: PasswordResetService = Depends(get_password_reset_service)
 ):
     logger.info(f"Password reset attempt for email: {request.email}")
-    
-    # Basic password validation
-    if len(request.new_password) < 8:
-        logger.warning(f"Password too short for email: {request.email}")
+
+    # Password complexity validation
+    is_valid, error_msg = validate_password_complexity(request.new_password)
+    if not is_valid:
+        logger.warning(f"Password validation failed for email: {request.email}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Password must be at least 8 characters long"
+            detail=error_msg
         )
     
     try:
@@ -334,9 +367,10 @@ async def refresh_token_endpoint(
         db.commit()
     except Exception as e:
         db.rollback()
+        logger.error(f"Failed to revoke old refresh token: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to revoke old refresh token: {str(e)}"
+            detail="Failed to refresh token. Please try again."
         )
 
     # Create new access token
@@ -363,9 +397,10 @@ async def refresh_token_endpoint(
         db.commit()
     except Exception as e:
         db.rollback()
+        logger.error(f"Failed to store new refresh token: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to store new refresh token: {str(e)}"
+            detail="Failed to refresh token. Please try again."
         )
 
     return {
@@ -406,9 +441,10 @@ async def logout(
         db.commit()
     except Exception as e:
         db.rollback()
+        logger.error(f"Failed to revoke tokens during logout: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to revoke tokens during logout: {str(e)}"
+            detail="Failed to complete logout. Please try again."
         )
 
     return {
@@ -473,9 +509,10 @@ async def upload_resume(
         async with aiofiles.open(file_path, 'wb') as out_file:
             await out_file.write(content)
     except Exception as e:
+        logger.error(f"Failed to save resume file: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to save file: {str(e)}"
+            detail="Failed to save file. Please try again."
         )
 
     # Create resume record in database
@@ -494,9 +531,10 @@ async def upload_resume(
         # Clean up file if database operation fails
         if os.path.exists(file_path):
             os.remove(file_path)
+        logger.error(f"Failed to save resume metadata: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to save resume metadata: {str(e)}"
+            detail="Failed to save resume. Please try again."
         )
 
     return {

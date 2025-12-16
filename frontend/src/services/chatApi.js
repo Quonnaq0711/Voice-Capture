@@ -3,16 +3,29 @@
  * Handles all HTTP requests to the chat backend running on localhost:8001
  */
 
-// Use relative paths for API calls (proxied through Nginx)
-// In production: /api/pa/ -> http://idii-PA-staging:8001/api/chat/
-// In development: Use environment variables or fallback to dev ports
-const CHAT_API_BASE_URL = process.env.NODE_ENV === 'production'
-  ? '/api/pa'  // Proxied through Nginx in production
-  : (process.env.REACT_APP_PA_URL ? `${process.env.REACT_APP_PA_URL}/api/chat` : 'http://localhost:6001/api/chat');  // Dev mode: port 6001
+// Use relative paths for API calls (proxied through setupProxy.js in dev, Nginx in prod)
+// This ensures all requests go through the proxy, avoiding CORS issues
+// In production: /api/pa/ -> http://idii-PA-staging:8001/api/chat/ (via Nginx)
+// In development: /api/pa/ -> http://localhost:6001/api/chat/ (via setupProxy.js)
+const CHAT_API_BASE_URL = '/api/pa';
+const CAREER_API_BASE_URL = '/api/career';
 
-const CAREER_API_BASE_URL = process.env.NODE_ENV === 'production'
-  ? '/api/career'  // Proxied through Nginx in production
-  : (process.env.REACT_APP_CAREER_URL ? `${process.env.REACT_APP_CAREER_URL}/api/chat` : 'http://localhost:6002/api/chat');  // Dev mode: port 6002
+/**
+ * Parse JSON response with error logging
+ * Replaces empty catch blocks with proper error logging
+ * @param {Response} response - Fetch response object
+ * @returns {Promise<Object>} - Parsed JSON or empty object on failure
+ */
+const parseJsonSafe = async (response) => {
+  try {
+    return await response.json();
+  } catch (err) {
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('[chatApi] Failed to parse JSON response:', err.message);
+    }
+    return {};
+  }
+};
 
 /**
  * Helper function to build absolute URL from relative or absolute path
@@ -51,18 +64,24 @@ export const sendMessage = async (message, sessionId = null, signal = null, apiU
     });
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
+      const errorData = await parseJsonSafe(response);
       throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
     }
 
-    const data = await response.json();
+    const data = await response.json().catch(() => {
+      throw new Error('Invalid response format from server');
+    });
     return data;
   } catch (error) {
     if (error.name === 'AbortError') {
-      console.log('Request was cancelled by user');
+      if (process.env.NODE_ENV === 'development') {
+        console.log('Request was cancelled by user');
+      }
       throw new Error('Request cancelled');
     }
-    console.error('Error sending message to chat API:', error);
+    if (process.env.NODE_ENV === 'development') {
+      console.error('Error sending message to chat API:', error);
+    }
     throw error;
   }
 };
@@ -76,6 +95,11 @@ export const sendMessage = async (message, sessionId = null, signal = null, apiU
 export const checkHealth = async (apiUrl = null) => {
   try {
     const healthUrl = apiUrl ? `${apiUrl}/health` : `${CHAT_API_BASE_URL}/health`;
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[chatApi] checkHealth called with healthUrl:', healthUrl);
+      console.log('[chatApi] CHAT_API_BASE_URL:', CHAT_API_BASE_URL);
+    }
+
     const response = await fetch(healthUrl, {
       method: 'GET',
       headers: {
@@ -83,14 +107,25 @@ export const checkHealth = async (apiUrl = null) => {
       }
     });
 
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[chatApi] Fetch response received:', response.status, response.ok);
+    }
+
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
 
-    const data = await response.json();
+    const data = await response.json().catch(() => {
+      throw new Error('Invalid health check response format');
+    });
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[chatApi] Health check data:', data);
+    }
     return data;
   } catch (error) {
-    console.error('Error checking chat API health:', error);
+    if (process.env.NODE_ENV === 'development') {
+      console.error('[chatApi] Error checking chat API health:', error);
+    }
     throw error;
   }
 };
@@ -115,7 +150,7 @@ export const clearMemory = async (sessionId = null) => {
     });
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
+      const errorData = await parseJsonSafe(response);
       throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
     }
 
@@ -141,7 +176,7 @@ export const getConversationHistory = async () => {
     });
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
+      const errorData = await parseJsonSafe(response);
       throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
     }
 
@@ -192,11 +227,15 @@ export const isApiAvailable = async () => {
 };
 
 /**
- * Generate a session ID for conversation tracking
+ * Generate a cryptographically secure session ID for conversation tracking
+ * Uses crypto.getRandomValues() instead of Math.random() for security
  * @returns {string} - Unique session ID
  */
 export const generateSessionId = () => {
-  return `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  const array = new Uint8Array(16);
+  crypto.getRandomValues(array);
+  const randomHex = Array.from(array, b => b.toString(16).padStart(2, '0')).join('');
+  return `session_${Date.now()}_${randomHex}`;
 };
 
 /**
@@ -220,7 +259,7 @@ export const removeMessagesAfterIndex = async (messageIndex, sessionId = null) =
     });
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
+      const errorData = await parseJsonSafe(response);
       throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
     }
 
@@ -257,7 +296,7 @@ export const updateMessageAtIndex = async (messageIndex, newContent, sessionId =
     });
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
+      const errorData = await parseJsonSafe(response);
       throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
     }
 
@@ -283,8 +322,14 @@ export const sendMessageStream = (message, sessionId, userId, onToken, onComplet
   const baseUrl = streamApiUrl || `${CHAT_API_BASE_URL}/message/stream`;
   const absoluteUrl = buildAbsoluteUrl(baseUrl);
 
-  // Get authentication token from localStorage
-  const token = localStorage.getItem('token');
+  // Get authentication token from localStorage (with try-catch for private browsing mode)
+  let token;
+  try {
+    token = localStorage.getItem('token');
+  } catch (e) {
+    if (onError) onError('Storage access denied. Please check browser settings.');
+    return null;
+  }
   if (!token) {
     if (onError) onError('Not authenticated. Please log in.');
     return null;
@@ -300,22 +345,65 @@ export const sendMessageStream = (message, sessionId, userId, onToken, onComplet
 
   const eventSource = new EventSource(url.toString());
 
+  // Track connection state for better error handling
+  let connectionOpened = false;
+  let connectionTimeout = null;
+  const CONNECTION_TIMEOUT_MS = 30000; // 30 second timeout for initial connection
+
+  // Helper function to properly cleanup and close EventSource
+  // Prevents memory leak by always clearing the timeout
+  const cleanupAndClose = () => {
+    if (connectionTimeout) {
+      clearTimeout(connectionTimeout);
+      connectionTimeout = null;
+    }
+    eventSource.close();
+  };
+
+  // Set up connection timeout
+  connectionTimeout = setTimeout(() => {
+    if (!connectionOpened) {
+      cleanupAndClose();
+      if (onError) onError('Connection timeout. The server took too long to respond.');
+    }
+  }, CONNECTION_TIMEOUT_MS);
+
+  // Cache DOM element reference to avoid repeated queries (performance optimization)
+  let cachedCareerAgentElement = null;
+  const getCareerAgentElement = () => {
+    if (!cachedCareerAgentElement) {
+      cachedCareerAgentElement = document.querySelector('[data-agent-type="career"]');
+    }
+    return cachedCareerAgentElement;
+  };
+
+  // Helper to dispatch career agent events (reduces code duplication)
+  const dispatchCareerEvent = (eventName, detail) => {
+    const element = getCareerAgentElement();
+    if (element) {
+      element.dispatchEvent(new CustomEvent(eventName, { detail }));
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`${eventName} event dispatched:`, detail.section || detail.progress || 'complete');
+      }
+    }
+  };
+
   // Handle incoming messages
   eventSource.addEventListener('message', (event) => {
     try {
       const data = JSON.parse(event.data);
-      
+
       switch (data.type) {
         case 'token':
           if (onToken) onToken(data.content);
           break;
         case 'complete':
           if (onComplete) onComplete(data.content, null, data.follow_up_questions);
-          eventSource.close();
+          cleanupAndClose();
           break;
         case 'error':
           if (onError) onError(data.content);
-          eventSource.close();
+          cleanupAndClose();
           break;
         case 'message':
           // Initial assistant message is complete; treat it as a final response, not streaming
@@ -324,100 +412,93 @@ export const sendMessageStream = (message, sessionId, userId, onToken, onComplet
         case 'career_insights':
           // Handle career insights data
           if (onComplete) onComplete(data.message, data.professional_data, data.follow_up_questions);
-          eventSource.close();
+          cleanupAndClose();
           break;
         case 'section_complete':
           // Handle section completion and dispatch DOM event
-          const careerAgentElement = document.querySelector('[data-agent-type="career"]');
-          if (careerAgentElement && data.section && data.data) {
-            const sectionCompleteEvent = new CustomEvent('sectionComplete', {
-              detail: {
-                section: data.section,
-                data: data.data,
-                error: data.error || null
-              }
+          if (data.section && data.data) {
+            dispatchCareerEvent('sectionComplete', {
+              section: data.section,
+              data: data.data,
+              error: data.error || null
             });
-            careerAgentElement.dispatchEvent(sectionCompleteEvent);
-            console.log('Section complete event dispatched:', data.section);
           }
           break;
         case 'section_start':
           // Handle section start and dispatch DOM event
-          const careerAgentStartElement = document.querySelector('[data-agent-type="career"]');
-          if (careerAgentStartElement && data.section) {
-            const sectionStartEvent = new CustomEvent('sectionStart', {
-              detail: {
-                section: data.section,
-                display_name: data.display_name,
-                description: data.description,
-                progress: data.progress || 0
-              }
+          if (data.section) {
+            dispatchCareerEvent('sectionStart', {
+              section: data.section,
+              display_name: data.display_name,
+              description: data.description,
+              progress: data.progress || 0
             });
-            careerAgentStartElement.dispatchEvent(sectionStartEvent);
-            console.log('Section start event dispatched:', data.section);
           }
           break;
         case 'analysis_progress':
           // Handle analysis progress and dispatch DOM event
-          const careerAgentProgressElement = document.querySelector('[data-agent-type="career"]');
-          if (careerAgentProgressElement) {
-            const progressEvent = new CustomEvent('analysisProgress', {
-              detail: {
-                progress: data.progress,
-                currentSection: data.current_section,
-                message: data.message,
-                status: data.status || 'analyzing'
-              }
-            });
-            careerAgentProgressElement.dispatchEvent(progressEvent);
-          }
+          dispatchCareerEvent('analysisProgress', {
+            progress: data.progress,
+            currentSection: data.current_section,
+            message: data.message,
+            status: data.status || 'analyzing'
+          });
           break;
         case 'analysis_complete':
           // Handle analysis completion
-          const careerAgentCompleteElement = document.querySelector('[data-agent-type="career"]');
-          if (careerAgentCompleteElement) {
-            const completeEvent = new CustomEvent('analysisComplete', {
-              detail: {
-                success: !data.error,
-                professional_data: data.professional_data,
-                message: data.message,
-                performance_metrics: data.performance_metrics
-              }
-            });
-            careerAgentCompleteElement.dispatchEvent(completeEvent);
-          }
+          dispatchCareerEvent('analysisComplete', {
+            success: !data.error,
+            professional_data: data.professional_data,
+            message: data.message,
+            performance_metrics: data.performance_metrics
+          });
           if (onComplete) onComplete(data.message, data.professional_data, data.follow_up_questions);
-          eventSource.close();
+          cleanupAndClose();
           break;
         default:
-          console.warn('Unknown message type:', data.type);
+          if (process.env.NODE_ENV === 'development') {
+            console.warn('Unknown message type:', data.type);
+          }
       }
     } catch (error) {
       console.error('Error parsing SSE data:', error);
       if (onError) onError('Error parsing response data');
-      eventSource.close();
+      cleanupAndClose();
     }
   });
 
   // Handle connection errors
   eventSource.onerror = (error) => {
     console.error('SSE connection error:', error);
-    if (eventSource.readyState === EventSource.CLOSED) {
-      console.log('SSE connection was closed');
-      // Check if this might be an authentication error (EventSource doesn't expose status codes)
-      // If the connection closes immediately, it's likely a 401/403
-      if (onError) {
-        onError('Connection error occurred. This may be due to authentication failure or network issues.');
-      }
+
+    // Determine error type based on connection state
+    let errorMessage;
+    if (!connectionOpened) {
+      // Connection never opened - likely auth failure or server unreachable
+      errorMessage = 'Unable to connect. Please check your authentication and try again.';
+    } else if (eventSource.readyState === EventSource.CLOSED) {
+      // Connection was open but closed unexpectedly
+      errorMessage = 'Connection lost. The server closed the connection unexpectedly.';
     } else {
-      if (onError) onError('Connection error occurred');
+      // Connection error while still trying to connect
+      errorMessage = 'Connection error. Please check your network and try again.';
     }
-    eventSource.close();
+
+    if (onError) onError(errorMessage);
+    cleanupAndClose();
   };
 
   // Handle connection open
   eventSource.onopen = () => {
-    console.log('SSE connection established');
+    connectionOpened = true;
+    // Clear the connection timeout since we connected successfully
+    if (connectionTimeout) {
+      clearTimeout(connectionTimeout);
+      connectionTimeout = null;
+    }
+    if (process.env.NODE_ENV === 'development') {
+      console.log('SSE connection established');
+    }
   };
 
   return eventSource;
@@ -425,23 +506,36 @@ export const sendMessageStream = (message, sessionId, userId, onToken, onComplet
 
 /**
  * Handle API errors and provide user-friendly messages
+ * Uses generic messages to prevent sensitive information leakage
  * @param {Error} error - The error object
  * @returns {string} - User-friendly error message
  */
 export const handleApiError = (error) => {
+  // Log actual error for debugging (not exposed to users)
+  console.error('API error:', error.message);
+
   if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
-    return 'Unable to connect to the chat service. Please make sure the chat API is running on localhost:8001.';
+    return 'Unable to connect to the service. Please check your connection.';
   }
-  
+
   if (error.message.includes('500')) {
-    return 'The chat service is experiencing issues. Please try again in a moment.';
+    return 'Service temporarily unavailable. Please try again later.';
   }
-  
+
+  if (error.message.includes('401') || error.message.includes('403')) {
+    return 'Authentication required. Please log in again.';
+  }
+
   if (error.message.includes('400')) {
-    return 'Invalid message format. Please check your input and try again.';
+    return 'Invalid request. Please check your input.';
   }
-  
-  return error.message || 'An unexpected error occurred. Please try again.';
+
+  if (error.message.includes('404')) {
+    return 'Resource not found.';
+  }
+
+  // Generic fallback - never expose raw error messages
+  return 'An unexpected error occurred. Please try again.';
 };
 
 /**
@@ -471,7 +565,7 @@ export const getCareerInsights = async (userId) => {
     });
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
+      const errorData = await parseJsonSafe(response);
       throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
     }
 
@@ -514,7 +608,7 @@ export const getCareerInsightsByResume = async (resumeId) => {
     });
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
+      const errorData = await parseJsonSafe(response);
       throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
     }
 

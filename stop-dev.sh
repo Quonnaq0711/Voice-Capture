@@ -103,16 +103,64 @@ stop_service "backend"
 stop_service "pa"
 stop_service "career"
 
-# Stop Ollama instances
-stop_service "ollama1"
-stop_service "ollama2"
+# Stop LLM Services (Ollama or vLLM based on LLM_PROVIDER)
+# Define ENV_FILE first
+ENV_FILE="$PROJECT_ROOT/.env.dev"
+
+# Check if we're using vLLM
+if [ -f "$ENV_FILE" ]; then
+    LLM_PROVIDER=$(grep "^LLM_PROVIDER=" "$ENV_FILE" | cut -d'=' -f2)
+else
+    LLM_PROVIDER="ollama"
+fi
+
+echo ""
+echo -e "${BLUE}LLM Provider: ${GREEN}${LLM_PROVIDER:-ollama}${NC}"
+
+if [ "$LLM_PROVIDER" = "vllm" ]; then
+    echo -e "${BLUE}Detected vLLM mode - stopping vLLM server...${NC}"
+
+    # Stop vLLM using the dedicated script
+    if [ -f "$PROJECT_ROOT/stop-vllm-dev.sh" ]; then
+        chmod +x "$PROJECT_ROOT/stop-vllm-dev.sh"
+        bash "$PROJECT_ROOT/stop-vllm-dev.sh"
+    else
+        # Fallback: Stop vLLM processes directly
+        VLLM_PIDS=$(pgrep -f "vllm.entrypoints.openai.api_server")
+        if [ -n "$VLLM_PIDS" ]; then
+            echo -e "${YELLOW}Stopping vLLM server processes...${NC}"
+            for PID in $VLLM_PIDS; do
+                echo "  Stopping vLLM process $PID..."
+                kill -TERM $PID 2>/dev/null
+            done
+            sleep 2
+
+            # Force kill if still running
+            REMAINING=$(pgrep -f "vllm.entrypoints.openai.api_server")
+            if [ -n "$REMAINING" ]; then
+                for PID in $REMAINING; do
+                    kill -9 $PID 2>/dev/null
+                done
+            fi
+            echo -e "${GREEN}✓${NC} vLLM server stopped"
+        fi
+    fi
+
+    # Stop Ollama 2 (Career Agent)
+    stop_service "ollama2"
+
+else
+    # Traditional Ollama mode
+    echo -e "${BLUE}Detected Ollama mode - stopping Ollama instances...${NC}"
+    stop_service "ollama1"
+    stop_service "ollama2"
+fi
 
 # Additional cleanup: Find any remaining processes on dev ports (PRECISE MODE)
 echo ""
 echo -e "${BLUE}Checking for remaining processes on dev ports...${NC}"
 
 # Read ports from .env.dev to ensure we only target dev environment ports
-ENV_FILE="$PROJECT_ROOT/.env.dev"
 if [ -f "$ENV_FILE" ]; then
     # Extract port values from .env.dev
     BACKEND_PORT=$(grep "^BACKEND_PORT=" "$ENV_FILE" | cut -d'=' -f2)
@@ -121,21 +169,32 @@ if [ -f "$ENV_FILE" ]; then
     FRONTEND_PORT=$(grep "^FRONTEND_PORT=" "$ENV_FILE" | cut -d'=' -f2)
     OLLAMA1_PORT=$(grep "^OLLAMA1_PORT=" "$ENV_FILE" | cut -d'=' -f2)
     OLLAMA2_PORT=$(grep "^OLLAMA2_PORT=" "$ENV_FILE" | cut -d'=' -f2)
+    VLLM_PORT=$(grep "^VLLM_PORT=" "$ENV_FILE" | cut -d'=' -f2)
 
-    # Build ports array from .env.dev
+    # Set defaults if not found
+    VLLM_PORT=${VLLM_PORT:-8888}
+
+    # Build ports array from .env.dev based on LLM provider
     PORTS=()
     [ ! -z "$BACKEND_PORT" ] && PORTS+=("$BACKEND_PORT")
     [ ! -z "$PA_PORT" ] && PORTS+=("$PA_PORT")
     [ ! -z "$CAREER_PORT" ] && PORTS+=("$CAREER_PORT")
     [ ! -z "$FRONTEND_PORT" ] && PORTS+=("$FRONTEND_PORT")
-    [ ! -z "$OLLAMA1_PORT" ] && PORTS+=("$OLLAMA1_PORT")
-    [ ! -z "$OLLAMA2_PORT" ] && PORTS+=("$OLLAMA2_PORT")
 
-    echo -e "${CYAN}ℹ️  Using ports from .env.dev: ${PORTS[*]}${NC}"
+    # Add LLM-specific ports based on provider
+    if [ "$LLM_PROVIDER" = "vllm" ]; then
+        [ ! -z "$VLLM_PORT" ] && PORTS+=("$VLLM_PORT")
+        [ ! -z "$OLLAMA2_PORT" ] && PORTS+=("$OLLAMA2_PORT")
+    else
+        [ ! -z "$OLLAMA1_PORT" ] && PORTS+=("$OLLAMA1_PORT")
+        [ ! -z "$OLLAMA2_PORT" ] && PORTS+=("$OLLAMA2_PORT")
+    fi
+
+    echo -e "${CYAN}ℹ️  Checking ports for ${LLM_PROVIDER} mode: ${PORTS[*]}${NC}"
 else
     # Fallback to hardcoded ports if .env.dev not found
     echo -e "${YELLOW}⚠️  .env.dev not found, using default ports${NC}"
-    PORTS=(5000 6001 6002 1000 12434 12435)
+    PORTS=(5000 6001 6002 1000 12434 12435 8888)
 fi
 
 FOUND_ORPHAN=false

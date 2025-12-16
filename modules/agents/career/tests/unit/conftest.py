@@ -18,6 +18,14 @@ from workflow_engine import ResumeAnalysisWorkflow
 from streaming_analyzer import StreamingResumeAnalyzer
 from error_handler import RetryConfig
 
+# Import vLLM implementations
+try:
+    from chat_service_vllm import ChatServiceVLLM
+    from resume_analyzer_vllm import ResumeAnalyzerVLLM
+except ImportError:
+    ChatServiceVLLM = None
+    ResumeAnalyzerVLLM = None
+
 @pytest.fixture(scope="session")
 def event_loop():
     """Create an instance of the default event loop for the test session."""
@@ -247,3 +255,57 @@ def generate_test_session_id():
     def _generate(user_id: int = 123) -> str:
         return f"test_session_{user_id}_{int(datetime.now().timestamp())}"
     return _generate
+
+@pytest.fixture
+def mock_chat_service_vllm():
+    """Mock ChatServiceVLLM for testing."""
+    if ChatServiceVLLM is None:
+        pytest.skip("ChatServiceVLLM not available")
+
+    service = Mock(spec=ChatServiceVLLM)
+    service.generate_response = AsyncMock()
+    service.get_session_history = Mock()
+    service.get_user_profile = AsyncMock(return_value=None)
+    service._create_llm_with_max_tokens = Mock()
+    service._count_message_tokens = Mock(return_value=100)
+    service._calculate_dynamic_max_tokens = Mock(return_value=2048)
+    service._apply_sliding_window = Mock()
+    service._ensure_alternating_roles = Mock()
+    service._generate_follow_up_sync = Mock(return_value="Question 1?")
+    service._optimize_sync_query = Mock(return_value="optimized query")
+    service.cleanup = Mock()
+
+    # Set attributes
+    service.model_name = "test-model"
+    service.api_base = "http://test:8888/v1"
+    service.temperature = 0.7
+    service.max_tokens = 2048
+    service.store = {}
+
+    return service
+
+@pytest.fixture
+def mock_resume_analyzer_vllm():
+    """Mock ResumeAnalyzerVLLM for testing."""
+    if ResumeAnalyzerVLLM is None:
+        pytest.skip("ResumeAnalyzerVLLM not available")
+
+    analyzer = Mock(spec=ResumeAnalyzerVLLM)
+    analyzer.analyze_resume = AsyncMock()
+    analyzer._create_llm_with_schema = Mock()
+    analyzer.store_career_insight = AsyncMock()
+    analyzer.get_latest_career_insight = AsyncMock()
+    analyzer.get_latest_resume = AsyncMock()
+
+    # Set attributes
+    analyzer.model_name = "test-model"
+    analyzer.api_base = "http://test:8888/v1"
+    analyzer.temperature = 0.7
+    analyzer.max_tokens = 2048
+    analyzer.base_llm_config = {
+        "model": "test-model",
+        "openai_api_base": "http://test:8888/v1",
+        "openai_api_key": "EMPTY"
+    }
+
+    return analyzer

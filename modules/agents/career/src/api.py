@@ -1,14 +1,19 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from typing import Optional, Dict, Any
-from chat_service import get_chat_service, ChatService
-from resume_analyzer import ResumeAnalyzer
 from sqlalchemy.orm import Session
 import sys
 import os
 
 # Add project root to path for imports
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', '..', '..'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '..'))
+# Add current directory to path for local imports
+sys.path.insert(0, os.path.dirname(__file__))
+
+from chat_service_factory import get_chat_service
+from base_chat_service import BaseChatService
+from resume_analyzer_factory import get_resume_analyzer
+from base_resume_analyzer import BaseResumeAnalyzer
 
 from backend.db.database import get_db
 from backend.utils.auth import get_current_user, get_current_user_from_query
@@ -43,7 +48,7 @@ from fastapi import Request, Query
 async def send_message(
     chat_request: ChatRequest,
     current_user: User = Depends(get_current_user),
-    chat_service: ChatService = Depends(get_chat_service),
+    chat_service: BaseChatService = Depends(get_chat_service),
     db: Session = Depends(get_db)
 ):
     """
@@ -72,7 +77,9 @@ async def send_message(
     try:
         result = await chat_service.generate_response(
             user_message=chat_request.message,
-            session_id=chat_request.session_id
+            session_id=chat_request.session_id,
+            user_id=current_user.id,
+            db=db
         )
         return result
     except Exception as e:
@@ -85,7 +92,7 @@ async def send_message_stream(
     session_id: Optional[str] = Query(None, description="Session ID"),
     current_user: User = Depends(get_current_user_from_query),
     request: Request = None,
-    chat_service: ChatService = Depends(get_chat_service),
+    chat_service: BaseChatService = Depends(get_chat_service),
     db: Session = Depends(get_db)
 ):
     """
@@ -172,7 +179,7 @@ async def send_message_stream(
 
 @router.get("/health", response_model=HealthResponse)
 async def health_check(
-    chat_service: ChatService = Depends(get_chat_service)
+    chat_service: BaseChatService = Depends(get_chat_service)
 ):
     """
     Check the health status of the career agent chat service.
@@ -220,7 +227,7 @@ async def health_check(
 
 @router.get("/health/deep", response_model=HealthResponse)
 async def deep_health_check(
-    chat_service: ChatService = Depends(get_chat_service)
+    chat_service: BaseChatService = Depends(get_chat_service)
 ):
     """
     Perform a deep health check that actually tests Ollama model connection.
@@ -302,8 +309,9 @@ async def get_career_insights(
         )
 
     try:
-        # Initialize resume analyzer to access career insights methods
-        resume_analyzer = ResumeAnalyzer()
+        # Initialize resume analyzer using factory pattern
+        # This automatically selects Ollama or vLLM based on LLM_PROVIDER
+        resume_analyzer = get_resume_analyzer()
 
         # Get the latest career insight for the user
         logger.info(f"Retrieving career insights for user {user_id}")
@@ -360,30 +368,9 @@ async def get_career_insights_by_resume(
     logger = logging.getLogger(__name__)
 
     try:
-        # First, verify the resume belongs to the authenticated user
-        from backend.models.resume import Resume
-        resume = db.query(Resume).filter(Resume.id == resume_id).first()
-
-        if not resume:
-            logger.warning(f"Resume {resume_id} not found")
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Resume not found"
-            )
-
-        # Authorization check - verify resume ownership
-        if resume.user_id != current_user.id:
-            logger.warning(
-                f"Authorization denied: User {current_user.id} ({current_user.email}) "
-                f"attempted to access resume {resume_id} belonging to user {resume.user_id}"
-            )
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You do not have permission to access this resume"
-            )
-
-        # Initialize resume analyzer to access career insights methods
-        resume_analyzer = ResumeAnalyzer()
+        # Initialize resume analyzer using factory pattern
+        # This automatically selects Ollama or vLLM based on LLM_PROVIDER
+        resume_analyzer = get_resume_analyzer()
 
         # Get career insight for the specific resume
         logger.info(f"Retrieving career insights for resume {resume_id}, user {current_user.id}")
@@ -422,7 +409,7 @@ async def get_career_insights_by_resume(
 async def generate_internal(
     chat_request: ChatRequest,
     api_key: str = Query(None, alias="api_key"),
-    chat_service: ChatService = Depends(get_chat_service)
+    chat_service: BaseChatService = Depends(get_chat_service)
 ):
     """
     Internal endpoint for generating AI responses without user authentication.

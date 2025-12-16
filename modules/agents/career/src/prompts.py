@@ -21,9 +21,9 @@ Please provide a comprehensive analysis in the exact JSON format specified in th
 # Section-specific analysis prompts
 SECTION_ANALYSIS_PROMPTS = {
     "professionalIdentity": """
-Analyze the professional identity section of this resume and extract key information with high precision.
+Analyze the professional identity section of this resume and extract key information with high precision, including market position assessment.
 
-IMPORTANT INSTRUCTIONS:
+PART 1 - PROFESSIONAL IDENTITY ANALYSIS:
 1. For "title": Create a concise, one-sentence professional title that captures the person's primary expertise and seniority level (e.g., "Senior Software Engineer specializing in full-stack web development" or "Marketing Manager with expertise in digital campaigns and brand strategy")
 2. For "summary": Write a comprehensive 2-3 sentence career summary highlighting experience, skills, and value proposition
 3. For "keyHighlights": Extract 3-6 most impressive achievements or skills, be specific with numbers/metrics when available
@@ -33,6 +33,40 @@ IMPORTANT INSTRUCTIONS:
 7. For "location": Extract current city and country/state if mentioned
 
 If any information is not clearly stated in the resume, use "Not specified" for that field.
+
+PART 2 - MARKET POSITION ASSESSMENT:
+Based on the resume content, evaluate the candidate's position in the job market:
+1. "competitiveness" (0-100): How competitive is this profile in the current market? Consider experience level, skills relevance, career progression, and industry demand.
+   - 85-100: Highly competitive (top-tier profile, in-demand skills, strong track record)
+   - 70-84: Above average competitive (solid experience, relevant skills, good progression)
+   - 50-69: Average competitive (meets market standards, some room for improvement)
+   - Below 50: Below average (significant gaps or outdated skills)
+
+2. "skillRelevance" (0-100): How relevant are the candidate's skills to current market trends?
+   - 90-100: Highly relevant (cutting-edge skills, high demand technologies)
+   - 75-89: Very relevant (modern skills, widely sought after)
+   - 60-74: Moderately relevant (standard skills, some updating needed)
+   - Below 60: Low relevance (outdated skills, require significant updating)
+
+3. "industryDemand" (0-100): What is the current demand for professionals in this industry/role?
+   - 80-100: High demand (rapidly growing sector, talent shortage)
+   - 60-79: Moderate-high demand (stable growth, good opportunities)
+   - 40-59: Moderate demand (some opportunities, competitive)
+   - Below 40: Low demand (declining sector, limited opportunities)
+
+4. "careerPotential" (0-100): What is the overall career growth potential?
+   - 85-100: Excellent potential (clear upward trajectory, leadership qualities)
+   - 70-84: Good potential (solid foundation, multiple growth paths)
+   - 50-69: Moderate potential (some growth opportunities, needs development)
+   - Below 50: Limited potential (plateaued, requires significant pivoting)
+
+PART 3 - DASHBOARD SUMMARY:
+Generate a concise 3-bullet summary for dashboard display:
+- Exactly 3 bullets using • symbol
+- Each bullet: 6-8 words maximum
+- Specific, impactful, NO generic advice
+- Focus on key achievements, skills, or unique value
+- Format: "• Bullet 1\n• Bullet 2\n• Bullet 3"
 
 Resume Content:
 {resume_content}
@@ -46,11 +80,113 @@ Return ONLY valid JSON in this exact format:
     "currentRole": "<exact_job_title>",
     "currentIndustry": "<industry_sector>",
     "currentCompany": "<company_name>",
-    "location": "<city_country_or_state>"
-  }}
+    "location": "<city_country_or_state>",
+    "marketPosition": {{
+      "competitiveness": <number_0_to_100>,
+      "skillRelevance": <number_0_to_100>,
+      "industryDemand": <number_0_to_100>,
+      "careerPotential": <number_0_to_100>
+    }}
+  }},
+  "professionalIdentity_summary": "• <bullet_1_6_8_words>\n• <bullet_2_6_8_words>\n• <bullet_3_6_8_words>"
 }}
 """,
-    
+
+    "educationBackground": """
+Analyze the education background section of this resume and extract comprehensive educational information.
+
+EXTRACTION GUIDELINES:
+1. Extract ALL degrees (Bachelor's, Master's, PhD, Associate's, High School Diploma, etc.)
+2. For each educational entry, extract:
+   - Institution name (full, official name)
+   - Degree type and field of study/major
+   - Start and end dates in YYYY.MM format (use .09 for Fall, .01 for Spring if month unclear)
+   - GPA if mentioned (format as "X.X/4.0" or "Not specified")
+   - Academic honors (Summa/Magna/Cum Laude, Dean's List, etc. or "None")
+   - Relevant coursework (select 3-5 most relevant/impressive courses)
+3. Extract professional certifications separate from degrees
+4. Identify academic achievements (publications, awards, scholarships, research projects)
+5. Calculate total years of higher education (exclude high school)
+
+COLOR SCHEME GUIDANCE:
+- Use varied colors from this palette for different institutions:
+  - Blue shades: #3B82F6, #60A5FA, #93C5FD
+  - Indigo shades: #6366F1, #818CF8, #A5B4FC
+  - Purple shades: #8B5CF6, #A78BFA, #C4B5FD
+  - Green shades: #10B981, #34D399, #6EE7B7
+- Matching bgColor classes: bg-blue-50, bg-indigo-50, bg-purple-50, bg-green-50
+
+Resume Content:
+{resume_content}
+
+Current Year/Month: {current_year}
+
+DASHBOARD SUMMARY REQUIREMENT:
+Generate a concise 3-bullet summary for dashboard display:
+- Exactly 3 bullets using • symbol
+- Each bullet: 6-8 words maximum
+- Specific, impactful, NO generic advice
+- Focus on: highest degree, prestigious institution, relevant certifications
+- Format: "• Bullet 1\n• Bullet 2\n• Bullet 3"
+
+Return ONLY valid JSON in this exact format:
+{{
+  "educationBackground": {{
+    "highestDegree": "<e.g., Master of Science in Computer Science>",
+    "totalYearsOfEducation": <number_e.g._6>,
+    "educationTimeline": [
+      {{
+        "institution": "<exact_university_name>",
+        "degree": "<degree_type_e.g._Master_of_Science>",
+        "major": "<field_of_study_e.g._Computer_Science>",
+        "startYear": <YYYY.MM_e.g._2019.09>,
+        "endYear": <YYYY.MM_e.g._2021.06>,
+        "gpa": "<e.g._3.9/4.0_or_Not_specified>",
+        "honors": "<e.g._Summa_Cum_Laude_or_None>",
+        "relevantCoursework": ["<course_1>", "<course_2>", "<course_3>"],
+        "color": "<hex_color_e.g._#3B82F6>",
+        "bgColor": "<tailwind_class_e.g._bg-blue-50>"
+      }},
+      {{
+        "institution": "<another_institution>",
+        "degree": "<Bachelor_of_Science>",
+        "major": "<major_field>",
+        "startYear": <YYYY.MM>,
+        "endYear": <YYYY.MM>,
+        "gpa": "<GPA_or_Not_specified>",
+        "honors": "<honors_or_None>",
+        "relevantCoursework": ["<course_1>", "<course_2>"],
+        "color": "<hex_color>",
+        "bgColor": "<tailwind_class>"
+      }}
+    ],
+    "certifications": [
+      {{
+        "name": "<certification_name_e.g._AWS_Solutions_Architect>",
+        "issuer": "<issuing_org_e.g._Amazon_Web_Services>",
+        "year": <year_obtained_e.g._2023>,
+        "status": "active"
+      }}
+    ],
+    "academicAchievements": [
+      "<achievement_1_e.g._Published_2_papers_in_IEEE_conferences>",
+      "<achievement_2_e.g._Received_Merit_Scholarship>",
+      "<achievement_3_e.g._Research_Assistant_for_AI_Lab>"
+    ]
+  }},
+  "educationBackground_summary": "• <bullet_1_6_8_words>\n• <bullet_2_6_8_words>\n• <bullet_3_6_8_words>"
+}}
+
+CRITICAL REQUIREMENTS:
+- List education in REVERSE chronological order (most recent first)
+- Use YYYY.MM format for all dates
+- Always include "gpa" and "honors" fields (use "Not specified"/"None" if not mentioned)
+- Certifications status should be "active" unless explicitly stated as expired
+- If no certifications found, use empty array []
+- If no academic achievements found, use empty array []
+- Calculate totalYearsOfEducation as sum of all higher education durations
+""",
+
     "workExperience": """
 Analyze the work experience section of this resume with high precision for time calculations and career analytics.
 
@@ -78,6 +214,14 @@ Resume Content:
 {resume_content}
 
 Current Year/Month: {current_year}
+
+DASHBOARD SUMMARY REQUIREMENT:
+Generate a concise 3-bullet summary for dashboard display:
+- Exactly 3 bullets using • symbol
+- Each bullet: 6-8 words maximum
+- Specific, impactful, NO generic advice
+- Focus on key career insights (e.g., total years, role variety, industry shifts)
+- Format: "• Bullet 1\n• Bullet 2\n• Bullet 3"
 
 Return ONLY valid JSON in this exact format:
 {{
@@ -128,7 +272,8 @@ Return ONLY valid JSON in this exact format:
         "color": "<hex_color_code>"
       }}
     ]
-  }}
+  }},
+  "workExperience_summary": "• <bullet_1_6_8_words>\n• <bullet_2_6_8_words>\n• <bullet_3_6_8_words>"
 }}
 
 CRITICAL REQUIREMENTS:
@@ -164,6 +309,14 @@ DO NOT skip any years in the timeline. Generate data for ALL years from start to
 
 Resume Content:
 {resume_content}
+
+DASHBOARD SUMMARY REQUIREMENT:
+Generate a concise 3-bullet summary for dashboard display:
+- Exactly 3 bullets using • symbol
+- Each bullet: 6-8 words maximum
+- Specific, impactful, NO generic advice
+- Focus on key salary insights (e.g., current salary, growth rate, market position)
+- Format: "• Bullet 1\n• Bullet 2\n• Bullet 3"
 
 Return only the salaryAnalysis section as JSON, ensuring the structure matches the following:
 {{
@@ -206,7 +359,8 @@ Return only the salaryAnalysis section as JSON, ensuring the structure matches t
     "recommendations": [
       {{ "strategy": "<salary_increase_strategy>", "impact": "<low_medium_high>", "timeframe": "<timeframe_to_see_results>", "description": "<detailed_description_of_strategy>" }}
     ]
-  }}
+  }},
+  "salaryAnalysis_summary": "• <bullet_1_6_8_words>\n• <bullet_2_6_8_words>\n• <bullet_3_6_8_words>"
 }}
 """,
 
@@ -219,6 +373,14 @@ Analyze the skills section of this resume. Focus on extracting:
 
 Resume Content:
 {resume_content}
+
+DASHBOARD SUMMARY REQUIREMENT:
+Generate a concise 3-bullet summary for dashboard display:
+- Exactly 3 bullets using • symbol
+- Each bullet: 6-8 words maximum
+- Specific, impactful, NO generic advice
+- Focus on key skill insights (e.g., top technical skills, core strengths, development areas)
+- Format: "• Bullet 1\n• Bullet 2\n• Bullet 3"
 
 Return only the skillsAnalysis section as JSON in the following exact format:
 {{
@@ -245,28 +407,8 @@ Return only the skillsAnalysis section as JSON in the following exact format:
       {{ "area": "<Fourth development area, e.g., 'Strategic Planning'>", "description": "<Description of this area, e.g., 'Develop long-term strategic thinking skills'>", "priority": "<'high' or 'medium'>" }}
       // Generate at least 3-5 development areas based on resume analysis
     ]
-  }}
-}}
-""",
-    
-    "marketPosition": """
-Analyze the market position based on this resume. Focus on:
-- Competitiveness in current market
-- Skill relevance to industry trends
-- Industry demand for this profile
-- Overall career potential
-
-Resume Content:
-{resume_content}
-
-Return only the marketPosition section as JSON:
-{{
-  "marketPosition": {{
-    "competitiveness": <0-100>,
-    "skillRelevance": <0-100>,
-    "industryDemand": <0-100>,
-    "careerPotential": <0-100>
-  }}
+  }},
+  "skillsAnalysis_summary": "• <bullet_1_6_8_words>\n• <bullet_2_6_8_words>\n• <bullet_3_6_8_words>"
 }}
 """
 }
@@ -461,6 +603,21 @@ User message: {user_message}
 Response (only CAREER_INSIGHTS or NORMAL_CONVERSATION):
 """
 
+# Query optimization prompt for improving user queries
+OPTIMIZE_QUERY_PROMPT = """
+You are a career query optimizer. Your task is to refine and enhance the user's career-related query to get better, more targeted advice.
+
+Original User Query: {user_query}
+
+Please optimize this query by:
+1. Clarifying ambiguous terms
+2. Adding relevant context if missing
+3. Making the question more specific and actionable
+4. Keeping the core intent intact
+
+Return ONLY the optimized query, nothing else.
+"""
+
 # Follow-up questions prompt for career conversations
 FOLLOW_UP_PROMPT = """
 Based on the following career conversation and user profile, generate exactly 3 simple, practical follow-up questions that the USER is most likely to ask next. These should be questions from the USER's perspective focused on career development.
@@ -505,3 +662,34 @@ Generate exactly 3 simple, practical follow-up questions that the USER would nat
 
 Only return the numbered questions, nothing else.
 """
+
+
+# ============================================================================
+# vLLM Guided Generation Support
+# ============================================================================
+
+def get_section_schema(section_name: str):
+    """
+    Get JSON Schema for section (vLLM guided generation).
+
+    This function imports and returns the JSON Schema for the specified section.
+    Used by vLLM implementation for structured output generation to ensure 100%
+    format compliance.
+
+    Args:
+        section_name: Name of the section to get schema for
+                     (professionalIdentity, workExperience, salaryAnalysis,
+                      skillsAnalysis, marketPosition)
+
+    Returns:
+        JSON Schema dictionary for the specified section
+
+    Raises:
+        ValueError: If section_name is unknown
+
+    Example:
+        >>> schema = get_section_schema("professionalIdentity")
+        >>> # Use with vLLM ChatOpenAI for guided generation
+    """
+    from resume_analysis_schemas import get_section_schema as _get_schema
+    return _get_schema(section_name)

@@ -153,7 +153,8 @@ class DocumentParserService:
             # Try alternative parsing method as fallback
             try:
                 return DocumentParserService._parse_docx_alternative(file_path)
-            except:
+            except Exception as alt_error:
+                logger.error(f"Alternative parsing also failed for {file_path}: {alt_error}")
                 return None
 
     @staticmethod

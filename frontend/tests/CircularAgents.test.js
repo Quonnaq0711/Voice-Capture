@@ -2,7 +2,7 @@ import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
 import userEvent from '@testing-library/user-event';
-import CircularAgents from '../src/components/CircularAgents';
+import CircularAgents from '../src/components/ui/CircularAgents';
 
 // Mock react-router-dom
 const mockNavigate = jest.fn();
@@ -80,7 +80,7 @@ const renderCircularAgents = (props = {}) => {
 
   const defaultUser = {
     id: 1,
-    username: 'testuser',
+    first_name: 'TestUser',
     email: 'test@example.com',
   };
 
@@ -117,16 +117,16 @@ describe('CircularAgents Component', () => {
     });
 
     it('should render user information in center', () => {
-      const user = { username: 'johndoe', id: 1 };
+      const user = { first_name: 'John', id: 1 };
       renderCircularAgents({ user });
-      
-      expect(screen.getByText('johndoe')).toBeInTheDocument();
+
+      expect(screen.getByText('John')).toBeInTheDocument();
     });
 
-    it('should render default username when user has no username', () => {
+    it('should render default name when user has no first_name', () => {
       const user = { id: 1 };
       renderCircularAgents({ user });
-      
+
       expect(screen.getByText('User')).toBeInTheDocument();
     });
 
@@ -344,9 +344,9 @@ describe('CircularAgents Component', () => {
   describe('Edge Cases', () => {
     it('should handle empty agents array', () => {
       renderCircularAgents({ agents: [] });
-      
+
       // Should still render user in center
-      expect(screen.getByText('testuser')).toBeInTheDocument();
+      expect(screen.getByText('TestUser')).toBeInTheDocument();
       // Should have no agent buttons
       expect(screen.queryAllByRole('button')).toHaveLength(0);
     });

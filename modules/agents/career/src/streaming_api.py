@@ -31,37 +31,66 @@ async def analyze_resume_streaming(
     """
     Stream resume analysis results in real-time.
     Returns streaming response with analysis progress and results.
+
+    The response includes a session_id in the first status message that can be
+    used to cancel the analysis via DELETE /api/career/analyze/cancel/{session_id}
     """
+    # Generate session_id for this analysis
+    # Use milliseconds to avoid collision if user clicks quickly
+    import time
+    user_id = int(request.user_id)
+    session_id = request.session_id or f"analysis_{user_id}_{int(time.time() * 1000)}"
+
     async def generate_stream():
         try:
             # Initialize streaming analyzer
             streaming_analyzer = StreamingResumeAnalyzer()
-            
-            # Convert user_id to int if it's a string
-            user_id = int(request.user_id)
-            
-            # Stream analysis results
+
+            # Stream analysis results with session_id for cancellation support
             resume_id = int(request.resume_id) if request.resume_id else None
-            async for result in streaming_analyzer.analyze_resume_streaming(user_id, resume_id):
-                # Format as JSON and add newline for streaming
+
+            async for result in streaming_analyzer.analyze_resume_streaming(user_id, resume_id, session_id):
+                # Format as JSON and add newline for streaming (SSE format)
                 yield f"data: {json.dumps(result)}\n\n"
-                
+
+                # Check if this is the stream_end marker - add extra delay for graceful close
+                if result.get("type") == "stream_end":
+                    # Give time for the client to receive the final event
+                    await asyncio.sleep(0.2)
+                    break
+
+        except asyncio.CancelledError:
+            # Client disconnected - clean shutdown
+            cancel_result = {
+                "type": "cancelled",
+                "message": "Connection closed by client",
+                "session_id": session_id,
+                "timestamp": datetime.now().isoformat()
+            }
+            yield f"data: {json.dumps(cancel_result)}\n\n"
         except Exception as e:
             error_result = {
                 "type": "error",
                 "message": f"Analysis failed: {str(e)}",
+                "session_id": session_id,
                 "timestamp": datetime.now().isoformat()
             }
             yield f"data: {json.dumps(error_result)}\n\n"
-    
+
+        # Final delay before closing stream to ensure all data is flushed
+        await asyncio.sleep(0.1)
+
     return StreamingResponse(
         generate_stream(),
-        media_type="text/plain",
+        media_type="text/event-stream",  # Correct SSE media type
         headers={
-            "Cache-Control": "no-cache",
+            "Cache-Control": "no-cache, no-store, must-revalidate",
             "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",  # Disable nginx buffering
             "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Headers": "*"
+            "Access-Control-Allow-Headers": "*",
+            "Access-Control-Expose-Headers": "X-Analysis-Session-ID",
+            "X-Analysis-Session-ID": session_id
         }
     )
 
@@ -181,19 +210,50 @@ async def stream_analysis_updates(session_id: str):
     )
 
 @router.delete("/analyze/session/{session_id}")
-async def cancel_analysis(session_id: str):
+async def cancel_analysis_session(session_id: str):
     """
-    Cancel an ongoing analysis session.
+    Cancel an ongoing analysis session (legacy endpoint).
     """
     try:
         success = notification_service.cancel_session(session_id)
         if not success:
             raise HTTPException(status_code=404, detail="Session not found")
-        
+
         return {"success": True, "message": "Analysis cancelled successfully"}
-        
+
     except HTTPException:
         raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to cancel analysis: {str(e)}")
+
+
+@router.delete("/analyze/cancel/{session_id}")
+async def cancel_analysis(session_id: str):
+    """
+    Cancel an ongoing resume analysis by session ID.
+
+    This endpoint stops the LLM processing for the specified session.
+    The session_id is provided in the initial status message and in the
+    X-Analysis-Session-ID response header when starting an analysis.
+    """
+    try:
+        # Cancel the analysis in StreamingResumeAnalyzer
+        success = StreamingResumeAnalyzer.cancel_analysis(session_id)
+
+        if success:
+            return {
+                "success": True,
+                "message": "Analysis cancelled successfully",
+                "session_id": session_id
+            }
+        else:
+            # Session might already be completed or not found
+            return {
+                "success": False,
+                "message": "Session not found or already completed",
+                "session_id": session_id
+            }
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to cancel analysis: {str(e)}")
 

@@ -7,14 +7,20 @@ from langchain_core.messages import HumanMessage, AIMessage
 from langchain_core.chat_history import BaseChatMessageHistory, InMemoryChatMessageHistory
 from langchain_core.runnables.history import RunnableWithMessageHistory
 import logging
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Any
 import httpx
 import json
 from datetime import datetime
 import asyncio
+import atexit
+import weakref
 from concurrent.futures import ThreadPoolExecutor
 from sqlalchemy.orm import Session
+
+# Track all ChatService instances for cleanup on exit
+_active_services = weakref.WeakSet()
 from backend.db.database import SessionLocal
+from backend.utils.db_session import get_db_session
 from backend.models.profile import UserProfile
 from backend.models.career_insight import CareerInsight
 from backend.models.user import User
@@ -22,6 +28,7 @@ from backend.models.chat import ChatMessage
 from backend.models.session import ChatSession
 from backend.models.resume import Resume
 from prompts import FOLLOW_UP_PROMPT
+from base_chat_service import BaseChatService
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -30,12 +37,16 @@ logger = logging.getLogger(__name__)
 # Get Ollama URL from environment variable, fallback to localhost for local development
 DEFAULT_CAREER_OLLAMA_URL = os.getenv("CAREER_OLLAMA_URL", "http://ollama2-staging:11434")
 
-class ChatService:
+class ChatService(BaseChatService):
     def __init__(self, model_name: str = "gemma3:latest", base_url: str = DEFAULT_CAREER_OLLAMA_URL):
         self.model_name = model_name
         self.base_url = base_url
         self.store = {}
         self.executor = ThreadPoolExecutor(max_workers=4)
+        self._shutdown_called = False
+
+        # Register this instance for cleanup on exit
+        _active_services.add(self)
 
         try:
             self.llm = OllamaLLM(
@@ -63,6 +74,9 @@ class ChatService:
             )
             logger.info(f"Career ChatService initialized with model: {model_name} at {base_url}")
         except Exception as e:
+            # Clean up executor if initialization fails
+            if self.executor:
+                self.executor.shutdown(wait=False)
             logger.error(f"Failed to initialize Career ChatService: {e}")
             raise
 
@@ -73,13 +87,31 @@ class ChatService:
         This method should be called when the application is shutting down to ensure
         all resources (ThreadPoolExecutor) are properly released.
         """
+        if self._shutdown_called:
+            return  # Prevent double shutdown
+        self._shutdown_called = True
+
         try:
             if self.executor:
                 logger.info("Shutting down Career Agent ThreadPoolExecutor...")
-                self.executor.shutdown(wait=True, cancel_futures=False)
+                self.executor.shutdown(wait=True, cancel_futures=True)
+                self.executor = None
                 logger.info("Career Agent ThreadPoolExecutor shut down successfully")
         except Exception as e:
             logger.error(f"Error during Career ChatService shutdown: {str(e)}", exc_info=True)
+
+    def __del__(self):
+        """Destructor to ensure resources are released."""
+        self.shutdown()
+
+    def __enter__(self):
+        """Context manager entry."""
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit - ensures shutdown is called."""
+        self.shutdown()
+        return False
 
     def get_session_history(self, session_id: str) -> BaseChatMessageHistory:
         """Return chat history for a given session.
@@ -120,29 +152,26 @@ class ChatService:
 
         if should_load_from_db:
             try:
-                db = SessionLocal()
-                messages = (
-                    db.query(ChatMessage)
-                    .filter(ChatMessage.session_id == db_session_id)
-                    .order_by(ChatMessage.id.asc())
-                    .all()
-                )
+                # Use context manager for automatic session cleanup
+                with get_db_session() as db:
+                    messages = (
+                        db.query(ChatMessage)
+                        .filter(ChatMessage.session_id == db_session_id)
+                        .order_by(ChatMessage.id.asc())
+                        .all()
+                    )
 
-                for msg in messages:
-                    # Distinguish between user and assistant messages.
-                    if msg.sender == "user":
-                        history.add_message(HumanMessage(content=msg.message_text))
-                    else:
-                        # Treat any non-user sender as assistant for robustness.
-                        history.add_message(AIMessage(content=msg.message_text))
+                    # Populate in-memory history from database records
+                    for msg in messages:
+                        # Distinguish between user and assistant messages
+                        if msg.sender == "user":
+                            history.add_message(HumanMessage(content=msg.message_text))
+                        else:
+                            # Treat any non-user sender as assistant for robustness
+                            history.add_message(AIMessage(content=msg.message_text))
             except Exception as e:
                 logger.error(f"Failed to load chat history from DB for session {session_id}: {str(e)}")
-            finally:
-                # Ensure DB session is closed even if an error occurs.
-                try:
-                    db.close()
-                except Exception:
-                    pass
+                # Continue with empty history
 
         # Cache the reconstructed history for future calls.
         self.store[session_id] = history
@@ -173,8 +202,6 @@ class ChatService:
         try:
             logger.info(f"Generating streaming response for message: {user_message[:50]}...")
 
-            print("session_id=", session_id)
-            
             # Use default session if none provided
             if session_id is None:
                 session_id = "default"
@@ -229,8 +256,6 @@ class ChatService:
                 # streaming process is cancelled before completion.
                 self.get_session_history(session_id).add_user_message(user_message)
 
-            print("messages=",messages)
-            
             # Prepare the request payload for Ollama's generate API
             payload = {
                 "model": self.model_name,
@@ -359,7 +384,7 @@ class ChatService:
             logger.error(f"Error getting conversation history: {str(e)}")
             return []
 
-    async def get_user_profile(self, user_id: int, db: Optional[Session] = None) -> Optional[Dict[str, any]]:
+    async def get_user_profile(self, user_id: int, db: Optional[Session] = None) -> Optional[Dict[str, Any]]:
         """
         Get user profile data from database to provide personalized context.
         
@@ -467,13 +492,16 @@ class ChatService:
                 
             finally:
                 if should_close_db:
-                    db.close()
-                
+                    try:
+                        db.close()
+                    except Exception as close_error:
+                        logger.warning(f"Error closing database session: {close_error}")
+
         except Exception as e:
             logger.error(f"Error getting user profile: {str(e)}")
             return None
 
-    async def get_latest_career_insights(self, user_id: int, db: Optional[Session] = None) -> Optional[Dict[str, any]]:
+    async def get_latest_career_insights(self, user_id: int, db: Optional[Session] = None) -> Optional[Dict[str, Any]]:
         """
         Get the latest career insights from database to provide context about recent resume analysis.
         
@@ -516,416 +544,16 @@ class ChatService:
                 
             finally:
                 if should_close_db:
-                    db.close()
-                
+                    try:
+                        db.close()
+                    except Exception as close_error:
+                        logger.warning(f"Error closing database session: {close_error}")
+
         except Exception as e:
             logger.error(f"Error getting latest career insights: {str(e)}")
             return None
 
-    def _format_career_insights_for_context(self, insights_data: Dict[str, any]) -> str:
-        """
-        Format career insights data into a readable context string for the LLM.
-        
-        Args:
-            insights_data: Dictionary containing career insights from resume analysis
-            
-        Returns:
-            Formatted string containing career insights context
-        """
-        context_parts = []
-        
-        try:
-            # Professional Identity - handle nested structure
-            prof_identity = insights_data.get('professionalIdentity')
-            if prof_identity:
-                # Check if it's nested (professionalIdentity.professionalIdentity)
-                if isinstance(prof_identity, dict) and 'professionalIdentity' in prof_identity:
-                    identity = prof_identity['professionalIdentity']
-                else:
-                    identity = prof_identity
-                
-                if isinstance(identity, dict):
-                    if identity.get('title'):
-                        context_parts.append(f"Professional Identity: {identity['title']}")
-                    if identity.get('summary'):
-                        context_parts.append(f"Career Summary: {identity['summary']}")
-                    if identity.get('currentRole'):
-                        context_parts.append(f"Current Role: {identity['currentRole']}")
-                    if identity.get('currentCompany'):
-                        context_parts.append(f"Current Company: {identity['currentCompany']}")
-            
-            # Work Experience - handle nested structure
-            work_exp_data = insights_data.get('workExperience')
-            if work_exp_data:
-                # Check if it's nested (workExperience.workExperience)
-                if isinstance(work_exp_data, dict) and 'workExperience' in work_exp_data:
-                    work_exp = work_exp_data['workExperience']
-                else:
-                    work_exp = work_exp_data
-                
-                if isinstance(work_exp, dict):
-                    if work_exp.get('totalYears'):
-                        context_parts.append(f"Total Experience: {work_exp['totalYears']} years")
-                    
-                    # Extract companies information
-                    if work_exp.get('companies') and isinstance(work_exp['companies'], list):
-                        companies = [comp.get('company', comp.get('name', '')) for comp in work_exp['companies'][:3]]
-                        if companies:
-                            context_parts.append(f"Recent Companies: {', '.join(filter(None, companies))}")
-                        
-                        # Extract current role from most recent company
-                        if work_exp['companies'] and work_exp['companies'][0].get('role'):
-                            context_parts.append(f"Current Role: {work_exp['companies'][0]['role']}")
-                    
-                    # Extract analytics insights
-                    if work_exp.get('analytics') and isinstance(work_exp['analytics'], dict):
-                        analytics = work_exp['analytics']
-                        
-                        # Add role insights
-                        if analytics.get('heldRoles') and isinstance(analytics['heldRoles'], dict):
-                            roles = analytics['heldRoles']
-                            if roles.get('count'):
-                                context_parts.append(f"Roles Held: {roles['count']}")
-                        
-                        # Add tenure insights
-                        if analytics.get('insights') and isinstance(analytics['insights'], dict):
-                            insights = analytics['insights']
-                            if insights.get('averageRoleDuration'):
-                                context_parts.append(f"Average Role Duration: {insights['averageRoleDuration']}")
-                    
-                    # Extract industries information
-                    if work_exp.get('industries') and isinstance(work_exp['industries'], list) and work_exp['industries']:
-                        industries = [ind.get('name', '') for ind in work_exp['industries']]
-                        if industries:
-                            context_parts.append(f"Industries: {', '.join(filter(None, industries))}")
-            
-            # Salary Analysis - handle nested structure
-            salary_data = insights_data.get('salaryAnalysis')
-            if salary_data:
-                # Check if it's nested (salaryAnalysis.salaryAnalysis)
-                if isinstance(salary_data, dict) and 'salaryAnalysis' in salary_data:
-                    salary_analysis = salary_data['salaryAnalysis']
-                else:
-                    salary_analysis = salary_data
-                
-                if isinstance(salary_analysis, dict):
-                    # Extract current salary
-                    current_salary = salary_analysis.get('currentSalary')
-                    if current_salary and isinstance(current_salary, dict):
-                        amount = current_salary.get('amount')
-                        currency = current_salary.get('currency', 'USD')
-                        confidence = current_salary.get('confidence')
-                        if amount:
-                            salary_str = f"Current Salary: {amount}k {currency}"
-                            if confidence:
-                                salary_str += f" (Confidence: {confidence}%)"
-                            context_parts.append(salary_str)
-                    
-                    # Extract market comparison
-                    market_comp = salary_analysis.get('marketComparison')
-                    if market_comp and isinstance(market_comp, dict):
-                        industry_avg = market_comp.get('industryAverage')
-                        percentile = market_comp.get('percentile')
-                        if industry_avg:
-                            context_parts.append(f"Industry Average Salary: {industry_avg}k {currency}")
-                        if percentile:
-                            context_parts.append(f"Salary Percentile: {percentile}th percentile")
-                    
-                    # Extract salary growth trend
-                    historical = salary_analysis.get('historicalTrend')
-                    if historical and isinstance(historical, list) and len(historical) >= 2:
-                        first_year = historical[0]
-                        last_year = historical[-1]
-                        if first_year.get('salary') and last_year.get('salary') and first_year.get('year') and last_year.get('year'):
-                            years_diff = last_year['year'] - first_year['year']
-                            if years_diff > 0:
-                                growth_rate = ((last_year['salary'] / first_year['salary']) ** (1/years_diff) - 1) * 100
-                                context_parts.append(f"Historical Salary Growth: {growth_rate:.1f}% annually over {years_diff} years")
-                    
-                    # Extract future projections
-                    projections = salary_analysis.get('projectedGrowth')
-                    if projections and isinstance(projections, list) and projections:
-                        last_projection = projections[-1]
-                        if last_projection.get('salary') and last_projection.get('year') and last_projection.get('role'):
-                            context_parts.append(f"Projected Salary ({last_projection['year']}): {last_projection['salary']}k as {last_projection['role']}")
-                    
-                    # Extract top recommendation
-                    recommendations = salary_analysis.get('recommendations')
-                    if recommendations and isinstance(recommendations, list) and recommendations:
-                        top_rec = recommendations[0]
-                        if top_rec.get('strategy'):
-                            context_parts.append(f"Salary Growth Recommendation: {top_rec['strategy']}")
-            
-            # Skills Analysis - handle nested structure
-            skills_data = insights_data.get('skillsAnalysis')
-            if skills_data:
-                # Check if it's nested (skillsAnalysis.skillsAnalysis)
-                if isinstance(skills_data, dict) and 'skillsAnalysis' in skills_data:
-                    skills = skills_data['skillsAnalysis']
-                else:
-                    skills = skills_data
-                
-                if isinstance(skills, dict):
-                    # Core Strengths
-                    if skills.get('coreStrengths') and isinstance(skills['coreStrengths'], list):
-                        # Extract top strengths with scores if available
-                        strengths = []
-                        for strength in skills['coreStrengths'][:5]:
-                            if isinstance(strength, dict):
-                                area = strength.get('area')
-                                score = strength.get('score')
-                                if area:
-                                    if score:
-                                        strengths.append(f"{area} ({score}/100)")
-                                    else:
-                                        strengths.append(area)
-                            elif strength:
-                                strengths.append(strength)
-                        
-                        if strengths:
-                            context_parts.append(f"Core Strengths: {', '.join(filter(None, strengths))}")
-                    
-                    # Hard Skills
-                    if skills.get('hardSkills') and isinstance(skills['hardSkills'], list):
-                        # Extract top hard skills with levels if available
-                        hard_skills = []
-                        for skill in skills['hardSkills'][:5]:
-                            if isinstance(skill, dict):
-                                skill_name = skill.get('skill')
-                                level = skill.get('level')
-                                category = skill.get('category')
-                                if skill_name:
-                                    if level:
-                                        hard_skills.append(f"{skill_name} ({level}/100)")
-                                    else:
-                                        hard_skills.append(skill_name)
-                            elif skill:
-                                hard_skills.append(skill)
-                        
-                        if hard_skills:
-                            context_parts.append(f"Technical Skills: {', '.join(filter(None, hard_skills))}")
-                    
-                    # Soft Skills
-                    if skills.get('softSkills') and isinstance(skills['softSkills'], list):
-                        # Extract top soft skills with current levels
-                        soft_skills = []
-                        for skill in skills['softSkills'][:5]:
-                            if isinstance(skill, dict):
-                                skill_name = skill.get('skill')
-                                current = skill.get('current')
-                                target = skill.get('target')
-                                if skill_name:
-                                    if current is not None:
-                                        soft_skills.append(f"{skill_name} (Current: {current})")
-                                    else:
-                                        soft_skills.append(skill_name)
-                            elif skill:
-                                soft_skills.append(skill)
-                        
-                        if soft_skills:
-                            context_parts.append(f"Soft Skills: {', '.join(filter(None, soft_skills))}")
-                    
-                    # Development Areas
-                    if skills.get('developmentAreas') and isinstance(skills['developmentAreas'], list):
-                        # Extract development areas with priorities if available
-                        dev_areas = []
-                        for area in skills['developmentAreas'][:3]:
-                            if isinstance(area, dict):
-                                area_name = area.get('area')
-                                priority = area.get('priority')
-                                if area_name:
-                                    if priority:
-                                        dev_areas.append(f"{area_name} ({priority} priority)")
-                                    else:
-                                        dev_areas.append(area_name)
-                            elif area:
-                                dev_areas.append(area)
-                        
-                        if dev_areas:
-                            context_parts.append(f"Development Areas: {', '.join(filter(None, dev_areas))}")
-            
-            # Market Position - handle nested structure
-            market_data = insights_data.get('marketPosition')
-            if market_data:
-                # Check if it's nested (marketPosition.marketPosition)
-                if isinstance(market_data, dict) and 'marketPosition' in market_data:
-                    market_pos = market_data['marketPosition']
-                else:
-                    market_pos = market_data
-                
-                if isinstance(market_pos, dict):
-                    market_info = []
-                    if market_pos.get('competitiveness'):
-                        market_info.append(f"Competitiveness: {market_pos['competitiveness']}%")
-                    if market_pos.get('skillRelevance'):
-                        market_info.append(f"Skill Relevance: {market_pos['skillRelevance']}%")
-                    if market_pos.get('industryDemand'):
-                        market_info.append(f"Industry Demand: {market_pos['industryDemand']}%")
-                    if market_pos.get('careerPotential'):
-                        market_info.append(f"Career Potential: {market_pos['careerPotential']}%")
-                    
-                    if market_info:
-                        context_parts.append(f"Market Position: {', '.join(market_info)}")
-            
-            return "\n".join(context_parts) if context_parts else "No career insights available from recent resume analysis."
-            
-        except Exception as e:
-            logger.error(f"Error formatting career insights: {str(e)}")
-            return "Error processing career insights data."
-
-    def _format_profile_for_context(self, profile_data: Dict[str, any]) -> str:
-        """
-        Format user profile data into a comprehensive context string for the LLM.
-        This includes all profile information to provide personalized career guidance.
-
-        Args:
-            profile_data: Dictionary containing user profile information
-
-        Returns:
-            Formatted string containing user profile context
-        """
-        context_parts = []
-        covered_keys = set()
-
-        # Career Information
-        career_info = []
-        for key, label in [
-            ("current_job", "Current Job"),
-            ("company", "Company"),
-            ("industry", "Industry"),
-            ("experience", "Experience Level")
-        ]:
-            if profile_data.get(key):
-                career_info.append(f"{label}: {profile_data[key]}")
-                covered_keys.add(key)
-        if career_info:
-            context_parts.append("Career: " + ", ".join(career_info))
-
-        # Skills and Competencies
-        for key, label in [
-            ("skills", "Technical Skills"),
-            ("soft_skills", "Soft Skills"),
-            ("certifications", "Certifications"),
-            ("skill_gaps", "Skill Gaps"),
-            ("professional_strengths", "Professional Strengths"),
-            ("growth_areas", "Growth Areas")
-        ]:
-            if profile_data.get(key):
-                value = profile_data[key]
-                value_str = ", ".join(value) if isinstance(value, list) else value
-                context_parts.append(f"{label}: {value_str}")
-                covered_keys.add(key)
-
-        # Goals and Aspirations
-        for key, label in [
-            ("career_goals", "Career Goals"),
-            ("short_term_goals", "Short-term Goals"),
-            ("career_path_preference", "Career Path Preference"),
-            ("career_challenges", "Career Challenges")
-        ]:
-            if profile_data.get(key):
-                context_parts.append(f"{label}: {profile_data[key]}")
-                covered_keys.add(key)
-
-        # Personal Information
-        personal_info = []
-        for key, label in [
-            ("personality_type", "Personality Type"),
-            ("learning_style", "Learning Style"),
-            ("education_level", "Education")
-        ]:
-            if profile_data.get(key):
-                personal_info.append(f"{label}: {profile_data[key]}")
-                covered_keys.add(key)
-        if personal_info:
-            context_parts.append("Personal: " + ", ".join(personal_info))
-
-        # Interests and Hobbies
-        for key, label in [
-            ("hobbies", "Hobbies"),
-            ("interests", "Interests"),
-            ("creative_pursuits", "Creative Pursuits")
-        ]:
-            if profile_data.get(key):
-                value = profile_data[key]
-                value_str = ", ".join(value) if isinstance(value, list) else str(value)
-                context_parts.append(f"{label}: {value_str}")
-                covered_keys.add(key)
-
-        # Lifestyle Preferences
-        lifestyle_info = []
-        for key, label in [
-            ("fitness_level", "Fitness Level"),
-            ("health_goals", "Health Goals"),
-            ("dietary_preferences", "Dietary Preferences"),
-            ("exercise_preferences", "Exercise Preferences"),
-            ("travel_style", "Travel Style"),
-            ("preferred_destinations", "Preferred Destinations"),
-            ("travel_budget", "Travel Budget"),
-            ("travel_frequency", "Travel Frequency"),
-            ("family_status", "Family Status"),
-            ("work_life_balance", "Work-Life Balance")
-        ]:
-            if profile_data.get(key):
-                lifestyle_info.append(f"{label}: {profile_data[key]}")
-                covered_keys.add(key)
-        if lifestyle_info:
-            context_parts.append("Lifestyle: " + ", ".join(lifestyle_info))
-
-        # Financial Information
-        for key, label in [
-            ("income_range", "Income Range"),
-            ("financial_goals", "Financial Goals"),
-            ("investment_experience", "Investment Experience"),
-            ("risk_tolerance", "Risk Tolerance")
-        ]:
-            if profile_data.get(key):
-                context_parts.append(f"{label}: {profile_data[key]}")
-                covered_keys.add(key)
-
-        # Work Preferences
-        work_prefs = []
-        for key, label in [
-            ("work_style", "Work Style"),
-            ("leadership_experience", "Leadership Experience"),
-            ("work_life_balance_priority", "Work-Life Balance Priority"),
-            ("company_size_preference", "Company Size Preference"),
-            ("career_risk_tolerance", "Career Risk Tolerance"),
-            ("geographic_flexibility", "Geographic Flexibility"),
-            ("work_values", "Work Values"),
-            ("learning_preferences", "Learning Preferences"),
-            ("preferred_learning_methods", "Preferred Learning Methods")
-        ]:
-            if profile_data.get(key):
-                work_prefs.append(f"{label}: {profile_data[key]}")
-                covered_keys.add(key)
-        if work_prefs:
-            context_parts.append("Work Preferences: " + ", ".join(work_prefs))
-
-        # Spiritual / Mindfulness
-        for key, label in [
-            ("spiritual_practices", "Spiritual Practices"),
-            ("mindfulness_level", "Mindfulness Level"),
-            ("stress_management", "Stress Management")
-        ]:
-            if profile_data.get(key):
-                context_parts.append(f"{label}: {profile_data[key]}")
-                covered_keys.add(key)
-
-        # Relationship Goals
-        if profile_data.get("relationship_goals"):
-            context_parts.append(f"Relationship Goals: {profile_data['relationship_goals']}")
-            covered_keys.add("relationship_goals")
-
-        # Append any remaining keys that were not explicitly covered
-        for key, value in profile_data.items():
-            if key not in covered_keys and value:
-                value_str = ", ".join(value) if isinstance(value, list) else str(value)
-                context_parts.append(f"{key.replace('_', ' ').title()}: {value_str}")
-
-        return "\n".join(context_parts) if context_parts else "No detailed profile information available."
-
-    async def generate_follow_up_questions(self, user_message: str, ai_response: str, session_id: str = "default", profile_data: Optional[Dict[str, any]] = None, cancellation_event: Optional[asyncio.Event] = None) -> List[str]:
+    async def generate_follow_up_questions(self, user_message: str, ai_response: str, session_id: str = "default", profile_data: Optional[Dict[str, Any]] = None, cancellation_event: Optional[asyncio.Event] = None) -> List[str]:
         """
         Generate 3 follow-up questions based on the user's original message and AI response.
         
@@ -951,15 +579,13 @@ class ChatService:
             
             # Create a specialized prompt for generating follow-up questions
             follow_up_prompt = FOLLOW_UP_PROMPT.format(
-                user_message=user_message, 
+                user_message=user_message,
                 ai_response=ai_response,
                 profile_context=profile_context
             )
-            
-            print("follow_up_prompt=",follow_up_prompt)
 
             # Generate follow-up questions using the LLM
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             task = loop.run_in_executor(
                 self.executor,
                 self._generate_follow_up_sync,
@@ -973,9 +599,17 @@ class ChatService:
                 try:
                     done, pending = await asyncio.wait(
                         [task, wait_task],
-                        return_when=asyncio.FIRST_COMPLETED
+                        return_when=asyncio.FIRST_COMPLETED,
+                        timeout=120.0  # 2 minute timeout for follow-up generation
                     )
-                    
+
+                    # Handle timeout
+                    if not done:
+                        logger.warning("[Ollama Career] Follow-up generation timed out after 120 seconds")
+                        for pending_task in [task, wait_task]:
+                            pending_task.cancel()
+                        raise asyncio.TimeoutError("Follow-up generation timed out after 120 seconds")
+
                     # Cancel any pending tasks
                     for pending_task in pending:
                         pending_task.cancel()
@@ -1051,73 +685,65 @@ class ChatService:
             logger.error(f"Error in sync follow-up generation: {str(e)}")
             raise
 
-    def _parse_follow_up_questions(self, questions_text: str) -> List[str]:
+    async def health_check(self) -> Dict[str, str]:
         """
-        Parse the generated follow-up questions text into a list of questions.
-        
-        Args:
-            questions_text: Raw text containing the generated questions
-            
+        Check if the Ollama service is healthy and responsive.
+
         Returns:
-            List of parsed follow-up questions
+            Dictionary containing health status information
         """
         try:
-            questions = []
-            lines = questions_text.strip().split('\n')
-            
-            for line in lines:
-                line = line.strip()
-                # Look for numbered questions (1., 2., 3. or 1), 2), 3))
-                if line and (line.startswith(('1.', '2.', '3.', '1)', '2)', '3)')) or 
-                           any(line.startswith(f'{i}.') or line.startswith(f'{i})') for i in range(1, 4))):
-                    # Remove the number and clean up the question
-                    question = line
-                    # Remove leading numbers and punctuation
-                    for prefix in ['1.', '2.', '3.', '1)', '2)', '3)']:
-                        if question.startswith(prefix):
-                            question = question[len(prefix):].strip()
-                            break
-                    
-                    if question and len(question) > 5:  # Ensure it's a meaningful question
-                        questions.append(question)
-            
-            # If we couldn't parse exactly 3 questions, try a different approach
-            if len(questions) != 3:
-                # Split by lines and look for any line that looks like a question
-                questions = []
-                for line in lines:
-                    line = line.strip()
-                    if line and ('?' in line or line.endswith('?')):
-                        # Clean up common prefixes
-                        for prefix in ['1.', '2.', '3.', '1)', '2)', '3)', '-', '*']:
-                            if line.startswith(prefix):
-                                line = line[len(prefix):].strip()
-                                break
-                        if line and len(line) > 5:
-                            questions.append(line)
-                            if len(questions) >= 3:
-                                break
-            
-            # Ensure we have exactly 3 questions, pad with defaults if needed
-            while len(questions) < 3:
-                default_questions = [
-                    "Can you provide more details about this career advice?",
-                    "What are the next steps I should take in my career?",
-                    "Are there any alternative career paths I should consider?"
-                ]
-                questions.append(default_questions[len(questions)])
-            
-            # Return only the first 3 questions
-            return questions[:3]
-            
+            logger.info("[Career Ollama] Health check: Testing Ollama connection...")
+
+            # Test with a simple prompt
+            test_response = await self.generate_response("Hello", "health_check_session")
+
+            if test_response.get("response"):
+                result = {
+                    "status": "healthy",
+                    "model": self.model_name,
+                    "base_url": self.base_url
+                }
+                logger.info(f"[Career Ollama] Health check: Returning healthy status: {result}")
+                return result
+            else:
+                result = {
+                    "status": "unhealthy",
+                    "model": self.model_name,
+                    "base_url": self.base_url,
+                    "error": "No response from Ollama"
+                }
+                logger.warning(f"[Career Ollama] Health check: Returning unhealthy status: {result}")
+                return result
+
         except Exception as e:
-            logger.error(f"Error parsing follow-up questions: {str(e)}")
-            # Return default questions if parsing fails
-            return [
-                "Can you provide more details about this career advice?",
-                "What are the next steps I should take in my career?",
-                "Are there any alternative career paths I should consider?"
-            ]
+            result = {
+                "status": "unhealthy",
+                "model": self.model_name,
+                "base_url": self.base_url,
+                "error": str(e)
+            }
+            logger.error(f"[Career Ollama] Health check: Exception occurred: {e}")
+            return result
+
+    async def clear_memory(self, session_id: str = "default") -> bool:
+        """
+        Clear the conversation memory for a specific session.
+
+        Args:
+            session_id: Session identifier to clear
+
+        Returns:
+            True if memory was cleared successfully
+        """
+        try:
+            if session_id in self.store:
+                self.store[session_id].clear()
+                logger.info(f"[Career Ollama] Conversation memory cleared for session: {session_id}")
+            return True
+        except Exception as e:
+            logger.error(f"[Career Ollama] Error clearing memory: {str(e)}")
+            return False
 
 _chat_service = None
 
@@ -1126,3 +752,25 @@ def get_chat_service():
     if _chat_service is None:
         _chat_service = ChatService()
     return _chat_service
+
+
+def _cleanup_all_services():
+    """Cleanup all active ChatService instances on program exit."""
+    global _chat_service
+    logger.info("Cleaning up ChatService instances on exit...")
+
+    # Shutdown the global singleton if it exists
+    if _chat_service is not None:
+        _chat_service.shutdown()
+        _chat_service = None
+
+    # Shutdown any other tracked instances
+    for service in list(_active_services):
+        try:
+            service.shutdown()
+        except Exception as e:
+            logger.error(f"Error cleaning up ChatService: {e}")
+
+
+# Register cleanup function to run on program exit
+atexit.register(_cleanup_all_services)

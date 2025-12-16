@@ -18,7 +18,20 @@ from backend.models.career_insight import CareerInsight
 logger = logging.getLogger(__name__)
 
 class RecommendationService:
-    """Service for generating daily AI recommendations"""
+    """Service for generating daily AI recommendations
+
+    Usage:
+        # Option 1: Use as context manager (recommended)
+        async with RecommendationService() as service:
+            result = await service.generate_daily_recommendations(db, user_id)
+
+        # Option 2: Manual cleanup
+        service = RecommendationService()
+        try:
+            result = await service.generate_daily_recommendations(db, user_id)
+        finally:
+            await service.close()
+    """
 
     def __init__(self, llm_base_url: str = None):
         # Use environment variable for Career Agent URL, fallback to localhost for development
@@ -27,6 +40,13 @@ class RecommendationService:
         self.llm_base_url = llm_base_url
         # Set very long timeout for local LLM - can be very slow
         self.client = httpx.AsyncClient(timeout=600.0)  # 10 minutes for local LLM
+        self._closed = False
+
+    async def close(self):
+        """Close the httpx client. Call this when done using the service."""
+        if not self._closed:
+            await self.client.aclose()
+            self._closed = True
 
     async def generate_daily_recommendations(
         self,
@@ -121,7 +141,8 @@ class RecommendationService:
             # Try to get context for fallback, but handle errors gracefully
             try:
                 context_data = await self._get_user_context(db, user_id)
-            except:
+            except Exception as context_error:
+                logger.warning(f"Failed to get user context for fallback: {context_error}")
                 context_data = {}
 
             fallback_result = self._generate_fallback_recommendations(context_data)
@@ -443,4 +464,4 @@ Return only the JSON array, no other text:
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        await self.client.aclose()
+        await self.close()

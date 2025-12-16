@@ -1,11 +1,12 @@
 """
 Daily Recommendations Model
 """
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Boolean
+from sqlalchemy import Column, Integer, String, Text, ForeignKey, Boolean
 from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
 from backend.db.database import Base
+from backend.db.types import TZDateTime
 
 def utc_now():
     """Return current UTC time as timezone-aware datetime"""
@@ -16,10 +17,10 @@ class DailyRecommendation(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-    date = Column(DateTime, nullable=False, index=True)  # Date for which recommendations are generated
+    date = Column(TZDateTime, nullable=False, index=True)  # Date for which recommendations are generated
     recommendations = Column(JSON, nullable=False)  # Array of 3 recommendation objects
-    created_at = Column(DateTime, default=utc_now, nullable=False)
-    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)
+    created_at = Column(TZDateTime, default=utc_now, nullable=False)
+    updated_at = Column(TZDateTime, default=utc_now, onupdate=utc_now, nullable=False)
 
     # Context data used for generation
     context_data = Column(JSON, nullable=True)  # Profile and resume analysis data used

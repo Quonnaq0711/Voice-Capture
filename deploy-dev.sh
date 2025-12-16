@@ -52,6 +52,7 @@ CAREER_PORT=${CAREER_PORT:-6002}
 FRONTEND_PORT=${FRONTEND_PORT:-1000}
 OLLAMA1_PORT=${OLLAMA1_PORT:-12434}
 OLLAMA2_PORT=${OLLAMA2_PORT:-12435}
+VLLM_PORT=${VLLM_PORT:-8888}
 
 echo -e "${CYAN}"
 echo "═══════════════════════════════════════════════════════════"
@@ -66,8 +67,14 @@ echo "  Frontend:         http://localhost:$FRONTEND_PORT"
 echo "  Backend API:      http://localhost:$BACKEND_PORT"
 echo "  Personal Asst:    http://localhost:$PA_PORT"
 echo "  Career Agent:     http://localhost:$CAREER_PORT"
-echo "  Ollama 1 (PA):    http://localhost:$OLLAMA1_PORT"
-echo "  Ollama 2 (Career): http://localhost:$OLLAMA2_PORT"
+
+# Display LLM-specific ports based on provider
+if [ "${LLM_PROVIDER:-ollama}" = "vllm" ]; then
+    echo "  vLLM Server:      http://localhost:$VLLM_PORT (PA + Career)"
+else
+    echo "  Ollama 1 (PA):    http://localhost:$OLLAMA1_PORT"
+    echo "  Ollama 2 (Career): http://localhost:$OLLAMA2_PORT"
+fi
 echo ""
 
 # Create PID directory
@@ -132,8 +139,14 @@ check_port $BACKEND_PORT "Backend" || PORTS_OK=false
 check_port $PA_PORT "Personal Assistant" || PORTS_OK=false
 check_port $CAREER_PORT "Career Agent" || PORTS_OK=false
 check_port $FRONTEND_PORT "Frontend" || PORTS_OK=false
-check_port $OLLAMA1_PORT "Ollama 1" || PORTS_OK=false
-check_port $OLLAMA2_PORT "Ollama 2" || PORTS_OK=false
+
+# Check LLM-specific ports based on provider
+if [ "${LLM_PROVIDER:-ollama}" = "vllm" ]; then
+    check_port $VLLM_PORT "vLLM Server" || PORTS_OK=false
+else
+    check_port $OLLAMA1_PORT "Ollama 1" || PORTS_OK=false
+    check_port $OLLAMA2_PORT "Ollama 2" || PORTS_OK=false
+fi
 
 if [ "$PORTS_OK" = false ]; then
     echo ""
@@ -172,35 +185,125 @@ fi
 
 echo ""
 echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
-echo -e "${CYAN}  Step 2: Starting Ollama Instances${NC}"
+echo -e "${CYAN}  Step 2: Starting LLM Services${NC}"
 echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
 
-# Start Ollama 1 (Personal Assistant)
-echo -e "${BLUE}Starting Ollama 1 (Personal Assistant) on port $OLLAMA1_PORT...${NC}"
-OLLAMA_HOST="0.0.0.0:$OLLAMA1_PORT" nohup ollama serve > "$PID_DIR/ollama1.log" 2>&1 &
-OLLAMA1_PID=$!
-echo $OLLAMA1_PID > "$PID_DIR/ollama1.pid"
-echo -e "${GREEN}✓${NC} Ollama 1 started (PID: $OLLAMA1_PID)"
-
-sleep 3
-
-# Start Ollama 2 (Career Agent)
-echo -e "${BLUE}Starting Ollama 2 (Career Agent) on port $OLLAMA2_PORT...${NC}"
-OLLAMA_HOST="0.0.0.0:$OLLAMA2_PORT" nohup ollama serve > "$PID_DIR/ollama2.log" 2>&1 &
-OLLAMA2_PID=$!
-echo $OLLAMA2_PID > "$PID_DIR/ollama2.pid"
-echo -e "${GREEN}✓${NC} Ollama 2 started (PID: $OLLAMA2_PID)"
-
-sleep 3
-
-# Wait for Ollama instances to be ready
-wait_for_service "http://localhost:$OLLAMA1_PORT/api/tags" "Ollama 1" || exit 1
-wait_for_service "http://localhost:$OLLAMA2_PORT/api/tags" "Ollama 2" || exit 1
-
-# Setup Ollama models
+# Check LLM provider from environment
+LLM_PROVIDER=${LLM_PROVIDER:-"ollama"}
+echo -e "${BLUE}LLM Provider: ${GREEN}$LLM_PROVIDER${NC}"
 echo ""
-echo -e "${BLUE}Setting up Ollama models (gemma3:latest)...${NC}"
-bash "$PROJECT_ROOT/setup-ollama-dev.sh"
+
+if [ "$LLM_PROVIDER" = "vllm" ]; then
+    # Check if staging vLLM (port 8888) is already running
+    STAGING_VLLM_PORT=8888
+    if curl -s "http://localhost:$STAGING_VLLM_PORT/v1/models" >/dev/null 2>&1; then
+        echo -e "${GREEN}✅ Detected staging vLLM server on port $STAGING_VLLM_PORT${NC}"
+        echo -e "${BLUE}   Dev mode will share the staging vLLM server${NC}"
+        echo ""
+        echo -e "${CYAN}vLLM Configuration (shared with staging):${NC}"
+        echo "  API Base:         http://localhost:$STAGING_VLLM_PORT/v1"
+        echo "  Services:         Personal Assistant + Career Agent"
+        echo ""
+        # Update VLLM_API_BASE for this session
+        export VLLM_API_BASE="http://localhost:$STAGING_VLLM_PORT/v1"
+        echo -e "${GREEN}✓ Using staging vLLM - no additional GPU memory needed${NC}"
+    else
+        # Start vLLM Server (for both PA and Career)
+        echo -e "${BLUE}Starting vLLM server (PA + Career Agent)...${NC}"
+        echo ""
+        echo -e "${CYAN}vLLM Configuration:${NC}"
+        echo "  Model:            ${VLLM_MODEL:-Qwen/Qwen2.5-3B-Instruct}"
+        echo "  Port:             $VLLM_PORT"
+        echo "  GPU Memory:       ${VLLM_GPU_MEMORY_UTILIZATION:-0.7} (70%)"
+        echo "  Context Length:   ${VLLM_MAX_MODEL_LEN:-4096} tokens"
+        echo "  API Base:         http://localhost:$VLLM_PORT/v1"
+        echo "  Services:         Personal Assistant + Career Agent"
+        echo ""
+
+        # Check GPU availability
+        if ! nvidia-smi &>/dev/null; then
+            echo -e "${RED}❌ Error: NVIDIA GPU not detected!${NC}"
+            echo -e "${YELLOW}vLLM requires NVIDIA GPU with CUDA support${NC}"
+            exit 1
+        fi
+
+        # Display GPU info
+        GPU_FREE=$(nvidia-smi --query-gpu=memory.free --format=csv,noheader,nounits)
+        GPU_TOTAL=$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits)
+        echo -e "${GREEN}GPU Status:${NC}"
+        echo "  Free Memory:      ${GPU_FREE} MiB / ${GPU_TOTAL} MiB"
+
+        # Check if enough GPU memory
+        REQUIRED_MEM=$(echo "$GPU_TOTAL * ${VLLM_GPU_MEMORY_UTILIZATION:-0.7}" | bc | cut -d. -f1)
+        if [ "$GPU_FREE" -lt "$REQUIRED_MEM" ]; then
+            echo -e "${RED}❌ Error: Insufficient GPU memory!${NC}"
+            echo -e "${YELLOW}   Required: ~${REQUIRED_MEM} MiB, Available: ${GPU_FREE} MiB${NC}"
+            echo -e "${YELLOW}   Tip: Free GPU memory or reduce VLLM_GPU_MEMORY_UTILIZATION in .env.dev${NC}"
+            exit 1
+        fi
+        echo ""
+
+        # Check if start-vllm-dev.sh exists
+        if [ ! -f "$PROJECT_ROOT/start-vllm-dev.sh" ]; then
+            echo -e "${RED}❌ Error: start-vllm-dev.sh not found!${NC}"
+            exit 1
+        fi
+
+        # Make sure it's executable
+        chmod +x "$PROJECT_ROOT/start-vllm-dev.sh"
+
+        # Start vLLM (script has built-in health check, will exit 1 on failure)
+        echo -e "${BLUE}Launching vLLM server...${NC}"
+        if ! bash "$PROJECT_ROOT/start-vllm-dev.sh"; then
+            echo -e "${RED}❌ vLLM server startup failed${NC}"
+            echo -e "${YELLOW}Check logs: tail -f vllm_server.log${NC}"
+            exit 1
+        fi
+
+        echo ""
+        echo -e "${GREEN}✅ vLLM server started successfully!${NC}"
+        echo -e "${YELLOW}   API Endpoint: http://localhost:$VLLM_PORT/v1${NC}"
+        echo -e "${YELLOW}   Model: ${VLLM_MODEL:-Qwen/Qwen2.5-3B-Instruct}${NC}"
+        echo -e "${YELLOW}   Used by: Personal Assistant + Career Agent${NC}"
+        echo -e "${GREEN}   ✓ Both PA and Career Agent will use vLLM for high-performance inference${NC}"
+    fi
+
+elif [ "$LLM_PROVIDER" = "ollama" ]; then
+    # Start Ollama instances (traditional mode)
+    echo -e "${BLUE}Starting Ollama instances (traditional mode)...${NC}"
+
+    # Start Ollama 1 (Personal Assistant)
+    echo -e "${BLUE}Starting Ollama 1 (Personal Assistant) on port $OLLAMA1_PORT...${NC}"
+    OLLAMA_HOST="0.0.0.0:$OLLAMA1_PORT" nohup ollama serve > "$PID_DIR/ollama1.log" 2>&1 &
+    OLLAMA1_PID=$!
+    echo $OLLAMA1_PID > "$PID_DIR/ollama1.pid"
+    echo -e "${GREEN}✓${NC} Ollama 1 started (PID: $OLLAMA1_PID)"
+
+    sleep 3
+
+    # Start Ollama 2 (Career Agent)
+    echo -e "${BLUE}Starting Ollama 2 (Career Agent) on port $OLLAMA2_PORT...${NC}"
+    OLLAMA_HOST="0.0.0.0:$OLLAMA2_PORT" nohup ollama serve > "$PID_DIR/ollama2.log" 2>&1 &
+    OLLAMA2_PID=$!
+    echo $OLLAMA2_PID > "$PID_DIR/ollama2.pid"
+    echo -e "${GREEN}✓${NC} Ollama 2 started (PID: $OLLAMA2_PID)"
+
+    sleep 3
+
+    # Wait for Ollama instances to be ready
+    wait_for_service "http://localhost:$OLLAMA1_PORT/api/tags" "Ollama 1" || exit 1
+    wait_for_service "http://localhost:$OLLAMA2_PORT/api/tags" "Ollama 2" || exit 1
+
+    # Setup Ollama models
+    echo ""
+    echo -e "${BLUE}Setting up Ollama models (gemma3:latest)...${NC}"
+    bash "$PROJECT_ROOT/setup-ollama-dev.sh"
+
+else
+    echo -e "${RED}❌ Error: Invalid LLM_PROVIDER '$LLM_PROVIDER'${NC}"
+    echo -e "${YELLOW}   Valid options: ollama, vllm${NC}"
+    exit 1
+fi
 
 echo ""
 echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
@@ -289,8 +392,14 @@ echo -e "  🌐 Frontend:         ${GREEN}http://localhost:$FRONTEND_PORT${NC}"
 echo -e "  📡 Backend API:      ${GREEN}http://localhost:$BACKEND_PORT/docs${NC}"
 echo -e "  🤖 Personal Asst:    ${GREEN}http://localhost:$PA_PORT/api/chat/health${NC}"
 echo -e "  💼 Career Agent:     ${GREEN}http://localhost:$CAREER_PORT/api/chat/health${NC}"
-echo -e "  🧠 Ollama 1 (PA):    ${GREEN}http://localhost:$OLLAMA1_PORT/api/tags${NC}"
-echo -e "  🧠 Ollama 2 (Career): ${GREEN}http://localhost:$OLLAMA2_PORT/api/tags${NC}"
+
+# Display LLM endpoints based on provider
+if [ "$LLM_PROVIDER" = "vllm" ]; then
+    echo -e "  🚀 vLLM Server:      ${GREEN}http://localhost:${VLLM_PORT:-8888}/v1/models${NC} ${YELLOW}(PA + Career)${NC}"
+else
+    echo -e "  🧠 Ollama 1 (PA):    ${GREEN}http://localhost:$OLLAMA1_PORT/api/tags${NC}"
+    echo -e "  🧠 Ollama 2 (Career): ${GREEN}http://localhost:$OLLAMA2_PORT/api/tags${NC}"
+fi
 echo ""
 echo -e "${YELLOW}Useful commands:${NC}"
 echo -e "  Stop all services:   ${CYAN}./stop-dev.sh${NC}"

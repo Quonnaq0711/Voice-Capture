@@ -3,9 +3,10 @@ Model for storing career insights generated from resume analysis
 """
 from datetime import datetime, timezone
 import json
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text
+from sqlalchemy import Column, Integer, String, ForeignKey, Text
 from sqlalchemy.orm import relationship
 from backend.db.database import Base
+from backend.db.types import TZDateTime
 
 def utc_now():
     """Return current UTC time as timezone-aware datetime"""
@@ -19,9 +20,9 @@ class CareerInsight(Base):
     resume_id = Column(Integer, ForeignKey("resumes.id"), index=True)  # Index for resume queries
     professional_data = Column(Text)  # JSON string of professional data
     dashboard_summaries = Column(Text)  # JSON string of LLM-generated summaries for Dashboard
-    summaries_generated_at = Column(DateTime, nullable=True)  # When summaries were last generated
-    created_at = Column(DateTime, default=utc_now, index=True)  # Index for time-based queries
-    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
+    summaries_generated_at = Column(TZDateTime, nullable=True)  # When summaries were last generated
+    created_at = Column(TZDateTime, default=utc_now, index=True)  # Index for time-based queries
+    updated_at = Column(TZDateTime, default=utc_now, onupdate=utc_now)
 
     # Relationships
     user = relationship("User", back_populates="career_insights")

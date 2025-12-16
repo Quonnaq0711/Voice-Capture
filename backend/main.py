@@ -201,7 +201,7 @@ async def shutdown_event():
 
     # Shutdown chat service if initialized
     try:
-        from backend.personal_assistant.chat_service import get_chat_service
+        from backend.personal_assistant.chat_service_factory import get_chat_service
         chat_service = get_chat_service()
 
         if chat_service is not None:
