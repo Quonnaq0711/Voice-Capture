@@ -8,16 +8,16 @@ RUN apt-get update && apt-get install -y \
 
 RUN pip install --no-cache-dir --upgrade pip
 
-COPY backend/coqui_tts/requirements.txt .
+COPY backend/voice_capture/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 RUN touch /app/backend/__init__.py
 
-COPY backend/coqui_tts/ /app/
+COPY backend/voice_capture/ /app/
 
 RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
 USER appuser
 
-EXPOSE 8003
+EXPOSE 9000
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8003"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "9000"]

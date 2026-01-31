@@ -10,8 +10,8 @@ from fastapi import HTTPException
 
 # Import the API module
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', 'src'))
-from api import router, send_message, get_career_insights
-from api import ChatRequest, CareerInsightsResponse
+from backend.voice_capture.api import router, send_message, get_career_insights
+from backend.voice_capture.api import ChatRequest, CareerInsightsResponse
 
 class TestSendMessageEndpoint:
     """Test cases for the /api/chat/message endpoint."""
