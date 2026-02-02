@@ -73,7 +73,7 @@ async def speech_synthesis(request: TextRequest):
                 audio_data = f.read()
             os.unlink(tmp.name)
 
-        base64_audio = base64.base64encode(audio_data).decode('utf-8')
+        base64_audio = base64.b64encode(audio_data).decode('utf-8')
         return {'success': True, "audio": base64_audio}
     except Exception as e:
         return {'success': False, 'error': str(e)}
@@ -95,3 +95,33 @@ async def voice_chat(file: UploadFile = File(...)):
         # STT
         with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
             tmp.write(await file.read())
+            tmp_path = tmp.name
+
+            segments, _ = whisper_model.transcibe(tmp_path)
+            transcribe = " ".join([seg.text for seg in segments])
+            os.unlik(tmp_path)
+
+        # LLM
+        res = ollama.chat(
+            model='gemma3:latest',
+            messages=[{'role':'user', 'content': transcribe}]
+        )
+        llm_res = res['meaasge']['content']
+
+        # TTS
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
+            tts_engine.save_to_file(llm_res, tmp.name)
+            tts_engine.runAndWait()
+
+            with open(tmp.name, 'rb') as f:
+                audio_data = f.read()
+                os.unlink(tmp.name)
+
+        return{
+            "success":True,
+            "user_transcribe": transcribe,
+            "llm_res": llm_res,
+            "res_audio": base64.b64encode(audio_data).decode('utf-8')
+        }
+    except Exception as e:
+        return{"success": False, "error": str(e)}
