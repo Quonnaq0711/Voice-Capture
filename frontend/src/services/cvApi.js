@@ -73,5 +73,11 @@ const VoiceCaptureApi = {
         }
     },
 
-    async synthsize() {}
+    async synthsize() {
+        try {
+            
+        } catch (error) {
+            
+        }
+    },
 }; 
