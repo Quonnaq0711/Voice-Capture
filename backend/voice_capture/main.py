@@ -1,6 +1,7 @@
 import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from .api import vc
 import pyttsx3
 import torch
 from faster_whisper import WhisperModel
@@ -33,7 +34,10 @@ app.add_middleware(
 )
 
 # Router
-app.include_router(vc)
+app.include_router(
+    vc.router,
+    prefix="/api/v1/vc",
+    tags=["vc", "voice-capture"])
 
 # GPU Check
 device = "cuda" if torch.cuda.is_available() else "cpu"

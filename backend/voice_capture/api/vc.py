@@ -1,8 +1,6 @@
 from multiprocessing import context
 import os
 import sys
-
-
 from faster_whisper import WhisperModel
 import ollama
 import pyttsx3
@@ -59,7 +57,7 @@ async def audio_transcription(file:UploadFile = File(...)):
             "language":info.language
         }
     except Exception as e:
-        return {"success" : False, "error":str(e)}
+        return {"success" : False, "error": str(e)}
     
 
 @router.post("/speech")
