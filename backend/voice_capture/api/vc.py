@@ -10,6 +10,10 @@ import tempfile
 from pydantic import BaseModel
 from fastapi import APIRouter, File, UploadFile, WebSocket
 
+from backend.voice_capture.utils.llm_async import chat_async
+from backend.voice_capture.utils.stt_async import transcribe_async
+from backend.voice_capture.utils.tts_async import synthesize_async
+
 
 # Python path addition in project root
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))))
@@ -47,15 +51,18 @@ async def audio_transcription(file:UploadFile = File(...)):
             tmp.write(content)
             tmp_path = tmp.name
 
-        segments, info = whisper_model.transcribe(tmp_path, beam_size=5)
-        transcribe = " ".join([seg.text for seg in segments])
+        text, language = await transcribe_async(
+           whisper_model,
+           tmp_path
+       )
         os.unlink(tmp_path)
 
         return{
             "success": True,
-            "transcript": transcribe,
-            "language":info.language
+            "transcript": text,
+            "language": language
         }
+    
     except Exception as e:
         return {"success" : False, "error": str(e)}
     
@@ -64,27 +71,38 @@ async def audio_transcription(file:UploadFile = File(...)):
 async def speech_synthesis(request: TextRequest):
     try:
         with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
-            tts_engine.save_to_file(request.text, tmp.name)
-            tts_engine.runAndWait()
+            await synthesize_async(
+                request.text,
+                request.voice,
+                tmp.name
+            )
 
             with open(tmp.name, 'rb') as f:
                 audio_data = f.read()
-            os.unlink(tmp.name)
+
+        os.unlink(tmp.name)
 
         base64_audio = base64.b64encode(audio_data).decode('utf-8')
         return {'success': True, "audio": base64_audio}
+    
     except Exception as e:
         return {'success': False, 'error': str(e)}
     
 
-@router.post('/chat')
+@router.post("/chat")
 async def ollama_chat(request: ChatRequest):
     try:
         message = request.content + [{"role": "user", "content": request.message}]
-        response = ollama.chat(model='gemma3:lastest', messages=message)
-        return{'success':True, 'response': response['message']['content']}
+        response = chat_async(
+            model="gemma3:lastest",
+            messages=message
+            )
+
+
+        return{"success":True, "response": response}
+    
     except Exception as e:
-        return{'success':False, 'error': str(e)}
+        return{"success":False, "error": str(e)}
     
 
 @router.post("/voice-chat")
@@ -93,31 +111,38 @@ async def voice_chat(file: UploadFile = File(...)):
         # STT
         with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
             tmp.write(await file.read())
-            tmp_path = tmp.name
+            wav_path = tmp.name
 
-            segments, _ = whisper_model.transcibe(tmp_path)
-            transcribe = " ".join([seg.text for seg in segments])
-            os.unlik(tmp_path)
+        user_text, _ = await transcribe_async(
+                whisper_model,
+                wav_path
+            )
+        
+        os.unlink(wav_path)
 
         # LLM
-        res = ollama.chat(
+        llm_res = await chat_async(
             model='gemma3:latest',
-            messages=[{'role':'user', 'content': transcribe}]
+            messages=[{'role':'user', 'content': user_text}]
         )
-        llm_res = res['meaasge']['content']
+        
 
         # TTS
         with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
-            tts_engine.save_to_file(llm_res, tmp.name)
-            tts_engine.runAndWait()
+            await synthesize_async(
+                llm_res,
+                None,
+                tmp.name
+            )            
 
             with open(tmp.name, 'rb') as f:
                 audio_data = f.read()
-                os.unlink(tmp.name)
+
+        os.unlink(tmp.name)
 
         return{
             "success":True,
-            "user_transcribe": transcribe,
+            "user_transcribe": user_text,
             "llm_res": llm_res,
             "res_audio": base64.b64encode(audio_data).decode('utf-8')
         }

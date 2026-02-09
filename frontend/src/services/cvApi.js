@@ -17,19 +17,35 @@ async function fetchDelay(url, options = {}, timeout = 30000) {
             ...options,
             signal: controller.signal
         });
-        clearTimeout(sig);
 
         if (!res.ok) {
-            const errorData = await res.json().catch(() => ({}));
-            throw new Error(errorData.detail)
+            let errorData;
+            try {
+                errorData = await res.json();
+            } catch {
+                errorData = null;
+            } 
+
+            const message = errorData?.detail || errorData?.message ||
+                `Request failed with status ${res.status}`;
+            
+            const err = new Error(message);
+            err.status = res.status;
+            err.body = errorData;
+            throw err;
         }
+
         return res;
+
     } catch (error) {
-        clearTimeout(sig);
+        
         if (error.name === 'AbortError') {
             throw new Error('Request timeout - Server may have slowed or file too large');
         }
+
         throw error;
+    } finally {
+        clearTimeout(sig);
     }
 }
 
@@ -68,16 +84,69 @@ const VoiceCaptureApi = {
             return await handleResponse(res);
 
         } catch (error) {
-            console.error('[Voice Capture Api] failed batch transcribe', error);
+            console.error('[Voice Capture API] failed batch transcribe', error);
             throw error;
         }
     },
 
-    async synthsize() {
+    async synthsize(text, voice = null) {
         try {
-            
+            const res = await fetchDelay(`${VC_BASE_API}/speech`, {
+                method: 'POST',
+                headers: { 'Content-type': 'application/json' },
+                body: JSON.stringify({text, voice}),
+            }, 30000)
+
+            return await handleResponse(res);
         } catch (error) {
-            
+            console.error('[Voice Capture API] Synthesize Failed', error);
+            throw error;
+        }
+    },
+
+    async chat(message, content = []) {
+        try {
+            const res = await fetchDelay(`${VC_BASE_API}/chat`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ message, content })
+            }, 60000);
+
+            return await handleResponse(res);
+        } catch (error) {
+            console.error('[Voice Capture API] chat failed', error)
+            throw error
+        }
+    },
+
+    async voice_chat(audioblob) {
+        try {
+            const formdata = new FormData();
+            formdata.append('file', audioblob, 'audio.webm');
+
+            const res = await fetchDelay(`${VC_BASE_API}/voice-chat`, {
+                method: 'POST',
+                body: formdata
+            }, 60000)
+
+            return await handleResponse(res);
+        } catch (error) {
+            console.error('[Voice Capture API] Voice Chat Failed', error)
+            throw error
+        }
+    },
+
+    async checkStatus() {
+        try {
+            const res = await fetchDelay(`${VC_BASE_API}/`, {
+                method: 'GET',
+                headers: {'Content-Type': 'application/json'}
+            })
+
+            return await handleResponse(res);
+        } catch (error) {
+            console.error('[Voice Capture Api] Status Check Failed', error)
+            throw error;
         }
     },
 }; 
