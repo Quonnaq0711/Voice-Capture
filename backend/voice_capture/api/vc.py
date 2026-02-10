@@ -1,17 +1,21 @@
 from multiprocessing import context
 import os
 import sys
+import time
+from typing import Optional, List, final
 from faster_whisper import WhisperModel
+from langchain_text_splitters import Language
 import ollama
 import pyttsx3
+from sympy import N
 import torch
 import base64
 import tempfile
 from pydantic import BaseModel
-from fastapi import APIRouter, File, UploadFile, WebSocket
+from fastapi import APIRouter, File, HTTPException, UploadFile, WebSocket
 
 from backend.voice_capture.utils.llm_async import chat_async
-from backend.voice_capture.utils.stt_async import transcribe_async
+from backend.voice_capture.utils.stt_async import transcribe_async, transcribe_files_async
 from backend.voice_capture.utils.tts_async import synthesize_async
 
 
@@ -42,6 +46,33 @@ class ChatRequest(BaseModel):
     message: str
     context: list = []
 
+class TranscribeResult(BaseModel):
+    filename: str
+    success: bool
+    transcribe: Optional[str] = None
+    language: Optional[str] = None
+    duration: Optional[float] = None
+    error: Optional[str] = None
+
+class BatchTranscribeResponse(BaseModel):
+    success: bool
+    total_files: int
+    successful: int
+    failed: int
+    results: List[TranscribeResult]
+    total_processing_time: float
+    device_used: str
+
+class GPUStatusResponse(BaseModel):
+    gpu_avaliable: bool
+    gpu_name: Optional[str] = None
+    memory_used_gb: Optional[str] = None
+    memory_reserved_gb: Optional[str] = None
+    memory_total_gb: Optional[str] = None
+    usage_percentage: Optional[str] = None
+    cuda_version: Optional[str] = None
+
+
 
 @router.post("/transcribe")
 async def audio_transcription(file:UploadFile = File(...)):
@@ -65,7 +96,87 @@ async def audio_transcription(file:UploadFile = File(...)):
     
     except Exception as e:
         return {"success" : False, "error": str(e)}
+
+
+@router.post("/batch", response_model=BatchTranscribeResponse)
+async def batch_transcribe(files: List[UploadFile] = File(...)):
+
+    if not files:
+        raise HTTPException(
+            status_code=400,
+            detail= "No files provided"
+        )
+    if len(files) > 50:
+        raise HTTPException(
+            status_code=400,
+            detail="Maximum of 50 files per batch allowed"
+        )
     
+    res = []
+    start_time = time.time()
+    successful_count = 0
+    failed_count = 0
+
+    for file in files:
+        temp_path = None
+
+        try:
+            if not file.content_type or not file.content_type.startswith("audio/"):
+                res.append(TranscribeResult(
+                    filename=file.filename,
+                    success=False,
+                    error="Invalid file type - Only audio file supported "
+                ))
+                failed_count += 1
+                continue
+
+
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
+                data = await file.read()
+                tmp.write(data)
+                temp_path = tmp.name
+
+            
+            transcript,language, duration = await transcribe_files_async(
+                whisper_model,
+                temp_path
+            )
+
+            res.append(TranscribeResult(
+                filename=file.filename,
+                success=True,
+                transcript=transcript,
+                language=language,
+                duration=duration
+            ))
+            successful_count += 1
+
+        except Exception as e:
+            res.append(TranscribeResult(
+                filename=file.filename,
+                success=False,
+                error=str(e)
+            ))
+            failed_count += 1
+
+        finally:
+            if temp_path and os.path.exists(temp_path):
+                try:
+                    os.unlink(temp_path)
+                except Exception:
+                    pass
+
+    total_time = round(time.time() - start_time, 2)
+
+    return BatchTranscribeResponse(
+        success=True,
+        total_files=len(files),
+        successfu=successful_count,
+        failed=failed_count,
+        results=res,
+        total_processing_time=total_time,
+        device_used=device
+    )
 
 @router.post("/speech")
 async def speech_synthesis(request: TextRequest):

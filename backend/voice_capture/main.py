@@ -66,6 +66,15 @@ async def root():
             "stt": "Faster-Whisper",
             "tts": "pyttsx3",
             "llm": "Gemma3 (Ollama)"
+        },
+        "endpoints": {
+            "transcribe": "POST /transcribe",
+            "synthesize": "POST /speech",
+            "chat": "POST /chat",
+            "voice_chat": "POST /voice-chat",
+            "batch_transcribe": "POST /batch",
+            "gpu_status": "GET /status",
+            "health": "GET /health"
         }
   }
 
