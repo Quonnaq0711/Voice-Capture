@@ -293,3 +293,17 @@ async def Gpu():
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error getting GPU status: {str(e)}")
+    
+
+@router.get("/health")
+async def health_check():
+    
+    return{
+        "status": "healthy",
+        "device": device,
+        "gpu_avaliable": torch.cuda.is_available(),
+        "models_loaded": {
+            "whisper": whisper_model is not None,
+            "tts": tts_engine is not None
+        }
+    }
