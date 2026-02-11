@@ -4,6 +4,7 @@ import sys
 import time
 from typing import Optional, List, final
 from faster_whisper import WhisperModel
+from huggingface_hub import DiscussionWithDetails
 from langchain_text_splitters import Language
 import ollama
 import pyttsx3
@@ -178,6 +179,7 @@ async def batch_transcribe(files: List[UploadFile] = File(...)):
         device_used=device
     )
 
+
 @router.post("/speech")
 async def speech_synthesis(request: TextRequest):
     try:
@@ -259,3 +261,35 @@ async def voice_chat(file: UploadFile = File(...)):
         }
     except Exception as e:
         return{"success": False, "error": str(e)}
+    
+
+@router.get("/gpu_status", response_model=GPUStatusResponse)
+async def Gpu():
+
+    if not torch.cuda.is_available():
+        return GPUStatusResponse(
+            gpu_avaliable=False 
+        )
+    
+    try:
+        gpu_name = torch.cuda.get_device_name(1)
+        cuda_version = torch.version.cuda
+
+        memory_used = torch.cuda.memory_allocated(1) / 1024**3
+        memoey_reserved = torch.cuda.memory_reserved(1) / 1024**3
+        memory_total = torch.cuda.get_device_properties(1).total_memory / 1024**3
+
+        usage = (memory_used / memory_total * 100) if memory_total > 0 else 0
+
+        return GPUStatusResponse(
+            gpu_avaliable=True,
+            gpu_name=gpu_name,
+            memory_used_gb=f"{memory_used:2f}",
+            memory_reserved_gb=f"{memoey_reserved:2f}",
+            memory_total_gb=f"{memory_total:2f}",
+            usage_percentage=f"{usage:1f}",
+            cuda_version=cuda_version
+        )
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error getting GPU status: {str(e)}")
