@@ -1,4 +1,3 @@
-from multiprocessing import context
 import os
 import sys
 import time
@@ -21,10 +20,10 @@ from backend.voice_capture.utils.tts_async import synthesize_async
 
 
 # Python path addition in project root
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))))
+#sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))))
 
 
-router = APIRouter(prefix="api/vc", tags=["vc", "voice capture"])
+router = APIRouter(tags=["vc", "voice capture"])
 
 # GPU Check
 device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -42,10 +41,11 @@ tts_engine.setProperty("rate", 150)
 # Response/Request Models
 class TextRequest(BaseModel):
     text: str
+    voice: Optional[str] = None
 
 class ChatRequest(BaseModel):
     message: str
-    context: list = []
+    context: List[dict] = []
 
 class TranscribeResult(BaseModel):
     filename: str
@@ -76,7 +76,7 @@ class GPUStatusResponse(BaseModel):
 
 
 @router.post("/transcribe")
-async def audio_transcription(file:UploadFile = File(...)):
+async def audio_transcription(file: UploadFile = File(...)):
     try:
         with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
             content = await file.read()
@@ -172,7 +172,7 @@ async def batch_transcribe(files: List[UploadFile] = File(...)):
     return BatchTranscribeResponse(
         success=True,
         total_files=len(files),
-        successfu=successful_count,
+        successful=successful_count,
         failed=failed_count,
         results=res,
         total_processing_time=total_time,
@@ -205,17 +205,16 @@ async def speech_synthesis(request: TextRequest):
 @router.post("/chat")
 async def ollama_chat(request: ChatRequest):
     try:
-        message = request.content + [{"role": "user", "content": request.message}]
-        response = chat_async(
-            model="gemma3:lastest",
-            messages=message
+        messages = request.context + [{"role": "user", "content": request.message}]
+        response = await chat_async(
+            model="gemma3:latest",
+            messages=messages
             )
-
-
-        return{"success":True, "response": response}
+        
+        return {"success": True, "response": response}
     
     except Exception as e:
-        return{"success":False, "error": str(e)}
+        return {"success": False, "error": str(e)}
     
 
 @router.post("/voice-chat")
@@ -263,7 +262,7 @@ async def voice_chat(file: UploadFile = File(...)):
         return{"success": False, "error": str(e)}
     
 
-@router.get("/gpu_status", response_model=GPUStatusResponse)
+@router.get("/gpu-status", response_model=GPUStatusResponse)
 async def Gpu():
 
     if not torch.cuda.is_available():

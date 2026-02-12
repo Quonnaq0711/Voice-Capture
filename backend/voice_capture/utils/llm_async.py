@@ -1,5 +1,5 @@
 import asyncio
-from executors import io_executor
+from .executors import io_executor
 import ollama
 
 

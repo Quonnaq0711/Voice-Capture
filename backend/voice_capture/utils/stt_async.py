@@ -1,5 +1,5 @@
 import asyncio        
-from executors import compute_executor, whisper_executor
+from .executors import compute_executor, whisper_executor
 
 
 async def transcribe_async(model, wav_path):
