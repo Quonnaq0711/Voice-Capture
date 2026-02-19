@@ -14,6 +14,7 @@ import tempfile
 from pydantic import BaseModel
 from fastapi import APIRouter, File, HTTPException, UploadFile, WebSocket
 
+from backend.voice_capture.utils import whisper_service
 from backend.voice_capture.utils.llm_async import chat_async
 from backend.voice_capture.utils.stt_async import transcribe_async, transcribe_files_async
 from backend.voice_capture.utils.tts_async import synthesize_async
@@ -30,7 +31,7 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 print(f"Using device {device}") 
 
 # Load Whisper
-whisper_model = WhisperModel("base", device=device, compute_type="float16" if device == "cuda" else "int8")
+whisper_model = WhisperModel("small", device=device, compute_type="float16" if device == "cuda" else "int8")
 
 # Init TTS
 tts_engine = pyttsx3.init()
@@ -47,20 +48,21 @@ class ChatRequest(BaseModel):
     message: str
     context: List[dict] = []
 
-class TranscribeResult(BaseModel):
-    filename: str
+class DictationResponse(BaseModel):
     success: bool
-    transcribe: Optional[str] = None
-    language: Optional[str] = None
-    duration: Optional[float] = None
-    error: Optional[str] = None
+    text: Optional[str]
+    language: Optional[str]
+    duration: Optional[float]
+    processing_time: float
+    device: str
+    
 
 class BatchTranscribeResponse(BaseModel):
     success: bool
     total_files: int
     successful: int
     failed: int
-    results: List[TranscribeResult]
+    results: List[dict]
     total_processing_time: float
     device_used: str
 
@@ -75,28 +77,42 @@ class GPUStatusResponse(BaseModel):
 
 
 
-@router.post("/transcribe")
+@router.post("/transcribe", response_model=DictationResponse)
 async def audio_transcription(file: UploadFile = File(...)):
+
+    if not file.content_type.startswith("audio/"):
+        raise HTTPException(400, "Invalid file")
+    
+    temp_path = None
+    start = time.time()
+
+
     try:
         with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
             content = await file.read()
             tmp.write(content)
-            tmp_path = tmp.name
+            temp_path = tmp.name
 
-        text, language = await transcribe_async(
-           whisper_model,
-           tmp_path
-       )
-        os.unlink(tmp_path)
+            res = whisper_service.dictation(temp_path)
 
-        return{
-            "success": True,
-            "transcript": text,
-            "language": language
-        }
+        return DictationResponse(
+            success=True,
+            text=res["text"],
+            language=res["language"],
+            duration=res["duration"],
+            device=device,
+            processing_time=round(time.time()-start, 2)
+        )
     
     except Exception as e:
         return {"success" : False, "error": str(e)}
+    
+
+    finally:
+        if temp_path and os.path.exsist(temp_path):
+          os.unlink(temp_path)
+
+    
 
 
 @router.post("/batch", response_model=BatchTranscribeResponse)
@@ -123,12 +139,14 @@ async def batch_transcribe(files: List[UploadFile] = File(...)):
 
         try:
             if not file.content_type or not file.content_type.startswith("audio/"):
-                res.append(TranscribeResult(
-                    filename=file.filename,
-                    success=False,
-                    error="Invalid file type - Only audio file supported "
-                ))
+                res.append({
+                    "filename": file.filename,
+                    "success": False,
+                    "text": res["text"]
+                })
+
                 failed_count += 1
+
                 continue
 
 
@@ -138,26 +156,24 @@ async def batch_transcribe(files: List[UploadFile] = File(...)):
                 temp_path = tmp.name
 
             
-            transcript,language, duration = await transcribe_files_async(
-                whisper_model,
+            res = whisper_model.dictation(
                 temp_path
             )
 
-            res.append(TranscribeResult(
-                filename=file.filename,
-                success=True,
-                transcript=transcript,
-                language=language,
-                duration=duration
-            ))
+            res.append({
+                "filename": file.filename,
+                "success": True,
+                "text": res["text"]
+            })
+            
             successful_count += 1
 
         except Exception as e:
-            res.append(TranscribeResult(
-                filename=file.filename,
-                success=False,
-                error=str(e)
-            ))
+            res.append({
+                "filename": file.filename,
+                "success": False,
+                "error": str(e)
+            })
             failed_count += 1
 
         finally:
@@ -186,8 +202,8 @@ async def speech_synthesis(request: TextRequest):
         with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
             await synthesize_async(
                 request.text,
-                request.voice,
-                tmp.name
+                voice_id=None,
+                output_path=tmp.name
             )
 
             with open(tmp.name, 'rb') as f:
