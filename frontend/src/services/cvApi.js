@@ -50,7 +50,7 @@ async function fetchDelay(url, options = {}, timeout = 30000) {
 }
 
 
-const VoiceCaptureApi = {
+export const VoiceCaptureApi = {
     async transcribe(audioblob) {
         try {
             const formData = new FormData();
