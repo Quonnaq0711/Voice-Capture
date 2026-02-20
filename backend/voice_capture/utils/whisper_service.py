@@ -6,7 +6,7 @@ from faster_whisper import WhisperModel
 import torch
 import os
 
-DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+DEVICE = "cuda:1" if torch.cuda.is_available() else "cpu"
 
 WHISPER_MODEL_SIZE = os.getenv("WHISPER_MODEL", "medium")
 

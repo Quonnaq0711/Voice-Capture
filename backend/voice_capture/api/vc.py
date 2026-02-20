@@ -27,11 +27,11 @@ from backend.voice_capture.utils.tts_async import synthesize_async
 router = APIRouter(tags=["vc", "voice capture"])
 
 # GPU Check
-device = "cuda" if torch.cuda.is_available() else "cpu"
+device = "cuda:1" if torch.cuda.is_available() else "cpu"
 print(f"Using device {device}") 
 
 # Load Whisper
-whisper_model = WhisperModel("small", device=device, compute_type="float16" if device == "cuda" else "int8")
+whisper_model = WhisperModel("small", device=device, compute_type="float16" if device == "cuda:1" else "int8")
 
 # Init TTS
 tts_engine = pyttsx3.init()
