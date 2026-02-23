@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { UseVoice } from "../../hooks/useVoiceCapture";
+import { UseVoice } from "../../hooks/useVoice";
 import { VoiceToggle } from "./voiceToggle";
 import { DictationStatus } from "./DictationStatus";
 import { TranscriptPanel } from "./TranscriptPanel";
