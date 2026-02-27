@@ -122,8 +122,9 @@ export const VoiceCaptureApi = {
     async voice_chat(audioblob) {
         try {
             const formdata = new FormData();
-            formdata.append('file', audioblob, 'audio.webm');
-
+            formdata.append('file', audioblob, 'voice.webm');
+            
+            
             const res = await fetchDelay(`${VC_BASE_API}/voice-chat`, {
                 method: 'POST',
                 body: formdata
