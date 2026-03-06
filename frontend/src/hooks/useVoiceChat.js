@@ -10,6 +10,8 @@ export function useVoiceChat({ onResponse }) {
     const chunksRef = useRef([]);
 
     const start = async () => {
+        if (isRecording) return;
+        
         const stream = await navigator.mediaDevices.getUserMedia({
             audio: true
         });
