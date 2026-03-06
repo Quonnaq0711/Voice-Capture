@@ -25,3 +25,107 @@ code {
     bottom: 0.25rem !important; /* 4px instead of 8px (bottom-2) */
   }
 }
+
+/* DatePicker Custom Styles for Extraction Settings */
+.extraction-datepicker {
+  font-family: inherit;
+  font-size: 13px;
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+}
+
+.extraction-datepicker .react-datepicker__header {
+  background: linear-gradient(to right, #faf5ff, #ffffff);
+  border-bottom: 1px solid #f3e8ff;
+  padding: 12px 8px 8px;
+}
+
+.extraction-datepicker .react-datepicker__current-month {
+  font-weight: 600;
+  color: #1f2937;
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+
+.extraction-datepicker .react-datepicker__day-name {
+  color: #6b7280;
+  font-weight: 500;
+  font-size: 11px;
+  text-transform: uppercase;
+  width: 32px;
+  line-height: 32px;
+}
+
+.extraction-datepicker .react-datepicker__day {
+  width: 32px;
+  line-height: 32px;
+  border-radius: 8px;
+  color: #374151;
+  font-weight: 500;
+}
+
+.extraction-datepicker .react-datepicker__day--selected,
+.extraction-datepicker .react-datepicker__day--keyboard-selected {
+  background-color: #9333ea;
+  color: white;
+  font-weight: 600;
+}
+
+.extraction-datepicker .react-datepicker__day--selected:hover,
+.extraction-datepicker .react-datepicker__day--keyboard-selected:hover {
+  background-color: #7e22ce;
+}
+
+.extraction-datepicker .react-datepicker__day:hover {
+  background-color: #f3e8ff;
+  color: #7c3aed;
+}
+
+.extraction-datepicker .react-datepicker__day--today {
+  font-weight: 700;
+  color: #9333ea;
+}
+
+.extraction-datepicker .react-datepicker__day--outside-month {
+  color: #d1d5db;
+}
+
+.extraction-datepicker .react-datepicker__navigation {
+  top: 12px;
+}
+
+.extraction-datepicker .react-datepicker__navigation--previous {
+  left: 8px;
+}
+
+.extraction-datepicker .react-datepicker__navigation--next {
+  right: 8px;
+}
+
+.extraction-datepicker .react-datepicker__navigation-icon::before {
+  border-color: #6b7280;
+}
+
+.extraction-datepicker .react-datepicker__navigation:hover .react-datepicker__navigation-icon::before {
+  border-color: #9333ea;
+}
+
+/* Ensure DatePicker inputs have proper width */
+.react-datepicker-wrapper {
+  flex: 1;
+}
+
+.react-datepicker__input-container {
+  width: 100%;
+}
+
+.react-datepicker__input-container input {
+  width: 100%;
+}
+
+/* DatePicker popper positioning */
+.react-datepicker-popper {
+  z-index: 100 !important;
+}

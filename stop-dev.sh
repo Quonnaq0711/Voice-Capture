@@ -102,6 +102,7 @@ stop_service "frontend"
 stop_service "backend"
 stop_service "pa"
 stop_service "career"
+stop_service "work"
 
 # Stop LLM Services (Ollama or vLLM based on LLM_PROVIDER)
 # Define ENV_FILE first
@@ -166,6 +167,7 @@ if [ -f "$ENV_FILE" ]; then
     BACKEND_PORT=$(grep "^BACKEND_PORT=" "$ENV_FILE" | cut -d'=' -f2)
     PA_PORT=$(grep "^PA_PORT=" "$ENV_FILE" | cut -d'=' -f2)
     CAREER_PORT=$(grep "^CAREER_PORT=" "$ENV_FILE" | cut -d'=' -f2)
+    WORK_PORT=$(grep "^WORK_PORT=" "$ENV_FILE" | cut -d'=' -f2)
     FRONTEND_PORT=$(grep "^FRONTEND_PORT=" "$ENV_FILE" | cut -d'=' -f2)
     OLLAMA1_PORT=$(grep "^OLLAMA1_PORT=" "$ENV_FILE" | cut -d'=' -f2)
     OLLAMA2_PORT=$(grep "^OLLAMA2_PORT=" "$ENV_FILE" | cut -d'=' -f2)
@@ -173,12 +175,14 @@ if [ -f "$ENV_FILE" ]; then
 
     # Set defaults if not found
     VLLM_PORT=${VLLM_PORT:-8888}
+    WORK_PORT=${WORK_PORT:-6004}
 
     # Build ports array from .env.dev based on LLM provider
     PORTS=()
     [ ! -z "$BACKEND_PORT" ] && PORTS+=("$BACKEND_PORT")
     [ ! -z "$PA_PORT" ] && PORTS+=("$PA_PORT")
     [ ! -z "$CAREER_PORT" ] && PORTS+=("$CAREER_PORT")
+    [ ! -z "$WORK_PORT" ] && PORTS+=("$WORK_PORT")
     [ ! -z "$FRONTEND_PORT" ] && PORTS+=("$FRONTEND_PORT")
 
     # Add LLM-specific ports based on provider
@@ -194,7 +198,7 @@ if [ -f "$ENV_FILE" ]; then
 else
     # Fallback to hardcoded ports if .env.dev not found
     echo -e "${YELLOW}⚠️  .env.dev not found, using default ports${NC}"
-    PORTS=(5000 6001 6002 1000 12434 12435 8888)
+    PORTS=(5000 6001 6002 8003 1000 12434 12435 8888)
 fi
 
 FOUND_ORPHAN=false
