@@ -23,6 +23,9 @@ COPY backend/services/ /app/backend/services/
 COPY backend/config/ /app/backend/config/
 COPY backend/personal_assistant/ /app/backend/personal_assistant/
 
+# Copy modules (PA tools used by chat_service_vllm)
+COPY modules/ /app/modules/
+
 # Create __init__.py files for backend module
 RUN touch /app/backend/__init__.py
 
@@ -40,4 +43,5 @@ EXPOSE 8001
 
 # Optimized for 4-core CPU: 4 workers (limited by LLM processing, not CPU)
 # For 8-core CPU, increase to 6-8 workers
-CMD ["gunicorn", "main:app", "-w", "4", "-k", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8001", "--timeout", "120", "--worker-connections", "1000"]
+# Timeout increased to 300s (5 min) for Qwen 7B model which generates ~17 tokens/s
+CMD ["gunicorn", "main:app", "-w", "4", "-k", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8001", "--timeout", "300", "--worker-connections", "1000"]

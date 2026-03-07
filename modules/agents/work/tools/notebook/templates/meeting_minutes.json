@@ -1,0 +1,7 @@
+{
+  "id": "meeting_minutes",
+  "name": "Meeting Minutes",
+  "description": "Structured template for capturing meeting notes with attendees, agenda, and action items",
+  "icon": "users",
+  "content": "<h2>Meeting Minutes</h2><p><strong>Date:</strong> </p><p><strong>Time:</strong> </p><p><strong>Location:</strong> </p><hr><h3>Attendees</h3><ul><li></li></ul><h3>Agenda</h3><ol><li></li></ol><h3>Discussion Points</h3><p></p><h3>Decisions Made</h3><ul><li></li></ul><h3>Action Items</h3><ul><li><strong>Task:</strong>  | <strong>Owner:</strong>  | <strong>Due:</strong> </li></ul><h3>Next Steps</h3><p></p><hr><p><em>Notes taken by: </em></p>"
+}

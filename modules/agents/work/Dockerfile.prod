@@ -1,0 +1,53 @@
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    libpq-dev \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+# Upgrade pip
+RUN pip install --no-cache-dir --upgrade pip
+
+# Copy requirements
+COPY modules/agents/work/src/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy shared backend modules (needed for database, models, and services)
+COPY backend/db/ /app/backend/db/
+COPY backend/models/ /app/backend/models/
+COPY backend/utils/ /app/backend/utils/
+COPY backend/services/ /app/backend/services/
+COPY backend/config/ /app/backend/config/
+
+# Create __init__.py files for backend module
+RUN touch /app/backend/__init__.py
+
+# Copy Work Agent files (maintaining module structure)
+COPY modules/agents/work/src/ /app/modules/agents/work/src/
+COPY modules/agents/work/tools/ /app/modules/agents/work/tools/
+
+# Copy shared modules (tools, etc.)
+COPY modules/tools/ /app/modules/tools/
+
+# Create __init__.py files for modules
+RUN mkdir -p /app/modules/agents/work && \
+    touch /app/modules/__init__.py && \
+    touch /app/modules/agents/__init__.py && \
+    touch /app/modules/agents/work/__init__.py
+
+# Create non-root user
+RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
+USER appuser
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:8003/api/work/health || exit 1
+
+EXPOSE 8003
+
+# Work Agent typically handles calendar/email operations, 4 workers is sufficient
+# Timeout set to 300s for AI-powered meeting prep which can take time
+CMD ["gunicorn", "modules.agents.work.src.main:app", "-w", "4", "-k", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8003", "--timeout", "300", "--worker-connections", "1000"]

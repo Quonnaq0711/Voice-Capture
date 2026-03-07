@@ -46,6 +46,9 @@ from backend.models.daily_recommendation import DailyRecommendation
 from backend.personal_assistant.prompts import FOLLOW_UP_PROMPT, OPTIMIZE_QUERY_PROMPT
 from backend.personal_assistant.base_chat_service import BaseChatService
 
+from langchain_core.messages import ToolMessage
+from modules.tools.pa import PA_TOOLS
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -124,6 +127,32 @@ class LRUSessionCache:
         self.set(key, value)
 
 
+# ---------------------------------------------------------------------------
+# Tool-calling configuration
+# ---------------------------------------------------------------------------
+MAX_TOOL_ROUNDS = 3        # Max tool-calling iterations before forcing final answer
+MAX_TOOL_OUTPUT = 3000     # Truncation limit for non-document tool results
+_PA_TOOL_MAP = {t.name: t for t in PA_TOOLS}
+
+
+def _execute_pa_tool(tool_call: dict, user_id: int) -> str:
+    """Execute a single PA tool call, injecting user_id server-side."""
+    tool_name = tool_call["name"]
+    tool_args = dict(tool_call.get("args", {}))
+    tool_args["user_id"] = user_id
+
+    if tool_name not in _PA_TOOL_MAP:
+        return f"Error: Unknown tool '{tool_name}'"
+    try:
+        result = _PA_TOOL_MAP[tool_name].invoke(tool_args)
+        # ReadDocument handles its own compression — skip truncation for it
+        if tool_name != "ReadDocument" and len(result) > MAX_TOOL_OUTPUT:
+            result = result[:MAX_TOOL_OUTPUT] + "\n[... truncated]"
+        return result
+    except Exception as e:
+        return f"Error executing {tool_name}: {str(e)}"
+
+
 class ChatServiceVLLM(BaseChatService):
     """
     vLLM-based chat service implementation.
@@ -138,6 +167,7 @@ class ChatServiceVLLM(BaseChatService):
     - Streaming response support
     - Session-based conversation history
     - User profile context injection
+    - Tool-calling for on-demand data access (tasks, documents, notes)
     - Database persistence
     """
 
@@ -218,6 +248,17 @@ class ChatServiceVLLM(BaseChatService):
                 request_timeout=120.0
             )
 
+            # Non-streaming LLM with tools bound — used in Phase 1 (tool detection)
+            self.llm_with_tools = ChatOpenAI(
+                model=model_name,
+                openai_api_base=api_base,
+                openai_api_key="EMPTY",
+                temperature=temperature,
+                max_tokens=max_tokens,
+                streaming=False,
+                request_timeout=90.0,
+            ).bind_tools(PA_TOOLS, tool_choice="auto")
+
             logger.info(f"ChatServiceVLLM initialized successfully:")
             logger.info(f"  Model: {model_name}")
             logger.info(f"  API Base: {api_base}")
@@ -226,6 +267,7 @@ class ChatServiceVLLM(BaseChatService):
             logger.info(f"  Max History Turns: {max_history_turns}")
             logger.info(f"  Max Model Length: {max_model_len}")
             logger.info(f"  Safety Margin: {safety_margin}")
+            logger.info(f"  PA Tools: {[t.name for t in PA_TOOLS]}")
 
         except Exception as e:
             # Cleanup executor if LLM initialization failed
@@ -767,21 +809,22 @@ class ChatServiceVLLM(BaseChatService):
         db: Optional[Session] = None
     ) -> AsyncIterator[Dict[str, Any]]:
         """
-        Generate streaming AI response using Server-Sent Events.
+        Generate streaming AI response with tool-calling support.
 
-        Args:
-            user_message: User's input message
-            session_id: Optional session ID for conversation context
-            user_id: Optional user ID for profile context
-            db: Optional database session
+        Two-phase architecture (mirrors task_solver_service):
+        Phase 1: Non-streaming tool detection loop (max MAX_TOOL_ROUNDS rounds)
+        Phase 2: Streaming final response to the user
 
         Yields:
-            Dictionary chunks with type, content, and optional follow-up questions
+            {type: "tool_call", name, args}    — when LLM requests a tool
+            {type: "tool_result", name, preview} — after tool execution
+            {type: "token", content}            — each streamed token
+            {type: "complete", content, follow_up_questions} — final message
+            {type: "error", content}            — on failure
         """
         try:
             logger.info(f"[vLLM] Generating streaming response for message: {user_message[:50]}...")
 
-            # Use default session if none provided
             if session_id is None:
                 session_id = "default"
 
@@ -796,9 +839,17 @@ class ChatServiceVLLM(BaseChatService):
             # Build messages list
             messages = []
 
-            # System message with profile context
-            # Keep base system prompt consistent for better prefix caching
-            system_content = "You are a helpful AI personal assistant. Please provide helpful, accurate, and personalized responses."
+            system_content = (
+                "You are a helpful AI personal assistant. Please provide helpful, accurate, and personalized responses.\n\n"
+                "You have access to tools that can query the user's data:\n"
+                "- GetTodos: List tasks with optional filters (date, status, priority, category)\n"
+                "- GetUserDocuments: List uploaded documents (resumes, attachments)\n"
+                "- ReadDocument(document_id): Read a document's content by its ID\n"
+                "- SearchNotes(query): Search notes by keyword\n"
+                "- GetDailyInsights: Get the latest AI-generated daily recommendations\n\n"
+                "Use tools when the user asks about their tasks, documents, notes, or insights. "
+                "Do NOT call tools for general questions unrelated to user data."
+            )
 
             if profile_data:
                 profile_context = self._format_profile_for_context(profile_data)
@@ -816,59 +867,98 @@ class ChatServiceVLLM(BaseChatService):
             # Add current user message
             if not history or history[-1]["role"] != "user" or history[-1]["content"] != user_message:
                 messages.append(HumanMessage(content=user_message))
-                # Persist user message immediately
                 self.get_session_history(session_id).add_user_message(user_message)
 
             # Apply sliding window to prevent context overflow
             messages = self._apply_sliding_window(messages)
 
-            # Ensure roles strictly alternate (vLLM requirement)
+            # Ensure roles strictly alternate (vLLM requirement) — only for
+            # the initial message list; tool messages break alternation by design.
             messages = self._ensure_alternating_roles(messages)
 
-            # Count input tokens BEFORE streaming
-            input_token_count = self._count_message_tokens(messages)
-
-            # Calculate dynamic max_tokens
-            dynamic_max_tokens = self._calculate_dynamic_max_tokens(input_token_count)
-
-            logger.info(f"[vLLM Streaming] Input tokens: ~{input_token_count}, Dynamic max_tokens: {dynamic_max_tokens}")
-
-            # Create request-specific LLM instance with dynamic max_tokens (thread-safe)
-            llm = self._create_llm_with_max_tokens(dynamic_max_tokens)
-
-            # Stream response from vLLM
+            # ------------------------------------------------------------------
+            # Streaming with inline tool-call detection
+            # ------------------------------------------------------------------
+            # Tokens are yielded immediately as they arrive from astream.
+            # Tool call chunks (which have empty content) are accumulated.
+            # After the stream ends, if tool_calls were found, execute them
+            # and stream a follow-up synthesis response.
+            # ------------------------------------------------------------------
+            effective_user_id = user_id or 1
+            tool_rounds = 0
+            used_tools = False
             full_response = ""
-            input_tokens = 0
-            output_tokens = 0
-            total_tokens = 0
 
-            async for chunk in llm.astream(messages):
-                # Extract content from chunk
-                chunk_content = chunk.content if hasattr(chunk, 'content') else str(chunk)
+            try:
+                while tool_rounds < MAX_TOOL_ROUNDS:
+                    input_token_count = self._count_message_tokens(messages)
+                    dynamic_max_tokens = self._calculate_dynamic_max_tokens(input_token_count)
+                    logger.info(f"[vLLM Streaming] Round {tool_rounds}, input tokens: ~{input_token_count}, max_tokens: {dynamic_max_tokens}")
 
-                if chunk_content:
-                    full_response += chunk_content
-                    yield {
-                        "type": "token",
-                        "content": chunk_content
-                    }
+                    # Stream and yield content tokens in real-time
+                    # Also accumulate chunks to merge tool_calls at the end
+                    merged = None
+                    async for chunk in self.llm_with_tools.astream(messages):
+                        # Yield text content immediately for real-time streaming
+                        chunk_content = chunk.content if hasattr(chunk, 'content') else ""
+                        if chunk_content:
+                            full_response += chunk_content
+                            yield {"type": "token", "content": chunk_content}
 
-                # Try to extract token usage from streaming chunks (if available)
-                if hasattr(chunk, 'usage_metadata') and chunk.usage_metadata:
-                    usage = chunk.usage_metadata
-                    input_tokens = usage.get('input_tokens', input_tokens)
-                    output_tokens = usage.get('output_tokens', output_tokens)
-                    total_tokens = usage.get('total_tokens', total_tokens)
+                        # Merge chunks to accumulate tool_calls
+                        if merged is None:
+                            merged = chunk
+                        else:
+                            merged = merged + chunk
+
+                    # Check if tool_calls were accumulated
+                    if merged is None or not merged.tool_calls:
+                        break  # No tools — we already yielded all tokens, done
+
+                    # Tool calls detected — execute them
+                    used_tools = True
+                    full_response = ""  # Reset — final response comes after tools
+                    ai_message = AIMessage(
+                        content=merged.content or "",
+                        tool_calls=merged.tool_calls
+                    )
+                    messages.append(ai_message)
+
+                    loop = asyncio.get_running_loop()
+                    for tc in merged.tool_calls:
+                        yield {"type": "tool_call", "name": tc["name"], "args": tc.get("args", {})}
+
+                        result = await loop.run_in_executor(
+                            self.executor, _execute_pa_tool, tc, effective_user_id
+                        )
+
+                        yield {"type": "tool_result", "name": tc["name"], "preview": result[:200]}
+                        messages.append(ToolMessage(content=result, tool_call_id=tc["id"]))
+
+                    tool_rounds += 1
+
+            except Exception as tool_err:
+                logger.warning(f"[vLLM] Tool-calling failed: {tool_err}, falling back to direct response")
+                messages = [m for m in messages if not isinstance(m, ToolMessage)]
+                messages = [m for m in messages if not (isinstance(m, AIMessage) and getattr(m, 'tool_calls', None))]
+                used_tools = False
+
+            # If tools were used, stream the final synthesis response
+            if used_tools:
+                input_token_count = self._count_message_tokens(messages)
+                dynamic_max_tokens = self._calculate_dynamic_max_tokens(input_token_count)
+                logger.info(f"[vLLM Streaming] Final synthesis after tools, input tokens: ~{input_token_count}, max_tokens: {dynamic_max_tokens}")
+
+                llm = self._create_llm_with_max_tokens(dynamic_max_tokens)
+                full_response = ""
+                async for chunk in llm.astream(messages):
+                    chunk_content = chunk.content if hasattr(chunk, 'content') else str(chunk)
+                    if chunk_content:
+                        full_response += chunk_content
+                        yield {"type": "token", "content": chunk_content}
 
             # Add complete response to history
             self._add_to_history(session_id, user_message, full_response)
-
-            # Log token usage if available
-            if input_tokens > 0 or output_tokens > 0:
-                logger.info(f"[vLLM Streaming] Actual usage - Input: {input_tokens}, Output: {output_tokens}, Total: {total_tokens}")
-                if input_tokens > 0:
-                    accuracy = (input_token_count / input_tokens * 100)
-                    logger.info(f"[vLLM Streaming] Token estimation accuracy: {accuracy:.1f}% (estimated: {input_token_count}, actual: {input_tokens})")
 
             # Generate follow-up questions
             follow_up_questions = await self.generate_follow_up_questions(
@@ -1207,23 +1297,27 @@ class ChatServiceVLLM(BaseChatService):
             response_text = response.content if hasattr(response, 'content') else str(response)
             optimized_query = response_text.strip()
 
-            # Remove common prefixes
-            prefixes_to_remove = [
-                "Optimized Query:",
-                "Optimized:",
-                "Here's the optimized query:",
-                "The optimized query is:"
-            ]
-
-            for prefix in prefixes_to_remove:
-                if optimized_query.startswith(prefix):
-                    optimized_query = optimized_query[len(prefix):].strip()
-                    break
+            # Strategy 1: If the response contains a quoted string, extract it
+            # Handles: 'Sure! Here\'s the optimized version:\n\n"The actual query"'
+            quoted_match = re.search(r'["\u201c](.+?)["\u201d]', optimized_query, re.DOTALL)
+            if quoted_match and len(quoted_match.group(1).strip()) > 10:
+                optimized_query = quoted_match.group(1).strip()
+            else:
+                # Strategy 2: Strip known preamble patterns (case-insensitive)
+                optimized_query = re.sub(
+                    r'^(?:sure[!,.]?\s*)?(?:here\'?s?\s+(?:an?\s+)?(?:the\s+)?optimized\s+(?:version\s+(?:of\s+)?(?:your\s+)?(?:query|input|message)|query)\s*[:\.!\-]\s*)',
+                    '', optimized_query, flags=re.IGNORECASE
+                ).strip()
+                # Also strip simple prefixes
+                optimized_query = re.sub(
+                    r'^(?:optimized\s+query\s*:|optimized\s*:|the\s+optimized\s+query\s+is\s*:)\s*',
+                    '', optimized_query, flags=re.IGNORECASE
+                ).strip()
 
             # Remove wrapping quotation marks
+            optimized_query = re.sub(r'^[\"\'\u201c\u201d`]+', '', optimized_query)
+            optimized_query = re.sub(r'[\"\'\u201c\u201d`]+$', '', optimized_query)
             optimized_query = optimized_query.strip()
-            optimized_query = re.sub(r'^[\""\'`]+', '', optimized_query)
-            optimized_query = re.sub(r'[\""\'`]+$', '', optimized_query)
 
             return optimized_query
 
