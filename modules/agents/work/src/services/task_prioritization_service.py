@@ -77,7 +77,11 @@ class TaskPrioritizationService:
                 raise Exception(f"vLLM API error: {response.status_code}")
 
             result = response.json()
-            return result["choices"][0]["message"]["content"].strip()
+            choices = result.get("choices")
+            if not choices or not isinstance(choices, list):
+                logger.error(f"vLLM returned no choices: {str(result)[:200]}")
+                raise Exception("AI returned an empty response")
+            return choices[0].get("message", {}).get("content", "").strip()
 
         except httpx.TimeoutException:
             logger.error("vLLM request timed out")

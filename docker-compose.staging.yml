@@ -168,12 +168,16 @@ services:
       - "--port"
       - "8888"
       - "--gpu-memory-utilization"
-      - "${VLLM_GPU_MEMORY_UTILIZATION:-0.85}"
+      - "${VLLM_GPU_MEMORY_UTILIZATION:-0.75}"
       - "--max-model-len"
       - "${VLLM_MAX_MODEL_LEN:-8192}"
       - "--dtype"
       - "${VLLM_DTYPE:-bfloat16}"
       - "--trust-remote-code"
+      # ===== Tensor Parallelism =====
+      # Split model across 2x L4 GPUs: doubles KV cache, lowers per-request latency
+      - "--tensor-parallel-size"
+      - "2"
       # ===== Concurrency Optimization =====
       # Allow multiple concurrent sequences (PA chat + Career analysis)
       - "--max-num-seqs"
@@ -192,6 +196,8 @@ services:
       - "hermes"
     volumes:
       - /home/idii/data/vllm-cache:/root/.cache/huggingface
+    # Required for NCCL inter-GPU communication with tensor parallelism
+    ipc: host
     networks:
       staging-network:
         aliases:
@@ -201,10 +207,10 @@ services:
         reservations:
           devices:
             - driver: nvidia
-              count: 1
+              count: all
               capabilities: [gpu]
         limits:
-          memory: 12G
+          memory: 24G
     runtime: nvidia
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8888/v1/models || exit 1"]
@@ -355,6 +361,41 @@ services:
       start_period: 30s
       retries: 3
 
+  voice-service-staging:
+    build:
+      context: .
+      dockerfile: modules/services/voice/Dockerfile.prod
+    container_name: idii-voice-staging
+    restart: unless-stopped
+    ports:
+      - "8004:8004"
+    env_file:
+      - .env.staging
+    environment:
+      VOICE_PORT: "8004"
+      WHISPER_MODEL_SIZE: "${WHISPER_MODEL_SIZE:-base}"
+      WHISPER_DEVICE: "cuda"
+      WHISPER_COMPUTE_TYPE: "float16"
+    networks:
+      - staging-network
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+        limits:
+          memory: 4G
+          cpus: '1.5'
+    runtime: nvidia
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8004/api/voice/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+      retries: 3
+
   nginx-staging:
     build:
       context: .
@@ -374,6 +415,7 @@ services:
       - backend-staging
       - personal-assistant-staging
       - work-agent-staging
+      - voice-service-staging
     deploy:
       resources:
         limits:

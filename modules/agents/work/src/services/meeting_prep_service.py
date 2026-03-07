@@ -42,6 +42,10 @@ class MeetingPrepService:
         self.model = VLLM_MODEL
         self.client = httpx.AsyncClient(timeout=60.0)
 
+    async def close(self):
+        """Close the HTTP client to release resources."""
+        await self.client.aclose()
+
     async def _call_llm(self, prompt: str, max_tokens: int = 1024, temperature: float = 0.5) -> str:
         """Call vLLM for text generation."""
         try:

@@ -75,6 +75,12 @@ async def lifespan(app: FastAPI):
 
     # Shutdown
     logger.info("Work Agent shutting down...")
+    try:
+        from modules.agents.work.src.services.meeting_prep_service import get_meeting_prep_service, _meeting_prep_service
+        if _meeting_prep_service is not None:
+            await _meeting_prep_service.close()
+    except Exception:
+        pass
 
 
 # Create FastAPI application

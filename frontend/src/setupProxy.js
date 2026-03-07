@@ -52,9 +52,26 @@ module.exports = function (app) {
     })
   );
 
+  // Proxy for Voice STT Service (development mode)
+  const voiceTarget = process.env.REACT_APP_VOICE_URL || 'http://localhost:6003';
+  app.use(
+    '/api/voice',
+    createProxyMiddleware({
+      target: voiceTarget,
+      changeOrigin: true,
+      logLevel: 'debug',
+      pathRewrite: (path) => {
+        const newPath = '/api/voice' + path;
+        console.log(`[Voice Proxy] Rewriting: /api/voice${path} -> ${newPath}`);
+        return newPath;
+      },
+    })
+  );
+
   console.log('✓ Agent proxies configured:');
   console.log('  - /api/pa -> ' + paTarget + ' (with path rewrite /api/pa -> /api/chat)');
   console.log('  - /api/career -> ' + careerTarget + ' (with path rewrite /api/career -> /api/chat)');
+  console.log('  - /api/voice -> ' + voiceTarget + ' (Voice STT service)');
 
   // Proxy for Work Agent (development mode)
   // NOTE: SSE streaming requires special handling to prevent response buffering

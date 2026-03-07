@@ -427,12 +427,7 @@ export const chat = {
 
   // Optimize query
   optimizeQuery: async (query) => {
-    // Use relative path in production (proxied through Nginx), localhost in development
-    const apiUrl = process.env.NODE_ENV === 'production'
-      ? '/api/pa/optimize'
-      : (process.env.REACT_APP_PA_URL || 'http://localhost:6001') + '/api/chat/optimize';
-
-    const response = await axios.post(apiUrl,
+    const response = await axios.post('/api/pa/optimize',
       { query: query },
       {
         headers: {

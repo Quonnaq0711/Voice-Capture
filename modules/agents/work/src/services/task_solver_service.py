@@ -271,21 +271,29 @@ async def stream_solver_response(
             tool_rounds += 1
 
         # Phase 2: Stream final response
-        if not used_tools and response is not None:
-            # No tools called — response already has content, simulate streaming
-            content = response.content or ""
-            for i in range(0, len(content), 20):
-                yield {"type": "token", "content": content[i:i+20]}
-            yield {"type": "complete", "content": content}
-        else:
-            # After tool calls (or if response is None) — stream with plain LLM
-            full_response = ""
-            async for chunk in _solver_llm.astream(messages):
-                chunk_content = chunk.content if hasattr(chunk, "content") else str(chunk)
-                if chunk_content:
-                    full_response += chunk_content
-                    yield {"type": "token", "content": chunk_content}
-            yield {"type": "complete", "content": full_response}
+        # Always use the streaming LLM for the final answer — whether tools were
+        # called or not.  When no tools were needed, discard the non-streaming
+        # response (it was only used for tool-call detection) and re-stream with
+        # _solver_llm so the client receives true token-by-token output.
+        if used_tools:
+            # After tool rounds, the non-streaming response contained tool_calls
+            # (already appended to messages).  Stream a fresh answer that
+            # incorporates the tool results.
+            pass  # messages already have tool context — fall through to stream
+        elif response is not None:
+            # No tools called — the non-streaming LLM already produced a final
+            # answer, but it arrived all-at-once.  Drop it and re-stream so the
+            # client sees real incremental tokens.  (The re-invocation is cheap:
+            # the prompt is already assembled and vLLM KV-cache usually hits.)
+            pass  # fall through to stream with same messages
+
+        full_response = ""
+        async for chunk in _solver_llm.astream(messages):
+            chunk_content = chunk.content if hasattr(chunk, "content") else str(chunk)
+            if chunk_content:
+                full_response += chunk_content
+                yield {"type": "token", "content": chunk_content}
+        yield {"type": "complete", "content": full_response}
 
     except Exception as e:
         logger.error(f"Tool calling failed: {e}, falling back to direct response")

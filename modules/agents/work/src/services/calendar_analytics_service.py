@@ -107,33 +107,26 @@ class CalendarAnalyticsService:
         return count
 
     def _parse_event_times(self, event: Dict) -> tuple:
-        """Parse event start and end times."""
+        """Parse event start and end times (returns naive datetimes)."""
         try:
             start_str = event.get('start', '')
             end_str = event.get('end', '')
 
-            # Handle ISO format strings
-            if isinstance(start_str, str):
-                # Remove timezone suffix for parsing
-                start_str = start_str.replace('Z', '+00:00')
-                if '+' in start_str:
-                    start_str = start_str.split('+')[0]
-                start = datetime.fromisoformat(start_str)
-            else:
-                start = start_str
-
-            if isinstance(end_str, str):
-                end_str = end_str.replace('Z', '+00:00')
-                if '+' in end_str:
-                    end_str = end_str.split('+')[0]
-                end = datetime.fromisoformat(end_str)
-            else:
-                end = end_str
+            start = self._parse_iso(start_str) if isinstance(start_str, str) else start_str
+            end = self._parse_iso(end_str) if isinstance(end_str, str) else end_str
 
             return start, end
         except Exception as e:
             logger.warning(f"Failed to parse event times: {e}")
             return None, None
+
+    @staticmethod
+    def _parse_iso(s: str) -> datetime:
+        """Parse ISO 8601 string to naive datetime (strip timezone for local comparison)."""
+        # datetime.fromisoformat handles 'Z' suffix from Python 3.11+
+        s = s.replace('Z', '+00:00')
+        dt = datetime.fromisoformat(s)
+        return dt.replace(tzinfo=None)
 
     def _calculate_meeting_metrics(self, events: List[Dict]) -> Dict:
         """Calculate basic meeting metrics."""

@@ -13,6 +13,7 @@ import { OnboardingWizard } from './components/onboarding';
 import { UnifiedSidebar } from './components/dashboard';
 import { CareerAgent, TravelAgent, BodyAgent } from './components/agents';
 import { ErrorBoundary } from './components/ui';
+import { LegalPage } from './components/legal';
 
 // Toast notifications
 import { ToastContainer } from 'react-toastify';
@@ -89,6 +90,11 @@ function App() {
                   </PrivateRoute>
                 }
               />
+              {/* Legal Routes */}
+              <Route path="/legal" element={<LegalPage />} />
+              <Route path="/privacy" element={<LegalPage />} />
+              <Route path="/terms" element={<LegalPage />} />
+
               {/* OTP Routes */}
               <Route path="/request-password" element={<ResetPasswordRequest />} />
               <Route path="/confirm-password" element={<VerifyPasswordOTP />} />
