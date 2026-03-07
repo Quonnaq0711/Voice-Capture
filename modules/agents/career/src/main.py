@@ -30,7 +30,7 @@ from backend.models.chat import ChatMessage
 from backend.models.session import ChatSession
 from backend.models.refresh_token import RefreshToken
 
-from api import router as chat_router
+from backend.voice_capture.api.vc import router as chat_router
 from streaming_api import router as streaming_router
 from chat_service import get_chat_service
 
