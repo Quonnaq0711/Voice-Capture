@@ -306,6 +306,17 @@ services:
           cpus: '1.5'
         reservations:
           memory: 1G
+  redis:
+    build:
+      context: .
+      dockerfile: backend/Rag/Dockerfile.prod
+    container_name: idii-Rag-staging
+    restart: unless-stopped
+    ports: ["6370:6379"]
+    image: redis:7-alpine
+    volumes: ["redis_data:/data"]
+    command: redis-server --appendonly yes
+
 
   nginx-staging:
     build:
@@ -335,6 +346,7 @@ services:
 
 volumes:
   postgres_data:
+  redis_data:
 
 networks:
   staging-network:
