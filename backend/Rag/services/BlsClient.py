@@ -45,6 +45,7 @@ class BLSClient:
         
         # Refresh Data Every 24 Hours(cached)
         r.setex(key, 86400, json.dumps(data))
+        
         return data
     
     async def get_outlook(self, soc: str) -> list:
@@ -63,5 +64,6 @@ class BLSClient:
 
         # Refesh Data Every 7 days(cached)
         r.setex(key, 86400*7, json.dumps(data))
+
         return data
     
