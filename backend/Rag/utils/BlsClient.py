@@ -1,7 +1,12 @@
+import os
 import redis
 
 
-r = redis.Redis()
+r = redis.Redis(
+    host=os.getenv("REDIS_HOST", "redis"),
+    port=6379,
+    decode_responses=True,
+)
 
 class BLSClient:
     Base="https://api.bls.gov/publicAPI/v2"

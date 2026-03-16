@@ -18,8 +18,13 @@ services:
       DB_NAME: idii-staging
       DB_USER: ${DB_USER:-postgres}
       DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      BLS_KEY: ${BLS_KEY}
+      ONET_USER: ${ONET_USER}
+      ONET_PASS: ${ONET_PASS}
+      REDIS_URL: ${REDIS_URL}
     depends_on:
       - db-staging
+      - redis
     networks:
       - staging-network
     labels:
