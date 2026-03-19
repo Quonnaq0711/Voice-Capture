@@ -1,7 +1,7 @@
-import json
-import os
-import httpx
-import redis
+import json, os, httpx, redis
+from dotenv import load_dotenv 
+
+load_dotenv()
 
 
 r = redis.Redis(
@@ -11,7 +11,7 @@ r = redis.Redis(
 )
 
 class BLSClient:
-    Base="https://api.bls.gov/publicAPI/v2"
+    Base = "https://api.bls.gov/publicAPI/v2"
 
     async def wages(self, soc:str, msa:str) -> dict:
         key = f"bls:wages:{soc}:{msa}"
@@ -45,7 +45,7 @@ class BLSClient:
         
         # Refresh Data Every 24 Hours(cached)
         r.setex(key, 86400, json.dumps(data))
-        
+
         return data
     
     async def get_outlook(self, soc: str) -> list:
