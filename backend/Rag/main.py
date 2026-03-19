@@ -25,7 +25,7 @@ app.add_middleware(
 app.include_router(
     rag.router,
     prefix="/api/v1/rg",
-    tags=["rag","bls","o*net"]
+    tags=["rag","bls","onet"]
 )
 
 app.get("/")

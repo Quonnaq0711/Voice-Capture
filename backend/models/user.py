@@ -19,6 +19,8 @@ class User(Base):
     email = Column(String, unique=True, index=True)
     hashed_password = Column(String)
     is_active = Column(Boolean, default=True)
+    soc = Column(String, nullable=True) # ONET Occupation Code
+    msa = Column(String, nullable=True) # Regional Location Mapping Code
 
     hotp_counter = Column(Integer, default=0)
     hotp_secret = Column(String, nullable=True)
