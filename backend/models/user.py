@@ -3,6 +3,7 @@ from sqlalchemy import Column, Integer, String, Boolean
 from sqlalchemy.orm import relationship
 from backend.db.database import Base
 from backend.db.types import TZDateTime
+from backend.models import user_data
 from backend.models.career_insight import CareerInsight
 
 def utc_now():
@@ -42,3 +43,4 @@ class User(Base):
     activities = relationship("UserActivity", back_populates="user", cascade="all, delete-orphan")
     daily_recommendations = relationship("DailyRecommendation", back_populates="user", cascade="all, delete-orphan", lazy="dynamic")
     refresh_tokens = relationship("RefreshToken", back_populates="user", cascade="all, delete-orphan")
+    user_data = relationship("UserData", back_populates= "user", cascade="all, delete-orphans")
