@@ -5,7 +5,7 @@ from backend.db.database import Base
 import re
 
 
-# ─── Enums ────────────────────────────────────────────────────────────────────
+# ─── Enums 
 
 class Race(enum.Enum):
     black            = "Black / African American"
@@ -39,7 +39,7 @@ class Disability(enum.Enum):
     dna = "I do not wish to answer"
 
 
-# ─── Model ────────────────────────────────────────────────────────────────────
+# ─── Model 
 
 class UserData(Base):
     __tablename__ = "user_data"
@@ -47,10 +47,10 @@ class UserData(Base):
     id      = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
 
-    # ── Contact ───────────────────────────────────────────────────────────────
+    # ── Contact
     secondary_email = Column(String(255), unique=True, index=True, nullable=True)
 
-    # ── Address ───────────────────────────────────────────────────────────────
+    # ── Address
     street  = Column(String(255), nullable=True)
     street2 = Column(String(255), nullable=True)   
     city    = Column(String(100), nullable=True)
@@ -58,12 +58,12 @@ class UserData(Base):
     zipcode = Column(String(10),  nullable=True)
     country = Column(String(2),   nullable=True, default="US")
 
-    # ── Phone ─────────────────────────────────────────────────────────────────
+    # ── Phone
     phone_country_code = Column(String(5),  nullable=True)
     phone_number       = Column(String(15), nullable=True)   
     phone_extension    = Column(String(10), nullable=True)
 
-    # ── Demographics ──────────────────────────────────────────────────────────
+    # ── Demographics
     date_of_birth     = Column(Date,  nullable=True)
     sex               = Column(Enum(Sex),  nullable=True, default=None)  
     race              = Column(Enum(Race),  nullable=True, default=None)  
@@ -71,14 +71,14 @@ class UserData(Base):
     veteran_status    = Column(Enum(VeteranStatus),  nullable=True, default=None)  
     disability_status = Column(Enum(Disability),     nullable=True, default=None)  
 
-    # ── Online Presence ───────────────────────────────────────────────────────
+    # ── Online Presence
     linkedin_url = Column(String(255), nullable=True)   
     website      = Column(String(255), nullable=True)
 
-    # ── Relationships ─────────────────────────────────────────────────────────
+    # ── Relationships
     user = relationship("User", back_populates="user_data")
 
-    # ── Validation ────────────────────────────────────────────────────────────
+    # ── Validation
     @validates("secondary_email")
     def validate_email(self, key, value):
         if value is None:
