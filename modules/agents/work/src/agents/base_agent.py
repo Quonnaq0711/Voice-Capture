@@ -79,7 +79,7 @@ class Agent:
         return ChatOpenAI(
             model=model,
             base_url=api_base,
-            api_key="not-needed",  # vLLM doesn't require API key
+            api_key=os.getenv("VLLM_API_KEY", "not-needed"),
             temperature=self.temperature,
             max_tokens=max_tokens
         )

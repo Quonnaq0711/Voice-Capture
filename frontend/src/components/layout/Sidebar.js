@@ -2,10 +2,11 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronDown,
-
+  Shield,
   X,
   Bug
 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 export default function Sidebar({
   sidebarExpanded,
@@ -337,34 +338,43 @@ export default function Sidebar({
       </nav>
 
       {/* Footer - Restored to Sidebar Bottom */}
-      <div className={`p-4 border-t border-gray-200/80 bg-white/50 backdrop-blur-sm ${!sidebarExpanded && !isMobile ? 'px-2 flex justify-center' : ''}`}>
+      <div className={`p-4 border-t border-gray-200/80 bg-white/50 backdrop-blur-sm ${!sidebarExpanded && !isMobile ? 'px-2 flex flex-col items-center gap-2' : ''}`}>
         {(sidebarExpanded || isMobile) ? (
-          <div className="flex items-center justify-between w-full">
-            <span className="text-xs font-medium text-gray-400">
-              © 2025 Idii.
-            </span>
+          <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-gray-400">
+            <span>© 2026 Idii.</span>
+            <span>·</span>
+            <Link to="/privacy" className="hover:text-gray-600 transition-colors">Privacy</Link>
+            <span>·</span>
+            <Link to="/terms" className="hover:text-gray-600 transition-colors">Terms</Link>
+            <span>·</span>
             <button
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-500 hover:text-gray-900 bg-transparent hover:bg-gray-100 rounded-md transition-all duration-200 active:scale-95 active:bg-gray-200 group"
+              type="button"
+              className="hover:text-gray-600 transition-colors inline-flex items-center gap-1"
               data-tally-open="PdRqlB"
               data-tally-layout="modal"
               data-tally-emoji-text="👋🏽"
               data-tally-emoji-animation="wave"
             >
-              <Bug className="w-3.5 h-3.5 text-gray-400 group-hover:text-gray-700 transition-colors" />
-              <span>Report Bug</span>
+              <Bug className="w-3 h-3" />
+              Bug
             </button>
           </div>
         ) : (
-          <button
-            className="p-2 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-all duration-200"
-            title="Report Bug"
-            data-tally-open="PdRqlB"
-            data-tally-layout="modal"
-            data-tally-emoji-text="👋🏽"
-            data-tally-emoji-animation="wave"
-          >
-            <Bug className="w-4 h-4" />
-          </button>
+          <div className="flex flex-col items-center gap-2">
+            <button
+              className="p-2 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-all duration-200"
+              title="Report Bug"
+              data-tally-open="PdRqlB"
+              data-tally-layout="modal"
+              data-tally-emoji-text="👋🏽"
+              data-tally-emoji-animation="wave"
+            >
+              <Bug className="w-4 h-4" />
+            </button>
+            <Link to="/legal" className="p-2 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-all duration-200" title="Privacy & Terms">
+              <Shield className="w-4 h-4" />
+            </Link>
+          </div>
         )}
       </div>
 

@@ -1206,7 +1206,6 @@ export const emailAI = {
     // Build URL with query parameters (EventSource only supports GET)
     const url = new URL(`${window.location.origin}${WORK_API_URL}/email/analyze/summarize/stream`);
     url.searchParams.append('content', content);
-    url.searchParams.append('token', token); // Add JWT token for authentication
     if (sender) url.searchParams.append('sender', sender);
     if (subject) url.searchParams.append('subject', subject);
 
@@ -1316,7 +1315,6 @@ export const emailAI = {
     const url = new URL(`${window.location.origin}${WORK_API_URL}/email/analyze/translate/stream`);
     url.searchParams.append('content', content);
     url.searchParams.append('target_language', targetLanguage);
-    url.searchParams.append('token', token);
     if (subject) url.searchParams.append('subject', subject);
 
     const eventSource = new EventSource(url.toString());
@@ -1425,7 +1423,6 @@ export const emailAI = {
           context,
           sender_name: senderName,
           recipient_name: recipientName,
-          token
         })
       });
 
@@ -1502,7 +1499,6 @@ export const emailAI = {
           content,
           tone,
           instruction: type,
-          token
         })
       });
 

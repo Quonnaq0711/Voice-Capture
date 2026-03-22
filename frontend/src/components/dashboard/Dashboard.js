@@ -1,5 +1,5 @@
 import React, { useEffect, useCallback, useRef, useReducer, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { List } from 'react-window';
 import { useAuth } from '../../contexts/AuthContext';
 import { profile as profileAPI, activities as activitiesAPI, careerInsights as careerInsightsAPI, dailyRecommendations as dailyRecommendationsAPI } from '../../services/api';
@@ -1823,19 +1823,19 @@ const fetchAvatar = async () => {
                 <h3 className="text-white font-semibold mb-4">Terms</h3>
                 <ul className="space-y-2">
                   <li>
-                    <button className="text-gray-400 hover:text-white transition-colors duration-200 text-sm">
+                    <Link to="/terms" className="text-gray-400 hover:text-white transition-colors duration-200 text-sm">
                       Terms of Service
-                    </button>
+                    </Link>
                   </li>
                   <li>
-                    <button className="text-gray-400 hover:text-white transition-colors duration-200 text-sm">
+                    <Link to="/privacy" className="text-gray-400 hover:text-white transition-colors duration-200 text-sm">
                       Privacy Policy
-                    </button>
+                    </Link>
                   </li>
                   <li>
-                    <button className="text-gray-400 hover:text-white transition-colors duration-200 text-sm">
+                    <Link to="/legal" className="text-gray-400 hover:text-white transition-colors duration-200 text-sm">
                       Cookie Policy
-                    </button>
+                    </Link>
                   </li>
                 </ul>
               </div>

@@ -123,8 +123,8 @@ ACTION_VERB_PATTERNS = [re.compile(r'\b' + re.escape(s) + r'\w*', re.IGNORECASE)
 # Exact patterns: \bphrase\b — full word boundary
 ACTION_VERB_PATTERNS += [re.compile(r'\b' + re.escape(v) + r'\b', re.IGNORECASE) for v in _ACTION_EXACT_STRINGS]
 
-# Request patterns that indicate actionable content
-REQUEST_PATTERNS = [
+# Request patterns that indicate actionable content (pre-compiled for performance)
+REQUEST_PATTERNS = [re.compile(p, re.IGNORECASE) for p in [
     r'(?:please|could you|can you|would you)\s+\w+',
     r'(?:need|want|require)\s+(?:you|your)\s+(?:to|input|feedback)',
     r'(?:by|before|until)\s+(?:tomorrow|monday|tuesday|wednesday|thursday|friday|eod|cob)',
@@ -136,7 +136,7 @@ REQUEST_PATTERNS = [
     r'(?:follow|circle)\s*-?\s*up',
     r'(?:expir|renew)\w*\s+(?:on|by|in|before|soon)',  # "expires on March 1st", "renewal by..."
     r'(?:needs?|requires?)\s+(?:attention|action|response|input|approval|sign)',
-]
+]]
 
 
 def _extract_domain(email) -> str:
@@ -206,7 +206,7 @@ def _calculate_actionability_score(email: Dict) -> float:
     # Check for request patterns (+0.2 each, max 0.4)
     pattern_count = 0
     for pattern in REQUEST_PATTERNS:
-        if re.search(pattern, text, re.IGNORECASE):
+        if pattern.search(text):
             pattern_count += 1
             if pattern_count >= 2:
                 break

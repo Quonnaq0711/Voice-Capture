@@ -95,6 +95,7 @@ import {
   CheckBadgeIcon,
   Cog6ToothIcon,
   ArrowDownTrayIcon,
+  MicrophoneIcon,
 } from '@heroicons/react/24/outline';
 import {
   CheckCircleIcon as CheckCircleSolidIcon,
@@ -104,6 +105,8 @@ import {
   InboxIcon as InboxSolidIcon,
 } from '@heroicons/react/24/solid';
 import { oauth, gmail, calendar as calendarApi, sources as sourcesApi, emailAI, todos, taskExtraction, taskPrioritization, taskScheduler, taskSolver, solverSessions } from '../../services/workApi';
+import { useVoiceDictation } from '../../hooks/useVoiceDictation';
+import { usePressTalk } from '../../hooks/usePressTalk';
 import axios from 'axios';
 import MessageRenderer from '../chat/MessageRenderer';
 import MessageDetailPanel from './MessageDetailPanel';
@@ -1211,7 +1214,16 @@ const InboxView = ({ activeInboxSubtab = 'email' }) => {
 
     prefetchInFlightRef.current.add(id);
     fetchFullMessage(id, accountId)
-      .then(full => { if (full) prefetchCacheRef.current.set(id, full); })
+      .then(full => {
+        if (full) {
+          // Cap cache at 50 entries to prevent unbounded memory growth
+          if (prefetchCacheRef.current.size >= 50) {
+            const oldest = prefetchCacheRef.current.keys().next().value;
+            prefetchCacheRef.current.delete(oldest);
+          }
+          prefetchCacheRef.current.set(id, full);
+        }
+      })
       .catch(() => {}) // Silently ignore prefetch errors
       .finally(() => prefetchInFlightRef.current.delete(id));
   }, [user?.id, fetchFullMessage]);
@@ -4902,6 +4914,84 @@ const TaskDetailPanel = ({ task, onClose, onUpdate, onDelete, onSummaryGenerated
   const [aiOptimizing, setAiOptimizing] = useState(false);
   const [aiOptimized, setAiOptimized] = useState(false);
   const [aiOriginalInput, setAiOriginalInput] = useState('');
+  // Voice input state — mirrors PA's ChatDialog pattern
+  const [voiceError, setVoiceError] = useState(null);
+  const voiceErrorTimer = useRef(null);
+  const pressTimerRef = useRef(null);
+  const pttGestureRef = useRef(false);
+  const handleAiSendRef = useRef(null);
+
+  const voiceErrorCb = useCallback((msg) => {
+    console.error('[Voice]', msg);
+    setVoiceError(msg);
+    clearTimeout(voiceErrorTimer.current);
+    voiceErrorTimer.current = setTimeout(() => setVoiceError(null), 4000);
+  }, []);
+
+  const voiceTranscript = useCallback((text) => {
+    setAiInput(prev => prev ? prev + ' ' + text : text);
+  }, []);
+
+  const voicePTTTranscript = useCallback((text) => {
+    if (!text.trim()) return;
+    setAiInput(text);
+    handleAiSendRef.current?.(text);
+  }, []);
+
+  const { isRecording, isProcessing, toggleRecording } = useVoiceDictation({
+    chunkInterval: 3000,
+    onTranscript: voiceTranscript,
+    onError: voiceErrorCb,
+  });
+
+  const {
+    isRecording: isPTTRecording,
+    isProcessing: pttProcessing,
+    start: startPTT,
+    stop: stopPTT,
+  } = usePressTalk({ onTranscript: voicePTTTranscript, onError: voiceErrorCb });
+
+  const voiceActive = isRecording || isPTTRecording || isProcessing || pttProcessing;
+  const micDisabled = aiStreaming || aiOptimizing;
+
+  const handleMicDown = useCallback((e) => {
+    e.preventDefault();
+    if (micDisabled || isProcessing || pttProcessing || isPTTRecording) return;
+    if (isRecording) return;
+
+    e.target.setPointerCapture(e.pointerId);
+    pttGestureRef.current = false;
+    pressTimerRef.current = setTimeout(() => {
+      pressTimerRef.current = null;
+      pttGestureRef.current = true;
+      startPTT();
+    }, 300);
+  }, [micDisabled, isProcessing, pttProcessing, isRecording, isPTTRecording, startPTT]);
+
+  const handleMicUp = useCallback(() => {
+    if (pressTimerRef.current) {
+      clearTimeout(pressTimerRef.current);
+      pressTimerRef.current = null;
+      toggleRecording();
+      return;
+    }
+    if (pttGestureRef.current) {
+      pttGestureRef.current = false;
+      stopPTT();
+      return;
+    }
+    if (isRecording) {
+      toggleRecording();
+    }
+  }, [isRecording, toggleRecording, stopPTT]);
+
+  const handleMicLeave = useCallback(() => {
+    if (pressTimerRef.current) {
+      clearTimeout(pressTimerRef.current);
+      pressTimerRef.current = null;
+    }
+  }, []);
+
   // Client-side session messages cache — instant switch for previously-loaded sessions
   const sessionMessagesCacheRef = useRef({});
   useEffect(() => { activeSessionRef.current = activeSessionId; }, [activeSessionId]);
@@ -5330,6 +5420,9 @@ const TaskDetailPanel = ({ task, onClose, onUpdate, onDelete, onSummaryGenerated
 
     aiAbortControllerRef.current = controller;
   }, [aiInput, aiMessages, task?.id, user?.id, activeSessionId, loadSolverSessions]);
+
+  // Keep ref in sync so PTT auto-submit can call handleAiSend without stale closures
+  useEffect(() => { handleAiSendRef.current = handleAiSend; }, [handleAiSend]);
 
   const handleAiCancel = useCallback(() => {
     // Keep partial content as-is (no marker text) — mirrors PA cancel pattern
@@ -6186,14 +6279,14 @@ const TaskDetailPanel = ({ task, onClose, onUpdate, onDelete, onSummaryGenerated
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
                       e.preventDefault();
-                      if (!aiStreaming && aiInput.trim()) {
+                      if (!aiStreaming && !voiceActive && aiInput.trim()) {
                         handleAiSend();
                       }
                     }
                   }}
                   placeholder="Ask about this task..."
                   rows={1}
-                  disabled={aiStreaming || aiOptimizing}
+                  disabled={aiStreaming || aiOptimizing || voiceActive}
                   className="flex-1 px-3 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none text-sm disabled:opacity-50 disabled:bg-gray-50"
                 />
                 {/* Optimize button — mirrors PA */}
@@ -6217,6 +6310,42 @@ const TaskDetailPanel = ({ task, onClose, onUpdate, onDelete, onSummaryGenerated
                     <SparklesIcon className="w-4 h-4" />
                   )}
                 </button>
+                {/* Voice input — mirrors PA's ChatDialog mic button */}
+                <button
+                  onPointerDown={handleMicDown}
+                  onPointerUp={handleMicUp}
+                  onPointerLeave={handleMicLeave}
+                  onPointerCancel={handleMicUp}
+                  onContextMenu={(e) => e.preventDefault()}
+                  type="button"
+                  disabled={micDisabled}
+                  className={`p-2.5 rounded-xl select-none touch-none transition-all duration-150 flex-shrink-0 ${
+                    micDisabled
+                      ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                      : isPTTRecording
+                      ? 'bg-blue-500 text-white scale-110 ring-2 ring-blue-300 animate-pulse'
+                      : isRecording
+                      ? 'bg-red-500 text-white hover:bg-red-600 animate-pulse'
+                      : isProcessing || pttProcessing
+                      ? 'bg-amber-500 text-white'
+                      : 'bg-purple-500 text-white hover:bg-purple-600'
+                  }`}
+                  title={
+                    isPTTRecording
+                      ? 'Release to transcribe'
+                      : isRecording
+                      ? 'Click to stop dictation'
+                      : isProcessing || pttProcessing
+                      ? 'Processing speech...'
+                      : 'Click: dictation | Hold: push-to-talk'
+                  }
+                >
+                  {(isProcessing || pttProcessing) ? (
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <MicrophoneIcon className="w-4 h-4" />
+                  )}
+                </button>
                 {aiStreaming ? (
                   <button
                     onClick={handleAiCancel}
@@ -6236,6 +6365,9 @@ const TaskDetailPanel = ({ task, onClose, onUpdate, onDelete, onSummaryGenerated
                   </button>
                 )}
               </div>
+              {voiceError && (
+                <p className="text-xs text-red-500 mt-1 text-left">{voiceError}</p>
+              )}
               <p className="text-xs text-gray-400 mt-1.5 text-right">Enter to send, Shift+Enter for new line</p>
             </div>
           </div>
@@ -9213,6 +9345,14 @@ const ScheduleView = () => {
   const [editEndTime, setEditEndTime] = useState('');
   const [editSlotError, setEditSlotError] = useState('');
 
+  // AI Scheduler panel collapsed state (persisted in localStorage)
+  const [schedulerPanelOpen, setSchedulerPanelOpen] = useState(
+    () => localStorage.getItem('scheduler_panel_open') !== 'false'
+  );
+  useEffect(() => {
+    localStorage.setItem('scheduler_panel_open', schedulerPanelOpen);
+  }, [schedulerPanelOpen]);
+
   // Locally-scheduled tasks (accepted but not necessarily pushed to Google Calendar)
   const [scheduledTasks, setScheduledTasks] = useState([]);
   const [showScheduledTasks, setShowScheduledTasks] = useState(true);
@@ -9985,8 +10125,15 @@ const ScheduleView = () => {
         )}
       </div>
 
-      {/* ===== Right Panel — AI Scheduler + Task Cards (always visible) ===== */}
-      <div className="w-96 border-l border-gray-200 flex flex-col flex-shrink-0" style={{ background: 'linear-gradient(180deg, #faf5ff 0%, #f5f3ff 40%, #f9fafb 100%)' }}>
+      {/* ===== Right Panel — AI Scheduler + Task Cards (collapsible) ===== */}
+      <div
+        className={`border-l border-gray-200 flex flex-col flex-shrink-0 transition-all duration-300 ease-in-out ${
+          schedulerPanelOpen ? 'w-96' : 'w-12'
+        }`}
+        style={{ background: 'linear-gradient(180deg, #faf5ff 0%, #f5f3ff 40%, #f9fafb 100%)' }}
+      >
+        {schedulerPanelOpen ? (
+          <>
           {/* AI Scheduler header + settings + action */}
           <div className="px-5 pt-5 pb-3">
             {/* Title row */}
@@ -9994,7 +10141,14 @@ const ScheduleView = () => {
               <div className="p-2 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-xl shadow-md shadow-purple-200">
                 <SparklesIcon className="w-5 h-5 text-white" />
               </div>
-              <h3 className="text-sm font-bold text-gray-900">AI Scheduler</h3>
+              <h3 className="text-sm font-bold text-gray-900 flex-1">AI Scheduler</h3>
+              <button
+                onClick={() => setSchedulerPanelOpen(false)}
+                className="p-1.5 text-gray-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
+                title="Collapse panel"
+              >
+                <ChevronRightIcon className="w-4 h-4" />
+              </button>
             </div>
 
             {/* Schedule settings */}
@@ -10290,7 +10444,27 @@ const ScheduleView = () => {
               </div>
             )}
           </div>
-        </div>
+          </>
+        ) : (
+          /* Collapsed rail — icon + vertical label + expand button */
+          <button
+            onClick={() => setSchedulerPanelOpen(true)}
+            className="flex flex-col items-center w-full pt-4 pb-4 gap-3 hover:bg-purple-50/50 transition-colors cursor-pointer group"
+            title="Expand AI Scheduler"
+          >
+            <div className="p-2 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-xl shadow-md shadow-purple-200 group-hover:shadow-lg transition-shadow">
+              <SparklesIcon className="w-5 h-5 text-white" />
+            </div>
+            <span
+              className="text-[11px] font-bold text-gray-500 group-hover:text-purple-600 tracking-wider uppercase transition-colors"
+              style={{ writingMode: 'vertical-rl', textOrientation: 'mixed' }}
+            >
+              AI Scheduler
+            </span>
+            <ChevronLeftIcon className="w-4 h-4 text-gray-400 group-hover:text-purple-600 transition-colors" />
+          </button>
+        )}
+      </div>
 
     {/* Task from Calendar Event Modal */}
     {showTaskFromEmailModal && taskFromEmailData && (
