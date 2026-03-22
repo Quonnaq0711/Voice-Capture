@@ -3,7 +3,7 @@ from sqlalchemy import Column, Integer, String, Boolean
 from sqlalchemy.orm import relationship
 from backend.db.database import Base
 from backend.db.types import TZDateTime
-from backend.models import user_data
+from backend.Rag.models import user_data
 from backend.models.career_insight import CareerInsight
 
 def utc_now():
