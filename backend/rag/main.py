@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from backend.Rag.api import ragApi
+from backend.rag.api import ragApi
 
 
 app=FastAPI(
@@ -23,8 +23,8 @@ app.add_middleware(
 
 # Router
 app.include_router(
-    rag.router,
-    prefix="/api/v1/rg",
+    ragApi.router,
+    prefix="/api/v1/intell",
     tags=["rag","bls","onet"]
 )
 
