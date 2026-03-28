@@ -19,10 +19,11 @@ onet = ONETClient()
 profile_service = ProfileService(onet, geo)
 
 
-@router.get("/charts/{user_id}")
-async def get_charts(
+@router.get("/intelligence/{user_id}")
+async def career_intelligence(
     user_id: str,
     current_user: User = Depends(get_current_user),
-    user_profile: User = Depends(get_current_user_profile),
+    user_profile: dict = Depends(get_current_user_profile),
+    user_data: dict = Depends()
     db: Session = Depends(get_db)
     ):

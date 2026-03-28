@@ -11,7 +11,7 @@ class ProfileService:
         soc = profile.get("soc")
 
         if not soc:
-            soc = await sefl.onet.get_soc(
+            soc = await self.onet.get_soc(
                 profile.get("current_career", "")
             )
 

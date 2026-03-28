@@ -1,5 +1,5 @@
 import asyncio
-import json, os
+import json, os, redis
 from backend.rag.services import bls_client, onet_client
 
 r = redis.Redis(
