@@ -1,0 +1,324 @@
+import os
+import sys
+import time
+from typing import Optional, List, final
+from faster_whisper import WhisperModel
+from huggingface_hub import DiscussionWithDetails
+from langchain_text_splitters import Language
+import ollama
+import pyttsx3
+from sympy import N
+import torch
+import base64
+import tempfile
+from pydantic import BaseModel
+from fastapi import APIRouter, File, HTTPException, UploadFile, WebSocket
+
+from backend.voice_capture.utils import whisper_service
+from backend.voice_capture.utils.llm_async import chat_async
+from backend.voice_capture.utils.stt_async import transcribe_async, transcribe_files_async
+from backend.voice_capture.utils.tts_async import synthesize_async
+
+
+# Python path addition in project root
+#sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))))
+
+
+router = APIRouter(tags=["vc", "voice capture"])
+
+# GPU Check
+device = "cuda:1" if torch.cuda.is_available() else "cpu"
+print(f"Using device {device}") 
+
+# Load Whisper
+whisper_model = WhisperModel("small", device=device, compute_type="float16" if device == "cuda:1" else "int8")
+
+# Init TTS
+tts_engine = pyttsx3.init()
+tts_engine.setProperty("rate", 150)
+
+
+
+# Response/Request Models
+class TextRequest(BaseModel):
+    text: str
+    voice: Optional[str] = None
+
+class ChatRequest(BaseModel):
+    message: str
+    context: List[dict] = []
+
+class DictationResponse(BaseModel):
+    success: bool
+    text: Optional[str]
+    language: Optional[str]
+    duration: Optional[float]
+    processing_time: float
+    device: str
+    
+
+class BatchTranscribeResponse(BaseModel):
+    success: bool
+    total_files: int
+    successful: int
+    failed: int
+    results: List[dict]
+    total_processing_time: float
+    device_used: str
+
+class GPUStatusResponse(BaseModel):
+    gpu_avaliable: bool
+    gpu_name: Optional[str] = None
+    memory_used_gb: Optional[str] = None
+    memory_reserved_gb: Optional[str] = None
+    memory_total_gb: Optional[str] = None
+    usage_percentage: Optional[str] = None
+    cuda_version: Optional[str] = None
+
+
+
+@router.post("/transcribe", response_model=DictationResponse)
+async def audio_transcription(file: UploadFile = File(...)):
+
+    if not file.content_type.startswith("audio/"):
+        raise HTTPException(400, "Invalid file")
+    
+    temp_path = None
+    start = time.time()
+
+
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
+            content = await file.read()
+            tmp.write(content)
+            temp_path = tmp.name
+
+            res = whisper_service.dictation(temp_path)
+
+        return DictationResponse(
+            success=True,
+            text=res["text"],
+            language=res["language"],
+            duration=res["duration"],
+            device=device,
+            processing_time=round(time.time()-start, 2)
+        )
+    
+    except Exception as e:
+        return {"success" : False, "error": str(e)}
+    
+
+    finally:
+        if temp_path and os.path.exsist(temp_path):
+          os.unlink(temp_path)
+
+    
+
+
+@router.post("/batch", response_model=BatchTranscribeResponse)
+async def batch_transcribe(files: List[UploadFile] = File(...)):
+
+    if not files:
+        raise HTTPException(
+            status_code=400,
+            detail= "No files provided"
+        )
+    if len(files) > 50:
+        raise HTTPException(
+            status_code=400,
+            detail="Maximum of 50 files per batch allowed"
+        )
+    
+    res = []
+    start_time = time.time()
+    successful_count = 0
+    failed_count = 0
+
+    for file in files:
+        temp_path = None
+
+        try:
+            if not file.content_type or not file.content_type.startswith("audio/"):
+                res.append({
+                    "filename": file.filename,
+                    "success": False,
+                    "text": res["text"]
+                })
+
+                failed_count += 1
+
+                continue
+
+
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
+                data = await file.read()
+                tmp.write(data)
+                temp_path = tmp.name
+
+            
+            res = whisper_model.dictation(
+                temp_path
+            )
+
+            res.append({
+                "filename": file.filename,
+                "success": True,
+                "text": res["text"]
+            })
+            
+            successful_count += 1
+
+        except Exception as e:
+            res.append({
+                "filename": file.filename,
+                "success": False,
+                "error": str(e)
+            })
+            failed_count += 1
+
+        finally:
+            if temp_path and os.path.exists(temp_path):
+                try:
+                    os.unlink(temp_path)
+                except Exception:
+                    pass
+
+    total_time = round(time.time() - start_time, 2)
+
+    return BatchTranscribeResponse(
+        success=True,
+        total_files=len(files),
+        successful=successful_count,
+        failed=failed_count,
+        results=res,
+        total_processing_time=total_time,
+        device_used=device
+    )
+
+
+@router.post("/speech")
+async def speech_synthesis(request: TextRequest):
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
+            await synthesize_async(
+                request.text,
+                voice_id=None,
+                output_path=tmp.name
+            )
+
+            with open(tmp.name, 'rb') as f:
+                audio_data = f.read()
+
+        os.unlink(tmp.name)
+
+        base64_audio = base64.b64encode(audio_data).decode('utf-8')
+        return {'success': True, "audio": base64_audio}
+    
+    except Exception as e:
+        return {'success': False, 'error': str(e)}
+    
+
+@router.post("/chat")
+async def ollama_chat(request: ChatRequest):
+    try:
+        messages = request.context + [{"role": "user", "content": request.message}]
+        response = await chat_async(
+            model="gemma3:latest",
+            messages=messages
+            )
+        
+        return {"success": True, "response": response}
+    
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+    
+
+@router.post("/voice-chat")
+async def voice_chat(file: UploadFile = File(...)):
+    try:
+        # STT
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
+            tmp.write(await file.read())
+            wav_path = tmp.name
+
+        user_text, _ = await transcribe_async(
+                whisper_model,
+                wav_path
+            )
+        
+        os.unlink(wav_path)
+
+        # LLM
+        llm_res = await chat_async(
+            model='gemma3:latest',
+            messages=[{'role':'user', 'content': user_text}]
+        )
+        
+
+        # TTS
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
+            await synthesize_async(
+                llm_res,
+                None,
+                tmp.name
+            )            
+
+            with open(tmp.name, 'rb') as f:
+                audio_data = f.read()
+
+        os.unlink(tmp.name)
+
+        return{
+            "success":True,
+            "user_transcribe": user_text,
+            "llm_res": llm_res,
+            "res_audio": base64.b64encode(audio_data).decode('utf-8')
+        }
+    except Exception as e:
+        return{"success": False, "error": str(e)}
+    
+
+@router.get("/gpu-status", response_model=GPUStatusResponse)
+async def Gpu():
+
+    if not torch.cuda.is_available():
+        return GPUStatusResponse(
+            gpu_avaliable=False 
+        )
+    
+    try:
+        gpu_name = torch.cuda.get_device_name(1)
+        cuda_version = torch.version.cuda
+
+        memory_used = torch.cuda.memory_allocated(1) / 1024**3
+        memoey_reserved = torch.cuda.memory_reserved(1) / 1024**3
+        memory_total = torch.cuda.get_device_properties(1).total_memory / 1024**3
+
+        usage = (memory_used / memory_total * 100) if memory_total > 0 else 0
+
+        return GPUStatusResponse(
+            gpu_avaliable=True,
+            gpu_name=gpu_name,
+            memory_used_gb=f"{memory_used:2f}",
+            memory_reserved_gb=f"{memoey_reserved:2f}",
+            memory_total_gb=f"{memory_total:2f}",
+            usage_percentage=f"{usage:1f}",
+            cuda_version=cuda_version
+        )
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error getting GPU status: {str(e)}")
+    
+
+@router.get("/health")
+async def health_check():
+    
+    return{
+        "status": "healthy",
+        "device": device,
+        "gpu_avaliable": torch.cuda.is_available(),
+        "models_loaded": {
+            "whisper": whisper_model is not None,
+            "tts": tts_engine is not None
+        }
+    }

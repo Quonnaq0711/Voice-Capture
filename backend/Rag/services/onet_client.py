@@ -10,7 +10,7 @@ r = redis.Redis(
 )
 
 class ONETClient:
-    BASE = "https://services.onetcenter.org/ws"
+    BASE = "https://services.onetcenter.org/ws/online/occupations"
     AUTH = (os.getenv("ONET_USER"), os.getenv("ONET_PASS"))
 
     async def get_soc(self, keyword: str) -> str:
