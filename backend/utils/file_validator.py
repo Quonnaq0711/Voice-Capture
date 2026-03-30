@@ -8,8 +8,10 @@ from fastapi import UploadFile, HTTPException, status
 from backend.config.file_upload_config import (
     MAX_RESUME_SIZE,
     MAX_AVATAR_SIZE,
+    MAX_ATTACHMENT_SIZE,
     ALLOWED_RESUME_EXTENSIONS,
     ALLOWED_AVATAR_EXTENSIONS,
+    ALLOWED_ATTACHMENT_EXTENSIONS,
     format_file_size
 )
 
@@ -101,6 +103,40 @@ class FileValidator:
                 detail=f"Image size ({format_file_size(file_size)}) exceeds "
                        f"maximum allowed size of {format_file_size(MAX_AVATAR_SIZE)}. "
                        f"Please upload a smaller image."
+            )
+
+        return content, file_extension
+
+    @staticmethod
+    async def validate_attachment(file: UploadFile) -> Tuple[bytes, str]:
+        """
+        Validate task attachment file (supports documents + images).
+
+        Returns:
+            Tuple of (file_content, file_extension)
+        """
+        file_extension = os.path.splitext(file.filename)[1].lower()
+        if file_extension not in ALLOWED_ATTACHMENT_EXTENSIONS:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Unsupported file format '{file_extension}'. "
+                       f"Allowed formats: {', '.join(ALLOWED_ATTACHMENT_EXTENSIONS)}"
+            )
+
+        content = await file.read()
+        file_size = len(content)
+
+        if file_size == 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="File is empty."
+            )
+
+        if file_size > MAX_ATTACHMENT_SIZE:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail=f"File size ({format_file_size(file_size)}) exceeds "
+                       f"maximum allowed size of {format_file_size(MAX_ATTACHMENT_SIZE)}."
             )
 
         return content, file_extension

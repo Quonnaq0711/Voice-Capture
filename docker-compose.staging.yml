@@ -35,8 +35,11 @@ services:
     labels:
       - "environment=staging"
     volumes:
+      # Persist user uploads (resumes, avatars, attachments) - multi-user with user_id subdirectories
       - /home/idii/data/user-uploads/resumes:/app/resumes
       - /home/idii/data/user-uploads/avatars:/app/avatars
+      - /home/idii/data/user-uploads/attachments:/app/attachments
+      # SQLite backup kept for migration reference
       - /home/idii/data/database:/app/db-backup:ro
     deploy:
       resources:
@@ -302,12 +305,11 @@ services:
     restart: unless-stopped
     ports:
       - "8888:8888"
-    environment:
-      HF_TOKEN: "${HF_TOKEN}"
-      HUGGING_FACE_HUB_TOKEN: "${HF_TOKEN}"
+    env_file:
+      - .env.staging
     command:
       - "--model"
-      - "${VLLM_MODEL:-google/gemma-3-4b-it}"
+      - "${VLLM_MODEL:-Qwen/Qwen2.5-7B-Instruct}"
       - "--host"
       - "0.0.0.0"
       - "--port"
@@ -330,6 +332,11 @@ services:
       - "4096"
       # Enable prefix caching for repeated system prompts
       - "--enable-prefix-caching"
+      # ===== Tool Calling Support =====
+      # Required for LangGraph agents (Work Agent, etc.)
+      - "--enable-auto-tool-choice"
+      - "--tool-call-parser"
+      - "hermes"
     volumes:
       - /home/idii/data/vllm-cache:/root/.cache/huggingface
     networks:
@@ -414,6 +421,87 @@ services:
               capabilities: [gpu]
     runtime: nvidia
 
+  career-agent-staging:
+    build:
+      context: .
+      dockerfile: modules/agents/career/Dockerfile.prod
+    container_name: idii-career-agent-staging
+    restart: unless-stopped
+    ports:
+      - "8002:8002"
+    env_file:
+      - .env.staging
+    environment:
+      # vLLM API endpoint (OpenAI-compatible)
+      VLLM_API_BASE: "http://vllm-server:8888/v1"
+      DB_TYPE: postgresql
+      DB_HOST: db-staging
+      DB_PORT: 5432
+      DB_NAME: idii-staging
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+    depends_on:
+      - db-staging
+      - vllm-server
+    networks:
+      - staging-network
+    volumes:
+      # Share resumes with backend
+      - /home/idii/data/user-uploads/resumes:/app/resumes
+      # SQLite backup kept for migration reference
+      - /home/idii/data/database:/app/db-backup:ro
+    # Use default CMD from Dockerfile (gunicorn with 4 workers)
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.5'
+        reservations:
+          memory: 1G
+
+  work-agent-staging:
+    build:
+      context: .
+      dockerfile: modules/agents/work/Dockerfile.prod
+    container_name: idii-work-agent-staging
+    restart: unless-stopped
+    ports:
+      - "8003:8003"
+    env_file:
+      - .env.staging
+    environment:
+      # vLLM API endpoint (OpenAI-compatible)
+      VLLM_API_BASE: "http://vllm-server:8888/v1"
+      DB_TYPE: postgresql
+      DB_HOST: db-staging
+      DB_PORT: 5432
+      DB_NAME: idii-staging
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+    depends_on:
+      - db-staging
+      - vllm-server
+    networks:
+      - staging-network
+    volumes:
+      # Task attachments — shared with backend for static serving
+      - /home/idii/data/user-uploads/attachments:/app/attachments
+      # SQLite backup kept for migration reference
+      - /home/idii/data/database:/app/db-backup:ro
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
+        reservations:
+          memory: 512M
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8003/api/work/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      start_period: 30s
+      retries: 3
+
   nginx-staging:
     build:
       context: .
@@ -432,6 +520,7 @@ services:
       - frontend-staging
       - backend-staging
       - personal-assistant-staging
+      - work-agent-staging
     deploy:
       resources:
         limits:
