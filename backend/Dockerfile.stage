@@ -16,11 +16,11 @@ RUN pip install --no-cache-dir --upgrade pip
 RUN groupadd -r appuser && useradd -r -g appuser appuser
 
 # Copy and install Python dependencies
-COPY requirements.txt .
+COPY backend/voice_capture/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
-COPY . .
+COPY backend/voice_capture/ . 
 
 
 # Change ownership

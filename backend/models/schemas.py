@@ -1,7 +1,8 @@
 from httpx import request
-from pydantic import BaseModel, EmailStr
-from datetime import datetime
+from pydantic import BaseModel, EmailStr, HttpUrl, field_validator
+from datetime import datetime, date
 from typing import Optional, List
+from .user_data import Race, Sex, VeteranStatus, Disability
 
 class UserBase(BaseModel):
     # username: str
@@ -210,3 +211,80 @@ class UserWithProfile(User):
 class PasswordChange(BaseModel):
     current_password: str
     new_password: str
+
+class UserDataBase(BaseModel):
+    # Contact
+    secondary_email: Optional[EmailStr] = None
+
+    # Address
+    street:  Optional[str] = None
+    street2: Optional[str] = None
+    city:    Optional[str] = None
+    state:   Optional[str] = None
+    zipcode: Optional[str] = None
+    country: Optional[str] = "US"
+
+    # Phone
+    phone_country_code: Optional[str] = None
+    phone_number:       Optional[str] = None
+    phone_extension:    Optional[str] = None
+
+    # Demographics
+    date_of_birth:     Optional[date]          = None
+    sex:               Optional[Sex]            = None
+    race:              Optional[Race]           = None
+    hispanic:          Optional[bool]           = None
+    veteran_status:    Optional[VeteranStatus]  = None
+    disability_status: Optional[Disability]     = None
+
+    # Online Presence
+    linkedin_url: Optional[str] = None
+    website:      Optional[str] = None
+
+    @field_validator("state")
+    @classmethod
+    def upper_state(cls, v):
+        return v.upper().strip() if v else v
+
+    @field_validator("country")
+    @classmethod
+    def upper_country(cls, v):
+        return v.upper().strip() if v else v
+
+    @field_validator("linkedin_url")
+    @classmethod
+    def validate_linkedin(cls, v):
+        if v and not v.startswith(("https://linkedin.com", "https://www.linkedin.com")):
+            raise ValueError("Must be a valid LinkedIn URL")
+        return v.strip() if v else v
+
+
+class UserDataCreate(UserDataBase):
+    pass
+
+
+class UserDataUpdate(UserDataBase):
+    pass  # All fields already Optional — partial updates work out of the box
+
+
+class UserDataResponse(UserDataBase):
+    id:      int
+    user_id: int
+
+    model_config = {"from_attributes": True}
+
+class CareerRequest(BaseModel):
+    user_id: str
+    soc: str
+    msa: str
+    salary: str
+    skills: list[str]
+
+class CareerResponse(BaseModel):
+    user_id: str
+    soc: str
+    msa: str
+    charts: dict
+    metrics: dict
+    missing_skills: list[str]
+    insights: str

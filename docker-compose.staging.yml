@@ -21,21 +21,23 @@ services:
       BLS_KEY: ${BLS_KEY}
       ONET_USER: ${ONET_USER}
       ONET_PASS: ${ONET_PASS}
-      REDIS_URL: ${REDIS_URL}
+      REDIS_URL: redis://redis:6379/0         # ← explicit URL format for your redis client
+      ONET_PROXY_URL: http://onet-proxy:8010  # ← new proxy service
     depends_on:
-      - db-staging
-      - redis
+      db-staging:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      onet-proxy:
+        condition: service_started
     networks:
       - staging-network
     labels:
       - "environment=staging"
     volumes:
-      # Persist user uploads (resumes and avatars) - multi-user with user_id subdirectories
       - /home/idii/data/user-uploads/resumes:/app/resumes
       - /home/idii/data/user-uploads/avatars:/app/avatars
-      # SQLite backup kept for migration reference
       - /home/idii/data/database:/app/db-backup:ro
-    # Use default CMD from Dockerfile (backend.main:app with PYTHONPATH)
     deploy:
       resources:
         limits:
@@ -43,8 +45,146 @@ services:
           cpus: '1.0'
         reservations:
           memory: 512M
-      
-  
+
+  career-agent-staging:
+    build:
+      context: .
+      dockerfile: modules/agents/career/Dockerfile.prod
+    container_name: idii-career-agent-staging
+    restart: unless-stopped
+    ports:
+      - "8002:8002"
+    env_file:
+      - .env.staging
+    environment:
+      VLLM_API_BASE: "http://vllm-server:8888/v1"
+      DB_TYPE: postgresql
+      DB_HOST: db-staging
+      DB_PORT: 5432
+      DB_NAME: idii-staging
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      BLS_KEY: ${BLS_KEY}
+      ONET_USER: ${ONET_USER}
+      ONET_PASS: ${ONET_PASS}
+      REDIS_URL: redis://redis:6379/0
+      ONET_PROXY_URL: http://onet-proxy:8010
+    depends_on:
+      db-staging:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      vllm-server:
+        condition: service_healthy
+      onet-proxy:
+        condition: service_started
+    networks:
+      - staging-network
+    volumes:
+      - /home/idii/data/user-uploads/resumes:/app/resumes
+      - /home/idii/data/database:/app/db-backup:ro
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.5'
+        reservations:
+          memory: 1G
+
+  rag-staging:
+    build:
+      context: .
+      dockerfile: backend/rag/Dockerfile.prod
+    container_name: idii-rag-api-staging
+    restart: unless-stopped
+    ports:
+      - "9001:9001"
+    env_file:
+      - .env.staging
+    environment:
+      REDIS_URL: redis://redis:6379/1
+      BLS_KEY: ${BLS_KEY}
+      ONET_USER: ${ONET_USER}
+      ONET_PASS: ${ONET_PASS}
+      ALLOWED_ORIGINS: "https://staging.idii.co"
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - staging-network
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "0.5"
+        reservations:
+          memory: 256M
+
+  # ============================================
+  # Redis — Cache + Distributed Lock Layer
+  # ============================================
+  redis:
+    image: redis:7-alpine
+    container_name: idii-redis-staging
+    restart: unless-stopped
+    ports:
+      - "6379:6379"         
+    volumes:
+      - redis_data:/data    
+    command: >
+      redis-server
+      --appendonly yes
+      --maxmemory 200mb
+      --maxmemory-policy allkeys-lru
+    networks:
+      - staging-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:                 # ← fixed indentation (was nested under healthcheck)
+      resources:
+        limits:
+          memory: 256M
+          cpus: "0.5"
+        reservations:
+          memory: 128M
+
+  # ============================================
+  # BLS / O*NET Proxy
+  # ============================================
+  # Centralises external API calls + caches responses
+  # so individual services don't each manage credentials
+  onet-proxy:
+    build:
+      context: .
+      dockerfile: modules/proxies/onet/Dockerfile
+    container_name: idii-onet-proxy-staging
+    restart: unless-stopped
+    ports:
+      - "8010:8010"
+    env_file:
+      - .env.staging
+    environment:
+      BLS_KEY: ${BLS_KEY}
+      ONET_USER: ${ONET_USER}
+      ONET_PASS: ${ONET_PASS}
+      REDIS_URL: redis://redis:6379/1   # ← DB 1 keeps proxy cache separate from app cache
+      PORT: 8010
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - staging-network
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: "0.5"
+        reservations:
+          memory: 128M
+
   personal-assistant-staging:
     build:
       context: .  # Change from ./backend/personal_assistant to project root
@@ -273,67 +413,6 @@ services:
               count: 1
               capabilities: [gpu]
     runtime: nvidia
-
-  career-agent-staging:
-    build:
-      context: .
-      dockerfile: modules/agents/career/Dockerfile.prod
-    container_name: idii-career-agent-staging
-    restart: unless-stopped
-    ports:
-      - "8002:8002"
-    env_file:
-      - .env.staging
-    environment:
-      # vLLM API endpoint (OpenAI-compatible)
-      VLLM_API_BASE: "http://vllm-server:8888/v1"
-      DB_TYPE: postgresql
-      DB_HOST: db-staging
-      DB_PORT: 5432
-      DB_NAME: idii-staging
-      DB_USER: ${DB_USER:-postgres}
-      DB_PASSWORD: ${DB_PASSWORD:-postgres}
-    depends_on:
-      - db-staging
-      - vllm-server
-    networks:
-      - staging-network
-    volumes:
-      # Share resumes with backend
-      - /home/idii/data/user-uploads/resumes:/app/resumes
-      # SQLite backup kept for migration reference
-      - /home/idii/data/database:/app/db-backup:ro
-    # Use default CMD from Dockerfile (gunicorn with 4 workers)
-    deploy:
-      resources:
-        limits:
-          memory: 2G
-          cpus: '1.5'
-        reservations:
-          memory: 1G
-  redis:
-    image: redis:7-alpine
-    container_name: idii-Rag-staging
-    restart: unless-stopped
-    ports: ["6370:6379"]
-    volumes: 
-      -"redis_data:/data"
-    command: redis-server --appendonly yes
-    networks:
-      - staging-network
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      deploy:
-        resources:
-          limits:
-            memory: 256M
-            cpus: "0.5"
-          reservations:
-            memory: 128M
-
 
   nginx-staging:
     build:
