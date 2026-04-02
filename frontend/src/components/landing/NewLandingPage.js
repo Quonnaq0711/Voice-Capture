@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
-import { ChevronDown, LogOut, Settings } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../../contexts/AuthContext';
+import React, { useState } from "react";
+import { ChevronDown, LogOut, Settings } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "../../contexts/AuthContext";
 
 const NewLandingPage = () => {
   const navigate = useNavigate();
@@ -10,7 +10,7 @@ const NewLandingPage = () => {
 
   const handleLogout = () => {
     logout();
-    navigate('/login');
+    navigate("/login");
   };
 
   const handleNavigate = (path) => {
@@ -21,8 +21,8 @@ const NewLandingPage = () => {
   return (
     <div className="relative w-full min-h-screen bg-gradient-to-br from-sky-950 via-slate-900 to-sky-950 overflow-hidden">
       {/* Decorative vertical lines */}
-      <div className="absolute left-[30%] top-0 w-0.5 h-full bg-gradient-to-b from-zinc-500 to-transparent opacity-20"></div>
-      <div className="absolute left-[70%] top-0 w-0.5 h-full bg-gradient-to-b from-zinc-500 to-transparent opacity-20"></div>
+      <div className="absolute left-[32%] top-0 w-0.5 h-full bg-gradient-to-b from-zinc-500 to-transparent opacity-20"></div>
+      <div className="absolute left-[67%] top-0 w-0.5 h-full bg-gradient-to-b from-zinc-500 to-transparent opacity-20"></div>
 
       {/* Header Navigation */}
       <header className="relative z-50 max-w-7xl mx-auto px-6 py-8 flex justify-between items-center">
@@ -32,7 +32,7 @@ const NewLandingPage = () => {
 
         <div className="flex items-center gap-4">
           <button
-            onClick={() => navigate('/profile')}
+            onClick={() => navigate("/profile")}
             className="p-2 hover:bg-white/10 rounded-lg transition-colors"
             title="Profile"
           >
@@ -52,41 +52,45 @@ const NewLandingPage = () => {
       <main className="relative z-10 h-[calc(100vh-200px)] flex items-center">
         <div className="max-w-7xl mx-auto w-full px-6">
           <div className="grid grid-cols-3 gap-16 items-end">
-            
             {/* Column 1: Empower */}
             <div className="mt-48">
               <div>
-                <h1 className="text-7xl font-bold text-cyan-600 leading-none mb-8">
+                <div className="group relative overflow-hidden cursor-default max-w-sm mx-auto">
+                <h1 className="text-7xl font-bold text-cyan-600 leading-relaxed transition-transform duration-300 ease-in-out group-hover:-translate-y-full">
                   Empower
                 </h1>
-                <p className="text-lg font-semibold text-white leading-relaxed max-w-sm">
-                  Shifting information into decisive action
-                  on your terms
+                <p className="absolute inset-0 text-lg font-semibold text-white leading-relaxed translate-y-full transition-transform duration-300 ease-in-out group-hover:translate-y-0">
+                  Shifting information into decisive action on your terms
                 </p>
-              </div>
+                </div>
+                </div>
 
               <div className="space-y-4">
                 <button
-                  onClick={() => setOpenDropdown(openDropdown === 'empower' ? null : 'empower')}
-                  className="w-full flex items-center justify-start gap-2 text-cyan-600 hover:text-cyan-400 transition-colors font-semibold group"
+                  onClick={() =>
+                    setOpenDropdown(
+                      openDropdown === "empower" ? null : "empower",
+                    )
+                  }
+                  className="w-full flex items-center justify-start mr-4 gap-2 text-cyan-600 hover:text-cyan-400 transition-colors font-semibold group"
                 >
                   <span>Explore</span>
                   <ChevronDown
                     size={24}
                     className={`transition-transform duration-300 ${
-                      openDropdown === 'empower' ? 'rotate-180' : ''
+                      openDropdown === "empower" ? "rotate-180" : ""
                     }`}
                   />
                 </button>
-                
-                {openDropdown === 'empower' && (
+
+                {openDropdown === "empower" && (
                   <div className="space-y-2 pt-4 bg-cyan-600/10 rounded-lg p-4 backdrop-blur-sm">
                     <button
-                      onClick={() => handleNavigate('/agents/career')}
+                      onClick={() => handleNavigate("/agents/career")}
                       className="block w-full text-left px-4 py-2 text-white hover:bg-cyan-600/30 rounded transition-colors font-medium"
- >
-                  Career
-                </button>
+                    >
+                      Career
+                    </button>
                   </div>
                 )}
               </div>
@@ -95,30 +99,38 @@ const NewLandingPage = () => {
             {/* Column 2: Produce */}
             <div className="space-y-12 -translate-y-32">
               <div className="text-center">
-                <h2 className="text-7xl font-bold text-pink-600 leading-none mb-6">
-                  Pro
-                </h2>
-                <p className="text-white text-lg font-light">Production</p>
+                <div className="group relative overflow-hidden cursor-default max-w-sm mx-auto">
+                  <h1 className="text-7xl font-bold text-pink-600 leading-relaxed transition-transform duration-300 ease-in-out group-hover:-translate-y-full">
+                    Produce
+                  </h1>
+                  <p className="absolute inset-0 text-white text-lg font-semibold leading-relaxed translate-y-full transition-transform duration-300 ease-in-out group-hover:translate-y-0">
+                    Turning direction into results time and again
+                  </p>
+                </div>
               </div>
 
               <div className="space-y-4 -translate-y-12">
                 <button
-                  onClick={() => setOpenDropdown(openDropdown === 'produce' ? null : 'produce')}
-                  className="w-full flex items-center justify-center gap-2 text-pink-600 hover:text-pink-400 transition-colors font-semibold group"
+                  onClick={() =>
+                    setOpenDropdown(
+                      openDropdown === "produce" ? null : "produce",
+                    )
+                  }
+                  className="w-full flex items-center justify-items-start ml-12 gap-2 text-pink-600 hover:text-pink-400 transition-colors font-semibold group"
                 >
                   <span>Explore</span>
                   <ChevronDown
                     size={24}
                     className={`transition-transform duration-300 ${
-                      openDropdown === 'produce' ? 'rotate-180' : ''
+                      openDropdown === "produce" ? "rotate-180" : ""
                     }`}
                   />
                 </button>
-                
-                {openDropdown === 'produce' && (
+
+                {openDropdown === "produce" && (
                   <div className="space-y-2 pt-4 bg-pink-600/10 rounded-lg p-4 backdrop-blur-sm">
                     <button
-                      onClick={() => handleNavigate('/agents/career')}
+                      onClick={() => handleNavigate("/agents/career")}
                       className="block w-full text-left px-4 py-2 text-white hover:bg-pink-600/30 rounded transition-colors font-medium"
                     >
                       Work
@@ -131,36 +143,44 @@ const NewLandingPage = () => {
             {/* Column 3: Thrive */}
             <div className="mt-48 text-center">
               <div>
-                <h2 className="text-7xl font-bold text-orange-500 leading-none mb-6">
-                  Thr
-                </h2>
-                <p className="text-white text-lg font-light mr-10">Thrive</p>
+                <div className="group relative overflow-hidden cursor-default max-w-sm mx-auto">
+                  <h1 className="text-7xl font-bold text-orange-500 leading-relaxed transition-transform duration-300 ease-in-out group-hover:-translate-y-full">
+                    Thrive
+                  </h1>
+
+                  <p className="absolute inset-0 text-white text-lg font-semibold leading-relaxed translate-y-full transition-transform duration-300 ease-in-out group-hover:translate-y-0 ">
+                    Continuously progressing in a way that is both effective and
+                    fulfilling
+                  </p>
+                </div>
               </div>
 
               <div className="space-y-4">
                 <button
-                  onClick={() => setOpenDropdown(openDropdown === 'thrive' ? null : 'thrive')}
-                  className="w-full flex items-center justify-center gap-2 text-orange-500 hover:text-orange-400 transition-colors font-semibold group"
+                  onClick={() =>
+                    setOpenDropdown(openDropdown === "thrive" ? null : "thrive")
+                  }
+                  className="w-full flex items-center justify-items-start ml-20 gap-2 text-orange-500 hover:text-orange-400 transition-colors font-semibold group"
                 >
                   <span>Explore</span>
                   <ChevronDown
                     size={24}
                     className={`transition-transform duration-300 ${
-                      openDropdown === 'thrive' ? 'rotate-180' : ''
+                      openDropdown === "thrive" ? "rotate-180" : ""
                     }`}
                   />
                 </button>
-                
-                {openDropdown === 'thrive' && (
+
+                {openDropdown === "thrive" && (
                   <div className="space-y-2 pt-4 bg-orange-500/10 rounded-lg p-4 backdrop-blur-sm text-left">
                     <button
-                      onClick={() => handleNavigate('/agents/body')}
+                      onClick={() => handleNavigate("/agents/body")}
                       className="block w-full px-4 py-2 text-white hover:bg-orange-500/30 rounded transition-colors font-medium"
                     >
                       Wellness
                     </button>
                     <button
-                      onClick={() => handleNavigate('/agents/travel')}
+                      onClick={() => handleNavigate("/agents/travel")}
                       className="block w-full px-4 py-2 text-white hover:bg-orange-500/30 rounded transition-colors font-medium"
                     >
                       Travel
@@ -180,9 +200,15 @@ const NewLandingPage = () => {
             <p className="text-6xl font-bold leading-none">Idii.</p>
           </div>
           <div className="flex gap-6 text-sm">
-            <button className="hover:opacity-100 transition-opacity">Privacy</button>
-            <button className="hover:opacity-100 transition-opacity">Terms</button>
-            <button className="hover:opacity-100 transition-opacity">Contact</button>
+            <button className="hover:opacity-100 transition-opacity">
+              Privacy
+            </button>
+            <button className="hover:opacity-100 transition-opacity">
+              Terms
+            </button>
+            <button className="hover:opacity-100 transition-opacity">
+              Contact
+            </button>
           </div>
         </div>
       </footer>
