@@ -259,3 +259,4 @@ frontend/.env.development.local
 
 # Backup files (should not be committed, use Git for version control)
 *.backup
+frontend/src/components/newlanding.js
