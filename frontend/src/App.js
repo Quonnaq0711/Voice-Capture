@@ -12,6 +12,7 @@ import { Profile } from './components/profile';
 import { OnboardingWizard } from './components/onboarding';
 import { UnifiedSidebar } from './components/dashboard';
 import { CareerAgent, TravelAgent, BodyAgent } from './components/agents';
+import { NewLandingPage } from './components/landing';
 import { ErrorBoundary } from './components/ui';
 
 // Placeholder components for agent routes
@@ -46,7 +47,8 @@ function App() {
         <AuthProvider>
           <AutoLogoutProvider>
             <Routes>
-          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/" element={<Navigate to="/welcome" replace />} />
+          <Route path="/welcome" element={<NewLandingPage />} />
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Register />} />
           <Route
