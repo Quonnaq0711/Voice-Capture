@@ -48,9 +48,9 @@ function App() {
           <AutoLogoutProvider>
             <Routes>
           <Route path="/" element={<Navigate to="/welcome" replace />} />
-          <Route path="/welcome" element={<NewLandingPage />} />
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Register />} />
+          <Route path="/welcome" element={<NewLandingPage />} />
           <Route
             path="/onboarding"
             element={
