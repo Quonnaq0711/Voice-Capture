@@ -88,7 +88,7 @@ export default function ResetPasswordRequest() {
             {/* Main content card */}
             <div className="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 relative z-10">
                 <div className="w-full max-w-md" style={{background: 'rgba(255, 255, 255, 0.10)', backdropFilter: 'blur(10px)', borderRadius: 20, border: '1px solid rgba(177, 184, 220, 0.60)', padding: '40px'}}>
-                    <div onSubmit={handleSubmit}>
+                    <div>
                         <h2 className="mt-6 text-center text-3xl font-extrabold" style={{color: '#003355'}}>
                             Reset your password
                         </h2>
@@ -98,7 +98,7 @@ export default function ResetPasswordRequest() {
                     </div>
 
                     <div className="mt-8 space-y-6">
-                        <div>
+                        <div onSubmit={handleSubmit} className="space-y-4">
                             <label htmlFor="email" className="sr-only">
                                 Email address
                             </label>

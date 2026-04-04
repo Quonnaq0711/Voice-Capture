@@ -156,13 +156,13 @@ const Register = () => {
       <div style={{width: 30, height: 30, left: 1342, top: 649, position: 'absolute', background: 'white', borderRadius: 9999}} />
 
       {/* Main content card */}
-      <div className="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 relative z-10">
-        <div className="w-full max-w-md" style={{background: 'rgba(255, 255, 255, 0.10)', backdropFilter: 'blur(10px)', borderRadius: 20, border: '1px solid rgba(177, 184, 220, 0.60)', padding: '40px'}}>
+      <div className="min-h-screen flex justify-center py-12 px-4 sm:px-6 lg:px-8 relative z-10">
+        <div onSubmit={handleSubmit} className="w-full max-w-md" style={{background: 'rgba(255, 255, 255, 0.10)', backdropFilter: 'blur(10px)', borderRadius: 20, border: '1px solid rgba(177, 184, 220, 0.60)', padding: '40px'}}>
           <h2 className="mt-6 text-center text-3xl font-extrabold" style={{color: '#003355'}}>
             Sign Up for Idii
           </h2>
 
-        <div className="mt-8 space-y-6" onSubmit={handleSubmit}>
+          <div className="mt-4 space-y-6 ">
           {/* Error messages */}
           {error && (
             <div className="rounded-md bg-red-50 p-4 relative animate-fade-in">
@@ -238,8 +238,8 @@ const Register = () => {
           </div>
 
             {/* Password Field with Strength Meter and Tooltip */}
-            <div>
-              {/* <div className="relative"> */}
+      
+              <div className="relative"> 
                 <input
                   id="password"
                   type={showPassword ? "text" : "password"}
@@ -262,9 +262,7 @@ const Register = () => {
                       ? "border-yellow-500 focus:ring-yellow-500 focus:border-yellow-500"
                       : "border-gray-300 focus:ring-primary-500 focus:border-[#003355]"
                     }`}
-                />
-              {/* </div> */}
-              
+                />                           
                 <div className="absolute inset-y-0 right-0 flex items-center pr-3">
                   <button
                     type="button"
@@ -275,9 +273,7 @@ const Register = () => {
                     {showPassword ? "🙈" : "👁️"}
                   </button>
               </div>
-              </div>
-              </div>
-
+              <div>
               {/* Strength Meter */}
               {password && (
                 <div className="mt-1">
@@ -367,7 +363,8 @@ const Register = () => {
             </div>
           
 
-          {/* Submit Button */}
+              {/* Submit Button */}
+              <div>
           <button
             type="submit"
             disabled={loading}
@@ -397,8 +394,12 @@ const Register = () => {
               Sign in
             </Link>
           </div>
-      </div>
-      </div>
+            </div>
+            </div>
+          </div>         
+          </div>         
+          </div>         
+          </div>          
   );
 };
 export default Register;
