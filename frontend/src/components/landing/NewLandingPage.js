@@ -211,8 +211,9 @@ const NewLandingPage = () => {
               onClick={() => navigate("/terms")}>
               Terms
             </button>
-            <button className="hover:opacity-100 transition-opacity"
-              onClick={() => navigate("/bug-report")}>
+            <button className=" text-xs font-medium text-white hover:opacity-100 transition-opacity"
+              data-tally-open="PdRqlB" data-tally-layout="modal" data-tally-emoji-text="👋🏽" data-tally-emoji-animation="wave"
+            >
               Bug Report
             </button>
           </div>

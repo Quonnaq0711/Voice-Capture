@@ -11,12 +11,13 @@ return(
   <h1 className=" text-2xl flex justify-center font-bold mt-5"> SADAORA INC.</h1>
 </div> */}
         
- <div className="min-h-screen flex items-center justify-center px-6 py-4">
+    
+ <div className="min-h-screen flex items-center justify-center px-6 py-4 bg-gradient-to-br from-sky-950 via-slate-900 to-sky-950 overflow-hidden">
             <div className="max-w-6xl w-full grid grid-cols-1 md:grid-cols-2 gap-8 text-sm text-gray-800">
         {/* <div className="max-w-6xl mx-auto px-6 py-4 grid grid-cols-1 md:grid-cols-2 gap-8 text-sm text-gray-800 space-y"> */}
             
         {/*Privacy Policy Box*/}
-        <section className='border-4 rounded-2xl shadow-md p-6 flex flex-col'>
+        <section className='border-4 rounded-2xl shadow-md p-6 flex flex-col text-gray-300 bg-slate-600/30 backdrop-blur-sm'>
              <div className="flex flex-col justify-center">
   <img
     src="final_logo1-svg.png"
@@ -784,7 +785,7 @@ return(
         </section>
 
         {/* Terms Of Service */}
-        <section className='border-4 rounded-2xl shadow-md p-6 flex flex-col'>
+        <section className='border-4 rounded-2xl shadow-md p-6 flex flex-col  text-gray-300 bg-slate-600/30 backdrop-blur-sm'>
    <div className="flex flex-col justify-center">
   <img
     src="final_logo1-svg.png"
