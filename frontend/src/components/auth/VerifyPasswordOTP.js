@@ -24,7 +24,7 @@ const getPasswordStrength = (pwd) => {
 };
 
 export default function VerifyPasswordOTP() {
-    // const { state } = useLocation();
+    const { state } = useLocation();
     const [otp, setOTP] = useState('');
     const [newPassword, setNewPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
@@ -33,7 +33,8 @@ export default function VerifyPasswordOTP() {
     const [error, setError] = useState(null);
     const nav = useNavigate();
     const { verifyPasswordOTP } = useAuth();
-    const email = useLocation().state?.email || 'dont for get to change this back to email';
+    // localhost variable
+    // const email = useLocation().state?.email || 'dont for get to change this back to email';
 
     const handlePasswordChange = (e) => {
         const pwd = e.target.value;
@@ -60,7 +61,7 @@ export default function VerifyPasswordOTP() {
         }
 
         try {
-            await verifyPasswordOTP(email, otp, newPassword);
+            await verifyPasswordOTP(state.email, otp, newPassword);
             nav('/login', { state: { message: 'Password successfully reset. Login please!' } });
         } catch (err) {
             setError(err.response?.data?.detail || 'Invalid OTP or password reset has failed');
@@ -97,7 +98,7 @@ export default function VerifyPasswordOTP() {
                             Reset Your Password
                         </h2>
                         <p className="mt-2 text-center text-sm" style={{color: '#003355', fontFamily: 'Open Sans'}}>
-                            Please enter the code sent to <span className="font-semibold">{email}</span> and your new password
+                            Please enter the code sent to <span className="font-semibold">{state.email}</span> and your new password
                         </p>
                     </div>
 
