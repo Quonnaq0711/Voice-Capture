@@ -14,6 +14,8 @@ import { UnifiedSidebar } from './components/dashboard';
 import { CareerAgent, TravelAgent, BodyAgent } from './components/agents';
 import { NewLandingPage } from './components/landing';
 import { ErrorBoundary } from './components/ui';
+import{ PrivacyPolicy } from './components/Policies/PrivacyTermsofUse';
+import{ BugReport } from './components/feedback/BugReport';
 
 // Placeholder components for agent routes
 const AgentPage = ({ agentName }) => (
@@ -74,7 +76,10 @@ function App() {
                 <Profile />
               </PrivateRoute>
             }
-          />
+              />
+              <Route path="/privacy" element={<PrivacyPolicy />} />
+              <Route path="/terms" element={<TermsOfService />} />
+              <Route path="/bug-report" element={<BugReport />} />
           {/* OTP Routes */}
           <Route path="/request-password" element={<ResetPasswordRequest />} />
           <Route path="/confirm-password" element={<VerifyPasswordOTP />} />

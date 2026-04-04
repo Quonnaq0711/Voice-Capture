@@ -21,16 +21,16 @@ const NewLandingPage = () => {
   return (
     <div className="relative w-full min-h-screen bg-gradient-to-br from-sky-950 via-slate-900 to-sky-950 overflow-hidden">
       {/* Decorative vertical lines */}
-      <div className="absolute left-[32%] top-0 w-0.5 h-full bg-gradient-to-b from-zinc-500 to-transparent opacity-20"></div>
+      <div className="absolute left-[35%] top-0 w-0.5 h-full bg-gradient-to-b from-zinc-500 to-transparent opacity-20"></div>
       <div className="absolute left-[67%] top-0 w-0.5 h-full bg-gradient-to-b from-zinc-500 to-transparent opacity-20"></div>
 
       {/* Header Navigation */}
-      <header className="relative z-50 max-w-7xl mx-auto px-6 py-8 flex justify-between items-center">
+      <header className="relative z-50 max-w-9xl  px-10 py-8 flex justify-between items-center">
         <div className="flex items-center gap-2">
           <h1 className="text-white text-4xl font-bold tracking-wider">Idii</h1>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex items-end gap-4">
           <button
             onClick={() => navigate("/profile")}
             className="p-2 hover:bg-white/10 rounded-lg transition-colors"
@@ -50,17 +50,18 @@ const NewLandingPage = () => {
 
       {/* Main Content Grid */}
       <main className="relative z-10 h-[calc(100vh-200px)] flex items-center">
-        <div className="max-w-7xl mx-auto w-full px-6">
-          <div className="grid grid-cols-3 gap-16 items-end">
+        <div className="max-w-7xl mx-auto w-full ">
+          <div className="grid grid-cols-3 gap-16 items-center">
             {/* Column 1: Empower */}
             <div className="mt-48">
               <div>
                 <div className="group relative overflow-hidden cursor-default max-w-sm mx-auto">
-                <h1 className="text-7xl font-bold text-cyan-600 leading-relaxed transition-transform duration-300 ease-in-out group-hover:-translate-y-full">
-                  Empower
-                </h1>
+                <h1 className="text-9xl font-bold text-cyan-600 leading-relaxed transition-transform duration-300 ease-in-out group-hover:-translate-y-full">
+                  Emp
+                  </h1>
                 <p className="absolute inset-0 text-lg font-semibold text-white leading-relaxed translate-y-full transition-transform duration-300 ease-in-out group-hover:translate-y-0">
-                  Shifting information into decisive action on your terms
+                    <p className="text-4xl text-cyan-600">Empower</p>
+                    Shifting information into decisive action on your 
                 </p>
                 </div>
                 </div>
@@ -72,7 +73,7 @@ const NewLandingPage = () => {
                       openDropdown === "empower" ? null : "empower",
                     )
                   }
-                  className="w-full flex items-center justify-start mr-4 gap-2 text-cyan-600 hover:text-cyan-400 transition-colors font-semibold group"
+                  className="w-full flex items-center justify-start ml-2 gap-2 text-cyan-600 hover:text-cyan-400 transition-colors font-semibold group"
                 >
                   <span>Explore</span>
                   <ChevronDown
@@ -100,10 +101,11 @@ const NewLandingPage = () => {
             <div className="space-y-12 -translate-y-32">
               <div className="text-center">
                 <div className="group relative overflow-hidden cursor-default max-w-sm mx-auto">
-                  <h1 className="text-7xl font-bold text-pink-600 leading-relaxed transition-transform duration-300 ease-in-out group-hover:-translate-y-full">
-                    Produce
+                  <h1 className="text-9xl font-bold text-pink-600 leading-relaxed transition-transform duration-300 ease-in-out group-hover:-translate-y-full">
+                    Pro
                   </h1>
                   <p className="absolute inset-0 text-white text-lg font-semibold leading-relaxed translate-y-full transition-transform duration-300 ease-in-out group-hover:translate-y-0">
+                    <p className="text-4xl font-bold text-pink-600">Produce</p>
                     Turning direction into results time and again
                   </p>
                 </div>
@@ -116,7 +118,7 @@ const NewLandingPage = () => {
                       openDropdown === "produce" ? null : "produce",
                     )
                   }
-                  className="w-full flex items-center justify-items-start ml-12 gap-2 text-pink-600 hover:text-pink-400 transition-colors font-semibold group"
+                  className="w-full flex items-center justify-items-center ml-24 gap-2 text-pink-600 hover:text-pink-400 transition-colors font-semibold group"
                 >
                   <span>Explore</span>
                   <ChevronDown
@@ -143,12 +145,13 @@ const NewLandingPage = () => {
             {/* Column 3: Thrive */}
             <div className="mt-48 text-center">
               <div>
-                <div className="group relative overflow-hidden cursor-default max-w-sm mx-auto">
-                  <h1 className="text-7xl font-bold text-orange-500 leading-relaxed transition-transform duration-300 ease-in-out group-hover:-translate-y-full">
-                    Thrive
+                <div className="group relative overflow-hidden cursor-default max-w-lg mx-auto">
+                  <h1 className="text-9xl font-bold text-orange-500 leading-relaxed transition-transform duration-300 ease-in-out group-hover:-translate-y-full ml-12">
+                    Thr
                   </h1>
 
-                  <p className="absolute inset-0 text-white text-lg font-semibold leading-relaxed translate-y-full transition-transform duration-300 ease-in-out group-hover:translate-y-0 ">
+                  <p className="absolute inset-0 text-white text-lg font-semibold ml-10 leading-relaxed translate-y-full transition-transform duration-300 ease-in-out group-hover:translate-y-0 ">
+                    <p className="text-4xl font-bold text-orange-500">Thrive</p>
                     Continuously progressing in a way that is both effective and
                     fulfilling
                   </p>
@@ -160,7 +163,7 @@ const NewLandingPage = () => {
                   onClick={() =>
                     setOpenDropdown(openDropdown === "thrive" ? null : "thrive")
                   }
-                  className="w-full flex items-center justify-items-start ml-20 gap-2 text-orange-500 hover:text-orange-400 transition-colors font-semibold group"
+                  className="w-full flex items-center justify-items-start ml-32 gap-2 text-orange-500 hover:text-orange-400 transition-colors font-semibold group"
                 >
                   <span>Explore</span>
                   <ChevronDown
@@ -194,20 +197,23 @@ const NewLandingPage = () => {
       </main>
 
       {/* Footer Branding */}
-      <footer className="relative z-10 max-w-7xl mx-auto px-6 py-8">
+      <footer className="relative z-10 max-w-9xl mx-auto px-6 py-8">
         <div className="flex justify-between items-end text-white text-xs opacity-50">
           <div>
             <p className="text-6xl font-bold leading-none">Idii.</p>
           </div>
           <div className="flex gap-6 text-sm">
-            <button className="hover:opacity-100 transition-opacity">
+            <button className="hover:opacity-100 transition-opacity"
+              onClick={() => navigate("/privacy")}>
               Privacy
             </button>
-            <button className="hover:opacity-100 transition-opacity">
+            <button className="hover:opacity-100 transition-opacity"
+              onClick={() => navigate("/terms")}>
               Terms
             </button>
-            <button className="hover:opacity-100 transition-opacity">
-              Contact
+            <button className="hover:opacity-100 transition-opacity"
+              onClick={() => navigate("/bug-report")}>
+              Bug Report
             </button>
           </div>
         </div>
