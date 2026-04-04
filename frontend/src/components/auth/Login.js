@@ -1,10 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { Eye, EyeOff } from 'lucide-react';
 
 const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [rememberMe, setRememberMe] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
   const [loading, setLoading] = useState(false);
@@ -12,26 +15,21 @@ const Login = () => {
   const { login } = useAuth();
   const location = useLocation();
 
-  // Use refs to prevent premature clearing
   const errorTimerRef = useRef(null);
   const infoTimerRef = useRef(null);
 
-  // Auto-dismiss error messages after 10 seconds (industry standard + buffer)
   useEffect(() => {
-    // Clear any existing timer
     if (errorTimerRef.current) {
       clearTimeout(errorTimerRef.current);
     }
 
     if (error) {
-      // Set new timer with ref to prevent cleanup issues
       errorTimerRef.current = setTimeout(() => {
         setError('');
         errorTimerRef.current = null;
-      }, 10000); // 10 seconds - ensure visibility
+      }, 3000);
     }
 
-    // Cleanup function
     return () => {
       if (errorTimerRef.current) {
         clearTimeout(errorTimerRef.current);
@@ -39,9 +37,7 @@ const Login = () => {
     };
   }, [error]);
 
-  // Auto-dismiss info messages after 10 seconds
   useEffect(() => {
-    // Clear any existing timer
     if (infoTimerRef.current) {
       clearTimeout(infoTimerRef.current);
     }
@@ -50,7 +46,7 @@ const Login = () => {
       infoTimerRef.current = setTimeout(() => {
         setInfo('');
         infoTimerRef.current = null;
-      }, 10000);
+      }, 3000);
     }
 
     return () => {
@@ -63,36 +59,26 @@ const Login = () => {
   useEffect(() => {
     if (location.state?.message) {
       setInfo(location.state.message);
-      // Clear the state to prevent the message from showing again on refresh
       navigate(location.pathname, { replace: true, state: {} });
     }
   }, [location, navigate]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
-    // Don't clear error immediately - let user read it if they're retrying
-    // Only clear error once we start loading
     setLoading(true);
 
     try {
       await login(email, password);
-
-      // Clear error only on successful login
       setError('');
 
-      // Check if this is a first-time user
       const isFirstTimeUser = localStorage.getItem('isFirstTimeUser');
       if (isFirstTimeUser === 'true') {
-        // Remove the flag and navigate to onboarding
         localStorage.removeItem('isFirstTimeUser');
         navigate('/onboarding');
       } else {
         navigate('/dashboard');
       }
     } catch (err) {
-      // Use generic error message to prevent information leakage
-      // Log actual error for debugging (only visible in browser console)
       console.error('Login error:', err.response?.data?.detail || err.message);
       setError('Invalid email or password. Please try again.');
     } finally {
@@ -100,117 +86,136 @@ const Login = () => {
     }
   };
 
-   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full space-y-8">
-        <div>
-          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-            Sign in to your account
-          </h2>
-        </div>
-        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-          {info && (
-            <div className="rounded-md bg-blue-50 p-4 relative animate-fade-in">
-              <div className="flex items-start justify-between">
-                <div className="text-sm text-blue-700 flex-1">{info}</div>
-                <button
-                  type="button"
-                  onClick={() => setInfo('')}
-                  className="ml-3 flex-shrink-0 inline-flex text-blue-400 hover:text-blue-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 rounded-md p-1 transition-colors"
-                  aria-label="Dismiss"
-                >
-                  <svg className="h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-                  </svg>
-                </button>
-              </div>
-            </div>
-          )}
+  return (
+    <div className="relative w-full min-h-screen bg-slate-200 overflow-hidden">
+      {/* Decorative white circles - Small (20x20) */}
+      <div className="absolute w-5 h-5 rounded-full bg-white" style={{ left: '85px', top: '432px' }} />
+      <div className="absolute w-5 h-5 rounded-full bg-white" style={{ left: '222px', top: '483px' }} />
+      <div className="absolute w-5 h-5 rounded-full bg-white" style={{ left: '313px', top: '378px' }} />
+      <div className="absolute w-5 h-5 rounded-full bg-white" style={{ left: '1189px', top: '500px' }} />
+      <div className="absolute w-5 h-5 rounded-full bg-white" style={{ left: '1322px', top: '180px' }} />
+      <div className="absolute w-5 h-5 rounded-full bg-white" style={{ left: '1254px', top: '32px' }} />
+      <div className="absolute w-5 h-5 rounded-full bg-white" style={{ left: '1386px', top: '50px' }} />
+      <div className="absolute w-5 h-5 rounded-full bg-white" style={{ left: '308px', top: '191px' }} />
+      <div className="absolute w-5 h-5 rounded-full bg-white" style={{ left: '188px', top: '628px' }} />
+
+      {/* Decorative white circles - Large (30x30) */}
+      <div className="absolute w-6 h-6 rounded-full bg-white" style={{ left: '189px', top: '82px' }} />
+      <div className="absolute w-6 h-6 rounded-full bg-white" style={{ left: '272px', top: '655px' }} />
+      <div className="absolute w-6 h-6 rounded-full bg-white" style={{ left: '1013px', top: '52px' }} />
+      <div className="absolute w-6 h-6 rounded-full bg-white" style={{ left: '1386px', top: '102px' }} />
+      <div className="absolute w-6 h-6 rounded-full bg-white" style={{ left: '1193px', top: '297px' }} />
+      <div className="absolute w-6 h-6 rounded-full bg-white" style={{ left: '1188px',  top: '630px' }} />
+      <div className="absolute w-6 h-6 rounded-full bg-white" style={{ left: '1066px', top: '585px' }} />
+      <div className="absolute w-6 h-6 rounded-full bg-white" style={{ left: '1264px', top: '440px' }} />
+      <div className="absolute w-6 h-6 rounded-full bg-white" style={{ left: '1342px', top: '649px' }} />
+      <div className="absolute w-6 h-6 rounded-full bg-white" style={{ left: '72px', top: '349px' }} />
+      <div className="absolute w-6 h-6 rounded-full bg-white" style={{ left: '42px', top: '649px' }} />
+
+      {/* Main Login Card */}
+      <div className="absolute w-[550px] h-[500px] rounded-[20px] bg-white/10 backdrop-blur-md border border-[#003355] shadow-black shadow-lg" style={{ left: '470px', top: '180px' }}>
+        
+        {/* Logo placeholder */}
+         <div className="flex justify-center pt-8 pb-6"> 
+          <img 
+            src="/Fulltext-idii-logo2-svg.png" 
+            alt="Logo" 
+            className="w-64 h-34 object-contain"
+          />
+        </div> 
+
+        {/* Form Container */}
+        <div className="px-9 space-y-5">
+          {/* Error Message */}
           {error && (
-            <div className="rounded-md bg-red-50 p-4 relative animate-fade-in">
-              <div className="flex items-start justify-between">
-                <div className="text-sm text-red-700 flex-1">{error}</div>
-                <button
-                  type="button"
-                  onClick={() => setError('')}
-                  className="ml-3 flex-shrink-0 inline-flex text-red-400 hover:text-red-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 rounded-md p-1 transition-colors"
-                  aria-label="Dismiss"
-                >
-                  <svg className="h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-                  </svg>
-                </button>
-              </div>
+            <div className="bg-red-50 p-3 rounded-md text-red-600 text-sm font-medium">
+              {error}
+            </div> 
+          )}  
+
+          {/* Info Message */}
+          {info && (
+            <div className="bg-blue-50 p-3 rounded-md text-blue-600 text-sm font-medium">
+              {info}
             </div>
-          )}
-          <div className="rounded-md shadow-sm -space-y-px">
-            <div>
-              <label htmlFor="email-address" className="sr-only">
-                Email address
-              </label>
-              <input
-                id="email-address"
-                name="email"
-                type="email"
-                autoComplete="email"
-                required
-                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-primary-500 focus:border-primary-500 focus:z-10 sm:text-sm"
-                placeholder="Email address"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
-            </div>
-            <div>
-              <label htmlFor="password" className="sr-only">
-                Password
-              </label>
-              <input
-                id="password"
-                name="password"
-                type="password"
-                autoComplete="current-password"
-                required
-                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-primary-500 focus:border-primary-500 focus:z-10 sm:text-sm"
-                placeholder="Password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </div>
+          )} 
+
+          {/* Email/Username Input */}
+          <div>
+            <input
+              type="text"
+              placeholder="username or email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full h-15 px-5 rounded-[10px] bg-[#F9F8F5] border border-[#8D908F] text-[#8D908F] placeholder-[#8D908F] font-['Space_Mono'] text-base focus:outline-none focus:ring-2 focus:ring-[#003355]"
+            />
           </div>
 
-          <div>
+          {/* Password Input */}
+          <div className="relative">
+            <input
+              type={showPassword ? 'text' : 'password'}
+              placeholder="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full h-15 px-5 pr-12 rounded-[10px] bg-[#F9F8F5] border border-[#8D908F] text-[#8D908F] placeholder-[#8D908F] font-['Open_Sans'] text-base focus:outline-none focus:ring-2 focus:ring-[#003355]"
+            />
             <button
-              type="submit"
-              disabled={loading}
-              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute right-4 top-1/2 transform -translate-y-1/2 text-[#8D908F] hover:text-[#003355]"
             >
-              {loading ? 'Signing in...' : 'Sign in'}
+              {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
             </button>
           </div>
-          <div className="text-center mt-4">
-            <p className="text-sm text-gray-600">
+
+          {/* Remember Me & Forgot Password */}
+           <div className="flex items-center justify-between pt-2">
+            <div className="flex items-center gap-3">
+              <input
+                type="checkbox"
+                id="remember"
+                checked={rememberMe}
+                onChange={(e) => setRememberMe(e.target.checked)}
+                className="w-[15px] h-[15px] rounded border border-[#8D908F] bg-[#F9F8F5] cursor-pointer"
+              />
+              <label htmlFor="remember" className="text-[#003355] font-['Open_Sans'] text-sm font-normal cursor-pointer">
+                Remember me
+              </label>
+            </div>
+            <Link
+              to="/request-password"
+              className="text-[#003355] font-['Open_Sans'] text-sm font-semibold hover:underline"
+            >
+              Forgot password?
+            </Link>
+          </div> 
+
+          {/* Login Button */}
+          <button
+            onClick={handleSubmit}
+            disabled={loading}
+            className="w-full h-25 rounded-[10px] bg-[#003355] text-white font-['Space_Mono'] text-base font-semibold hover:bg-[#002945] transition-colors disabled:opacity-50 mt-8"
+          >
+            {loading ? 'Logging in...' : 'Login'}
+          </button> 
+
+          {/* Sign Up Link */}
+          <div className="text-center pt-4">
+            <span className="text-[#003355] font-['Open_Sans'] text-sm font-normal">
               Don't have an account?{' '}
-              <Link
-                to="/signup"
-                className="font-medium text-primary-600 hover:text-primary-500"
-              >
-                Sign up now
-              </Link>
-            </p>
-            <p className="text-sm text-gray-600">
-              Forgot Password?{' '}
-              <Link
-                to="/request-password"
-                className="font-medium text-primary-600 hover:text-primary-500"
-              >
-                Click Here
-              </Link>
-            </p>
-          </div>
-        </form>
+            </span>
+            <Link
+              to="/signup"
+              className="text-[#003355] font-['Open_Sans'] text-sm font-semibold hover:underline"
+            >
+              Sign up
+            </Link>
+          </div> 
+        </div> 
       </div>
-    </div>
-  );
+    </div> 
+  ); 
 };
 
 export default Login;

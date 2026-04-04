@@ -134,13 +134,35 @@ const Register = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full space-y-8">
-        <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-          Sign Up for Idii
-        </h2>
+    <div style={{width: '100%', height: '100vh', position: 'relative', background: '#F2F2F2', overflow: 'hidden'}}>
+      {/* Decorative circles */}
+      <div style={{width: 20, height: 20, left: 85, top: 432, position: 'absolute', background: 'white', borderRadius: 9999}} />
+      <div style={{width: 20, height: 20, left: 222, top: 483, position: 'absolute', background: 'white', borderRadius: 9999}} />
+      <div style={{width: 20, height: 20, left: 313, top: 378, position: 'absolute', background: 'white', borderRadius: 9999}} />
+      <div style={{width: 20, height: 20, left: 1096, top: 200, position: 'absolute', background: 'white', borderRadius: 9999}} />
+      <div style={{width: 20, height: 20, left: 1322, top: 180, position: 'absolute', background: 'white', borderRadius: 9999}} />
+      <div style={{width: 20, height: 20, left: 1254, top: 32, position: 'absolute', background: 'white', borderRadius: 9999}} />
+      <div style={{width: 20, height: 20, left: 1386, top: 950, position: 'absolute', background: 'white', borderRadius: 9999}} />
+      <div style={{width: 20, height: 20, left: 1008, top: 910, position: 'absolute', background: 'white', borderRadius: 9999}} />
+      <div style={{width: 20, height: 20, left: 1188, top: 728, position: 'absolute', background: 'white', borderRadius: 9999}} />
+      <div style={{width: 30, height: 30, left: 159, top: 282, position: 'absolute', background: 'white', borderRadius: 9999}} />
+      <div style={{width: 30, height: 30, left: 272, top: 755, position: 'absolute', background: 'white', borderRadius: 9999}} />
+      <div style={{width: 30, height: 30, left: 1013, top: 52, position: 'absolute', background: 'white', borderRadius: 9999}} />
+      <div style={{width: 30, height: 30, left: 1386, top: 102, position: 'absolute', background: 'white', borderRadius: 9999}} />
+      <div style={{width: 30, height: 30, left: 1193, top: 297, position: 'absolute', background: 'white', borderRadius: 9999}} />
+      <div style={{width: 30, height: 30, left: 36, top: 641, position: 'absolute', background: 'white', borderRadius: 9999}} />
+      <div style={{width: 30, height: 30, left: 1066, top: 785, position: 'absolute', background: 'white', borderRadius: 9999}} />
+      <div style={{width: 30, height: 30, left: 1264, top: 940, position: 'absolute', background: 'white', borderRadius: 9999}} />
+      <div style={{width: 30, height: 30, left: 1342, top: 649, position: 'absolute', background: 'white', borderRadius: 9999}} />
 
-        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
+      {/* Main content card */}
+      <div className="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 relative z-10">
+        <div className="w-full max-w-md" style={{background: 'rgba(255, 255, 255, 0.10)', backdropFilter: 'blur(10px)', borderRadius: 20, border: '1px solid rgba(177, 184, 220, 0.60)', padding: '40px'}}>
+          <h2 className="mt-6 text-center text-3xl font-extrabold" style={{color: '#003355'}}>
+            Sign Up for Idii
+          </h2>
+
+        <div className="mt-8 space-y-6" onSubmit={handleSubmit}>
           {/* Error messages */}
           {error && (
             <div className="rounded-md bg-red-50 p-4 relative animate-fade-in">
@@ -177,7 +199,7 @@ const Register = () => {
             </div>
           )}
 
-          <div className="space-y-4">
+          <div>
             <input
               id="firstname"
               type="text"
@@ -185,9 +207,11 @@ const Register = () => {
               placeholder="First Name"
               value={firstname}
               onChange={(e) => setFirstname(e.target.value)}
-              className="block w-full px-3 py-2 placeholder-gray-400 text-gray-900 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 sm:text-sm transition-colors duration-150"
+              className="w-full h-15 px-5 rounded-[10px] bg-[#F9F8F5] border border-[#8D908F] text-[#8D908F] placeholder-[#8D908F] font-['Space_Mono'] text-base focus:outline-none focus:ring-2 focus:ring-[#003355]"
             />
+            </div>            
 
+          <div className="mb-2">
             <input
               id="lastname"
               type="text"
@@ -195,9 +219,11 @@ const Register = () => {
               placeholder="Last Name"
               value={lastname}
               onChange={(e) => setLastname(e.target.value)}
-              className="block w-full px-3 py-2 placeholder-gray-400 text-gray-900 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 sm:text-sm transition-colors duration-150"
+              className="w-full h-15 px-5 rounded-[10px] bg-[#F9F8F5] border border-[#8D908F] text-[#8D908F] placeholder-[#8D908F] font-['Space_Mono'] text-base focus:outline-none focus:ring-2 focus:ring-[#003355]"
             />
+          </div>
 
+          <div>
             <input
               id="email-address"
               type="email"
@@ -206,12 +232,14 @@ const Register = () => {
               autoComplete="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="block w-full px-3 py-2 placeholder-gray-400 text-gray-900 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 sm:text-sm transition-colors duration-150"
+              className="w-full h-15 px-5 rounded-[10px] bg-[#F9F8F5] border border-[#8D908F] text-[#8D908F] placeholder-[#8D908F] font-['Space_Mono'] text-base focus:outline-none focus:ring-2 focus:ring-[#003355]"
+
             />
+          </div>
 
             {/* Password Field with Strength Meter and Tooltip */}
             <div>
-              <div className="relative">
+              {/* <div className="relative"> */}
                 <input
                   id="password"
                   type={showPassword ? "text" : "password"}
@@ -228,12 +256,15 @@ const Register = () => {
                     setPasswordStrength(getPasswordStrength(pastedText));
                     setPasswordError(validatePassword(pastedText));
                   }}
-                  className={`block w-full pr-20 px-3 py-2 placeholder-gray-400 text-gray-900 border rounded-md sm:text-sm transition-colors duration-150
+                  className={`w-full h-15 px-5 rounded-[10px] bg-[#F9F8F5] border border-[#8D908F] text-[#8D908F] placeholder-[#8D908F] font-['Space_Mono'] text-base focus:outline-none focus:ring-2 focus:ring-[#003355]
+
                     ${passwordError
                       ? "border-yellow-500 focus:ring-yellow-500 focus:border-yellow-500"
-                      : "border-gray-300 focus:ring-primary-500 focus:border-primary-500"
+                      : "border-gray-300 focus:ring-primary-500 focus:border-[#003355]"
                     }`}
                 />
+              {/* </div> */}
+              
                 <div className="absolute inset-y-0 right-0 flex items-center pr-3">
                   <button
                     type="button"
@@ -243,7 +274,8 @@ const Register = () => {
                   >
                     {showPassword ? "🙈" : "👁️"}
                   </button>
-                </div>
+              </div>
+              </div>
               </div>
 
               {/* Strength Meter */}
@@ -307,7 +339,7 @@ const Register = () => {
             </div>
 
             {/* Confirm Password */}
-            <div className="relative">
+            <div>
               <input
                 id="confirm-password"
                 type="password"
@@ -322,7 +354,8 @@ const Register = () => {
                   e.preventDefault();
                   setConfirmPassword(pastedText);
                 }}
-                className="block w-full px-3 py-2 placeholder-gray-400 text-gray-900 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 sm:text-sm transition-colors duration-150"
+                className="w-full h-15 px-5 pr-12 rounded-[10px] bg-[#F9F8F5] border border-[#8D908F] text-[#8D908F] placeholder-[#8D908F] font-['Open_Sans'] text-base focus:outline-none focus:ring-2 focus:ring-[#003355]"
+
               />
               {password && confirmPassword && password === confirmPassword && (
                 <div className="absolute inset-y-0 right-0 flex items-center pr-3">
@@ -332,32 +365,41 @@ const Register = () => {
                 </div>
               )}
             </div>
-          </div>
+          
 
           {/* Submit Button */}
           <button
             type="submit"
             disabled={loading}
-            className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
+            style={{
+              width: '100%',
+              padding: '15px',
+              background: loading ? '#D1D5DB' : '#003355',
+              color: 'white',
+              border: 'none',
+              borderRadius: 10,
+              fontSize: 16,
+              fontFamily: 'Roboto',
+              fontWeight: 600,
+              cursor: loading ? 'not-allowed' : 'pointer'
+            }}
           >
             {loading ? "Registering..." : "Sign Up"}
           </button>
 
           {/* Sign-in Link */}
-          <div className="mt-4 text-center text-sm text-gray-600">
+          <div className="text-center" style={{color: '#003355', fontSize: 12, fontFamily: 'Open Sans'}}>
             Already have an account?{" "}
             <Link
               to="/login"
-              className="font-medium text-primary-600 hover:text-primary-500 transition-colors duration-150"
+              style={{color: '#003355', fontWeight: 600, textDecoration: 'none'}}
             >
               Sign in
             </Link>
           </div>
-        </form>
       </div>
-    </div>
+      </div>
   );
 };
-
 export default Register;
 

@@ -24,7 +24,7 @@ const getPasswordStrength = (pwd) => {
 };
 
 export default function VerifyPasswordOTP() {
-    const { state } = useLocation();
+    // const { state } = useLocation();
     const [otp, setOTP] = useState('');
     const [newPassword, setNewPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
@@ -33,6 +33,7 @@ export default function VerifyPasswordOTP() {
     const [error, setError] = useState(null);
     const nav = useNavigate();
     const { verifyPasswordOTP } = useAuth();
+    const email = useLocation().state?.email || 'dont for get to change this back to email';
 
     const handlePasswordChange = (e) => {
         const pwd = e.target.value;
@@ -59,7 +60,7 @@ export default function VerifyPasswordOTP() {
         }
 
         try {
-            await verifyPasswordOTP(state.email, otp, newPassword);
+            await verifyPasswordOTP(email, otp, newPassword);
             nav('/login', { state: { message: 'Password successfully reset. Login please!' } });
         } catch (err) {
             setError(err.response?.data?.detail || 'Invalid OTP or password reset has failed');
@@ -67,19 +68,41 @@ export default function VerifyPasswordOTP() {
     }
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-            <div className="max-w-md w-full space-y-8">
-                <div>
-                    <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-                        Reset Your Password
-                    </h2>
-                    <p className="mt-2 text-center text-sm text-gray-600">
-                        Please enter the code sent to <span className="font-medium">{state.email}</span> and your new password
-                    </p>
-                </div>
+        <div style={{width: '100%', height: '100vh', position: 'relative', background: '#F2F2F2', overflow: 'hidden'}}>
+            {/* Decorative circles */}
+            <div style={{width: 20, height: 20, left: 85, top: 432, position: 'absolute', background: 'white', borderRadius: 9999}} />
+            <div style={{width: 20, height: 20, left: 222, top: 483, position: 'absolute', background: 'white', borderRadius: 9999}} />
+            <div style={{width: 20, height: 20, left: 313, top: 378, position: 'absolute', background: 'white', borderRadius: 9999}} />
+            <div style={{width: 20, height: 20, left: 1096, top: 200, position: 'absolute', background: 'white', borderRadius: 9999}} />
+            <div style={{width: 20, height: 20, left: 1322, top: 180, position: 'absolute', background: 'white', borderRadius: 9999}} />
+            <div style={{width: 20, height: 20, left: 1254, top: 32, position: 'absolute', background: 'white', borderRadius: 9999}} />
+            <div style={{width: 20, height: 20, left: 1386, top: 950, position: 'absolute', background: 'white', borderRadius: 9999}} />
+            <div style={{width: 20, height: 20, left: 1008, top: 910, position: 'absolute', background: 'white', borderRadius: 9999}} />
+            <div style={{width: 20, height: 20, left: 1188, top: 728, position: 'absolute', background: 'white', borderRadius: 9999}} />
+            <div style={{width: 30, height: 30, left: 159, top: 282, position: 'absolute', background: 'white', borderRadius: 9999}} />
+            <div style={{width: 30, height: 30, left: 272, top: 755, position: 'absolute', background: 'white', borderRadius: 9999}} />
+            <div style={{width: 30, height: 30, left: 1013, top: 52, position: 'absolute', background: 'white', borderRadius: 9999}} />
+            <div style={{width: 30, height: 30, left: 1386, top: 102, position: 'absolute', background: 'white', borderRadius: 9999}} />
+            <div style={{width: 30, height: 30, left: 1193, top: 297, position: 'absolute', background: 'white', borderRadius: 9999}} />
+            <div style={{width: 30, height: 30, left: 36, top: 641, position: 'absolute', background: 'white', borderRadius: 9999}} />
+            <div style={{width: 30, height: 30, left: 1066, top: 785, position: 'absolute', background: 'white', borderRadius: 9999}} />
+            <div style={{width: 30, height: 30, left: 1264, top: 940, position: 'absolute', background: 'white', borderRadius: 9999}} />
+            <div style={{width: 30, height: 30, left: 1342, top: 649, position: 'absolute', background: 'white', borderRadius: 9999}} />
 
-                <div className="mt-8 space-y-6">
-                    <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Main content card */}
+            <div className="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 relative z-10 shadow-black shadow-lg">
+                <div className="w-full max-w-md" style={{background: 'rgba(255, 255, 255, 0.10)', backdropFilter: 'blur(10px)', borderRadius: 20, border: '1px solid rgba(177, 184, 220, 0.60)', padding: '40px'}}>
+                    <div>
+                        <h2 className="mt-6 text-center text-3xl font-extrabold" style={{color: '#003355'}}>
+                            Reset Your Password
+                        </h2>
+                        <p className="mt-2 text-center text-sm" style={{color: '#003355', fontFamily: 'Open Sans'}}>
+                            Please enter the code sent to <span className="font-semibold">{email}</span> and your new password
+                        </p>
+                    </div>
+
+                    <div className="mt-8 space-y-6">
+                        <form onSubmit={handleSubmit} className="space-y-4">
                         {/* OTP Input */}
                         <div>
                             <label htmlFor="otp" className="sr-only">
@@ -96,8 +119,16 @@ export default function VerifyPasswordOTP() {
                                 }}
                                 placeholder="Enter verification code"
                                 required
-                                className={`appearance-none rounded-md relative block w-full px-3 py-2 border ${error ? "border-red-300" : "border-gray-300"
-                                    } placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm`}
+                                style={{
+                                    background: '#F9F8F5',
+                                    border: '1px solid #8D908F',
+                                    borderRadius: 10,
+                                    padding: '12px 16px',
+                                    width: '100%',
+                                    fontSize: 16,
+                                    fontFamily: 'Open Sans',
+                                    color: '#8D908F'
+                                }}
                             />
                         </div>
 
@@ -114,9 +145,16 @@ export default function VerifyPasswordOTP() {
                                 onChange={handlePasswordChange}
                                 placeholder="Enter new password"
                                 required
-                                className={`appearance-none rounded-md relative block w-full px-3 py-2 border ${
-                                    passwordError ? "border-yellow-500" : error ? "border-red-300" : "border-gray-300"
-                                } placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm`}
+                                style={{
+                                    background: '#F9F8F5',
+                                    border: passwordError ? '1px solid #F59E0B' : '1px solid #8D908F',
+                                    borderRadius: 10,
+                                    padding: '12px 16px',
+                                    width: '100%',
+                                    fontSize: 16,
+                                    fontFamily: 'Open Sans',
+                                    color: '#8D908F'
+                                }}
                             />
                             {/* Password Strength Meter */}
                             {newPassword && (
@@ -163,9 +201,16 @@ export default function VerifyPasswordOTP() {
                                 }}
                                 placeholder="Confirm new password"
                                 required
-                                className={`appearance-none rounded-md relative block w-full px-3 py-2 border ${
-                                    error && error.includes("match") ? "border-red-300" : "border-gray-300"
-                                } placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm`}
+                                style={{
+                                    background: '#F9F8F5',
+                                    border: error && error.includes("match") ? '1px solid #EF4444' : '1px solid #8D908F',
+                                    borderRadius: 10,
+                                    padding: '12px 16px',
+                                    width: '100%',
+                                    fontSize: 16,
+                                    fontFamily: 'Open Sans',
+                                    color: '#8D908F'
+                                }}
                             />
                         </div>
 
@@ -197,7 +242,18 @@ export default function VerifyPasswordOTP() {
                         <div>
                             <button
                                 type="submit"
-                                className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                                style={{
+                                    width: '100%',
+                                    padding: '15px',
+                                    background: '#003355',
+                                    color: 'white',
+                                    border: 'none',
+                                    borderRadius: 10,
+                                    fontSize: 16,
+                                    fontFamily: 'Roboto',
+                                    fontWeight: 600,
+                                    cursor: 'pointer'
+                                }}
                             >
                                 Reset Password
                             </button>
@@ -205,6 +261,7 @@ export default function VerifyPasswordOTP() {
                     </form>
                 </div>
             </div>
-        </div>
+            </div>
+            </div>
     );
 }

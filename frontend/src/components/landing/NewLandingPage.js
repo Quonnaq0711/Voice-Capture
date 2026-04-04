@@ -208,7 +208,7 @@ const NewLandingPage = () => {
               Privacy
             </button>
             <button className="hover:opacity-100 transition-opacity"
-              onClick={() => navigate("/terms")}>
+              onClick={() => navigate("/privacy")}>
               Terms
             </button>
             <button className=" text-xs font-medium text-white hover:opacity-100 transition-opacity"
