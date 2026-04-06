@@ -64,30 +64,34 @@ export default function ResetPasswordRequest() {
     };
 
     return (
-        <div style={{width: '100%', height: '100vh', position: 'relative', background: '#F2F2F2', overflow: 'hidden'}}>
-            {/* Decorative circles */}
-            <div style={{width: 20, height: 20, left: 85, top: 432, position: 'absolute', background: 'white', borderRadius: 9999}} />
-            <div style={{width: 20, height: 20, left: 222, top: 483, position: 'absolute', background: 'white', borderRadius: 9999}} />
-            <div style={{width: 20, height: 20, left: 313, top: 378, position: 'absolute', background: 'white', borderRadius: 9999}} />
-            <div style={{width: 20, height: 20, left: 1096, top: 200, position: 'absolute', background: 'white', borderRadius: 9999}} />
-            <div style={{width: 20, height: 20, left: 1322, top: 180, position: 'absolute', background: 'white', borderRadius: 9999}} />
-            <div style={{width: 20, height: 20, left: 1254, top: 32, position: 'absolute', background: 'white', borderRadius: 9999}} />
-            <div style={{width: 20, height: 20, left: 1386, top: 950, position: 'absolute', background: 'white', borderRadius: 9999}} />
-            <div style={{width: 20, height: 20, left: 1008, top: 910, position: 'absolute', background: 'white', borderRadius: 9999}} />
-            <div style={{width: 20, height: 20, left: 1188, top: 728, position: 'absolute', background: 'white', borderRadius: 9999}} />
-            <div style={{width: 30, height: 30, left: 159, top: 282, position: 'absolute', background: 'white', borderRadius: 9999}} />
-            <div style={{width: 30, height: 30, left: 272, top: 755, position: 'absolute', background: 'white', borderRadius: 9999}} />
-            <div style={{width: 30, height: 30, left: 1013, top: 52, position: 'absolute', background: 'white', borderRadius: 9999}} />
-            <div style={{width: 30, height: 30, left: 1386, top: 102, position: 'absolute', background: 'white', borderRadius: 9999}} />
-            <div style={{width: 30, height: 30, left: 1193, top: 297, position: 'absolute', background: 'white', borderRadius: 9999}} />
-            <div style={{width: 30, height: 30, left: 36, top: 641, position: 'absolute', background: 'white', borderRadius: 9999}} />
-            <div style={{width: 30, height: 30, left: 1066, top: 785, position: 'absolute', background: 'white', borderRadius: 9999}} />
-            <div style={{width: 30, height: 30, left: 1264, top: 940, position: 'absolute', background: 'white', borderRadius: 9999}} />
-            <div style={{width: 30, height: 30, left: 1342, top: 649, position: 'absolute', background: 'white', borderRadius: 9999}} />
+       <div className="relative w-full min-h-screen bg-slate-200 overflow-hidden">
+      {/* Decorative white circles - Small (20x20) */}
+      <div className="absolute w-5 h-5 rounded-full bg-white" style={{ left: '85px', top: '432px' }} />
+      <div className="absolute w-5 h-5 rounded-full bg-white" style={{ left: '222px', top: '483px' }} />
+      <div className="absolute w-5 h-5 rounded-full bg-white" style={{ left: '313px', top: '378px' }} />
+      <div className="absolute w-5 h-5 rounded-full bg-white" style={{ left: '1189px', top: '500px' }} />
+      <div className="absolute w-5 h-5 rounded-full bg-white" style={{ left: '1322px', top: '180px' }} />
+      <div className="absolute w-5 h-5 rounded-full bg-white" style={{ left: '1254px', top: '32px' }} />
+      <div className="absolute w-5 h-5 rounded-full bg-white" style={{ left: '1386px', top: '50px' }} />
+      <div className="absolute w-5 h-5 rounded-full bg-white" style={{ left: '308px', top: '191px' }} />
+      <div className="absolute w-5 h-5 rounded-full bg-white" style={{ left: '188px', top: '628px' }} />
+
+      {/* Decorative white circles - Large (30x30) */}
+      <div className="absolute w-6 h-6 rounded-full bg-white" style={{ left: '189px', top: '82px' }} />
+      <div className="absolute w-6 h-6 rounded-full bg-white" style={{ left: '272px', top: '655px' }} />
+      <div className="absolute w-6 h-6 rounded-full bg-white" style={{ left: '1013px', top: '52px' }} />
+      <div className="absolute w-6 h-6 rounded-full bg-white" style={{ left: '1386px', top: '102px' }} />
+      <div className="absolute w-6 h-6 rounded-full bg-white" style={{ left: '1193px', top: '297px' }} />
+      <div className="absolute w-6 h-6 rounded-full bg-white" style={{ left: '1188px',  top: '630px' }} />
+      <div className="absolute w-6 h-6 rounded-full bg-white" style={{ left: '1066px', top: '585px' }} />
+      <div className="absolute w-6 h-6 rounded-full bg-white" style={{ left: '1264px', top: '440px' }} />
+      <div className="absolute w-6 h-6 rounded-full bg-white" style={{ left: '1342px', top: '649px' }} />
+      <div className="absolute w-6 h-6 rounded-full bg-white" style={{ left: '72px', top: '349px' }} />
+      <div className="absolute w-6 h-6 rounded-full bg-white" style={{ left: '42px', top: '649px' }} />
 
             {/* Main content card */}
-            <div className="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 relative z-10">
-                <div className="w-full max-w-md" style={{background: 'rgba(255, 255, 255, 0.10)', backdropFilter: 'blur(10px)', borderRadius: 20, border: '1px solid rgba(177, 184, 220, 0.60)', padding: '40px'}}>
+            <div className="absolute w-[550px] h-[350px] rounded-[20px] bg-white/10 backdrop-blur-md border border-[#003355] shadow-black shadow-lg" style={{ left: '470px', top: '80px' }}>
+                {/* <div className="w-full max-w-md" style={{background: 'rgba(255, 255, 255, 0.10)', backdropFilter: 'blur(10px)', borderRadius: 20, border: '1px solid rgba(177, 184, 220, 0.60)', padding: '40px'}}> */}
                     <div>
                         <h2 className="mt-6 text-center text-3xl font-extrabold" style={{color: '#003355'}}>
                             Reset your password
@@ -97,8 +101,8 @@ export default function ResetPasswordRequest() {
                         </p>
                     </div>
 
-                    <div className="mt-8 space-y-6">
-                        <div onSubmit={handleSubmit} className="space-y-4">
+                    <div className="mt-2 space-y-6">
+                        <div onSubmit={handleSubmit} className="space-y-4 p-8">
                             <label htmlFor="email" className="sr-only">
                                 Email address
                             </label>
@@ -126,6 +130,44 @@ export default function ResetPasswordRequest() {
                                 }}
                                 disabled={isLoading || success}
                             />
+                                    <button
+                                        type="submit"
+                                        disabled={isLoading || success}
+                                        style={{
+                                            width: '100%',
+                                            padding: '15px',
+                                            background: isLoading || success ? '#D1D5DB' : '#003355',
+                                            color: 'white',
+                                            border: 'none',
+                                            borderRadius: 10,
+                                            fontSize: 16,
+                                            fontFamily: 'Roboto',
+                                            fontWeight: 600,
+                                            cursor: isLoading || success ? 'not-allowed' : 'pointer'
+                                        }}
+                                    >
+                                        {isLoading ? (
+                                            <div className="flex items-center justify-center">
+                                                <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                </svg>
+                                                Sending...
+                                            </div>
+                                        ) : success ? (
+                                            'Email Sent!'
+                                        ) : (
+                                            'Send Reset Code'
+                                        )}
+                                    </button>
+                            <button
+                                type="button"
+                                onClick={handleBackToLogin}
+                                style={{color: '#003355', fontSize: 14, fontFamily: 'Space Mono', fontWeight: 600, background: 'none', border: 'none', cursor: isLoading ? 'not-allowed' : 'pointer', opacity: isLoading ? 0.5 : 1}}
+                                disabled={isLoading}
+                            >
+                                Back to Login
+                            </button>
                         </div>
 
                     {error && (
@@ -160,52 +202,14 @@ export default function ResetPasswordRequest() {
                         </div>
                     )}
 
-                        <div>
-                            <button
-                                type="submit"
-                                disabled={isLoading || success}
-                                style={{
-                                    width: '100%',
-                                    padding: '15px',
-                                    background: isLoading || success ? '#D1D5DB' : '#003355',
-                                    color: 'white',
-                                    border: 'none',
-                                    borderRadius: 10,
-                                    fontSize: 16,
-                                    fontFamily: 'Roboto',
-                                    fontWeight: 600,
-                                    cursor: isLoading || success ? 'not-allowed' : 'pointer'
-                                }}
-                            >
-                                {isLoading ? (
-                                    <div className="flex items-center justify-center">
-                                        <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                        </svg>
-                                        Sending...
-                                    </div>
-                                ) : success ? (
-                                    'Email Sent!'
-                                ) : (
-                                    'Send Reset Code'
-                                )}
-                            </button>
+                        <div className="-mt-5 p-8">
                         </div>
 
-                        <div className="text-center">
-                            <button
-                                type="button"
-                                onClick={handleBackToLogin}
-                                style={{color: '#003355', fontSize: 14, fontFamily: 'Open Sans', fontWeight: 600, background: 'none', border: 'none', cursor: isLoading ? 'not-allowed' : 'pointer', opacity: isLoading ? 0.5 : 1}}
-                                disabled={isLoading}
-                            >
-                                Back to Login
-                            </button>
+                        <div className="-mt-10 text-center">
                         </div>
                     </div>
                     </div>
                 </div>
-            </div>
+            // </div>
     );
 }

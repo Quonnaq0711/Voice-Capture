@@ -113,7 +113,7 @@ const Login = () => {
       <div className="absolute w-6 h-6 rounded-full bg-white" style={{ left: '42px', top: '649px' }} />
 
       {/* Main Login Card */}
-      <div className="absolute w-[550px] h-[500px] rounded-[20px] bg-white/10 backdrop-blur-md border border-[#003355] shadow-black shadow-lg" style={{ left: '470px', top: '180px' }}>
+      <div className="absolute w-[550px] h-[400px] rounded-[20px] bg-white/10 backdrop-blur-md border border-[#003355] shadow-black shadow-lg" style={{ left: '470px', top: '140px' }}>
         
         {/* Logo placeholder */}
          <div className="flex justify-center pt-8 pb-6"> 
@@ -144,7 +144,7 @@ const Login = () => {
           <div>
             <input
               type="text"
-              placeholder="username or email"
+              placeholder="Email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="w-full h-15 px-5 rounded-[10px] bg-[#F9F8F5] border border-[#8D908F] text-[#8D908F] placeholder-[#8D908F] font-['Space_Mono'] text-base focus:outline-none focus:ring-2 focus:ring-[#003355]"
@@ -155,7 +155,7 @@ const Login = () => {
           <div className="relative">
             <input
               type={showPassword ? 'text' : 'password'}
-              placeholder="password"
+              placeholder="Password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="w-full h-15 px-5 pr-12 rounded-[10px] bg-[#F9F8F5] border border-[#8D908F] text-[#8D908F] placeholder-[#8D908F] font-['Open_Sans'] text-base focus:outline-none focus:ring-2 focus:ring-[#003355]"
@@ -165,7 +165,7 @@ const Login = () => {
               onClick={() => setShowPassword(!showPassword)}
               className="absolute right-4 top-1/2 transform -translate-y-1/2 text-[#8D908F] hover:text-[#003355]"
             >
-              {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+              {showPassword ? "🙈": "🙉"}
             </button>
           </div>
 
@@ -179,15 +179,15 @@ const Login = () => {
                 onChange={(e) => setRememberMe(e.target.checked)}
                 className="w-[15px] h-[15px] rounded border border-[#8D908F] bg-[#F9F8F5] cursor-pointer"
               />
-              <label htmlFor="remember" className="text-[#003355] font-['Open_Sans'] text-sm font-normal cursor-pointer">
-                Remember me
+              <label htmlFor="remember" className="text-[#003355] font-['Open_Sans'] text-sm font-semibold cursor-pointer">
+                Remember Me
               </label>
             </div>
             <Link
               to="/request-password"
               className="text-[#003355] font-['Open_Sans'] text-sm font-semibold hover:underline"
             >
-              Forgot password?
+              Forgot Password?
             </Link>
           </div> 
 
@@ -195,21 +195,21 @@ const Login = () => {
           <button
             onClick={handleSubmit}
             disabled={loading}
-            className="w-full h-25 rounded-[10px] bg-[#003355] text-white font-['Space_Mono'] text-base font-semibold hover:bg-[#002945] transition-colors disabled:opacity-50 mt-8"
+            className="w-full px-4 py-2 rounded-[10px] bg-[#003355] text-white font-['Space_Mono'] text-base font-semibold hover:bg-[#002945] transition-colors disabled:opacity-50 mt-4"
           >
             {loading ? 'Logging in...' : 'Login'}
           </button> 
 
           {/* Sign Up Link */}
           <div className="text-center pt-4">
-            <span className="text-[#003355] font-['Open_Sans'] text-sm font-normal">
+            <span className="text-[#003355] font-['Open_Sans'] text-md font-normal">
               Don't have an account?{' '}
             </span>
             <Link
               to="/signup"
               className="text-[#003355] font-['Open_Sans'] text-sm font-semibold hover:underline"
             >
-              Sign up
+              Sign Up
             </Link>
           </div> 
         </div> 
