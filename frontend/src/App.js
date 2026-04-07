@@ -56,9 +56,9 @@ function App() {
           <Route
             path="/onboarding"
             element={
-              <PrivateRoute>
+              // <PrivateRoute>
                 <OnboardingWizard />
-              </PrivateRoute>
+              // </PrivateRoute>
             }
           />
           <Route

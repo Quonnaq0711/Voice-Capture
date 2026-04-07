@@ -595,15 +595,16 @@ const OnboardingWizard = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 py-8">
+        <div className="relative w-full min-h-screen bg-gradient-to-br from-sky-950 via-slate-900 to-sky-950 overflow-hidden">
+
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Welcome to Your AI Assistant!</h1>
-          <p className="text-lg text-gray-600 mb-4">
+          <h1 className="text-3xl font-bold text-gray-300 mb-2">Welcome to Your AI Assistant!</h1>
+          <p className="text-lg text-slate-300 mb-4">
             Let's personalize your experience by learning about you
           </p>
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-slate-300">
             This will help us provide better recommendations and insights tailored to your needs
           </p>
         </div>
@@ -611,10 +612,10 @@ const OnboardingWizard = () => {
         {/* Progress Bar */}
         <div className="mb-8">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium text-gray-700">
+            <span className="text-sm font-medium text-gray-300">
               Step {currentStep + 1} of {steps.length}
             </span>
-            <span className="text-sm text-gray-500">
+            <span className="text-sm text-gray-100">
               {Math.round(((currentStep + 1) / steps.length) * 100)}% Complete
             </span>
           </div>
@@ -667,7 +668,7 @@ const OnboardingWizard = () => {
             {currentStep > 0 && (
               <button
                 onClick={prevStep}
-                className="flex items-center px-6 py-3 border border-gray-300 rounded-lg text-gray-700 bg-white hover:bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all"
+                className="flex items-center px-6 py-3 border border-gray-100 rounded-lg text-gray-500 bg-white hover:bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all"
               >
                 <ArrowLeftIcon className="h-5 w-5 mr-2" />
                 Previous
@@ -676,7 +677,7 @@ const OnboardingWizard = () => {
             
             <button
               onClick={skipOnboarding}
-              className="px-6 py-3 text-gray-600 hover:text-gray-800 transition-colors"
+              className="px-6 py-3 text-gray-200 hover:text-gray-600 transition-colors"
             >
               Skip for now
             </button>
