@@ -133,7 +133,7 @@ export default function WorkPage() {
 const directoryItems = [
   {
     text: "Directory",
-    path: "M 112 167 A 155 140 0 0 1 255 66",
+    path: "M 50 170 A 155 140 0 0 1 225 44",
     route: "/agents/career",
     tooltip: "Directory",
     id: "directoryCurve",
@@ -144,7 +144,7 @@ const directoryItems = [
 const scheduleItems = [
   {
     text: "Schedule",
-    path: "M 125 500 A 130 155 0 0 1 55 310",
+    path: "M 154 12 A 140 150 0 0 0 298 428",
     route: "/agents/hobby",
     tooltip: "Schedule",
     id: "scheduleCurve",
@@ -155,7 +155,7 @@ const scheduleItems = [
 const connectItems = [
   {
     text: "Connections",
-    path: "M 504 180 A 109 120 0 0 1 370 535",
+    path: "M 176 408 A 140 152 0 0 0 315 30",
     route: "/agents/family-life",
     tooltip: "Connections",
     id: "connectCurve",
@@ -166,7 +166,7 @@ const connectItems = [
 const toolsItems = [
   {
     text: "Tools",
-    path: "M 318 113 A 100 87 0 0 1 515 273",
+    path: "M 111 147 A 130 150 0 0 1 400 320",
     route: "/agents/tools",
     tooltip: "Tools",
     id: "toolsCurve",
@@ -177,7 +177,7 @@ const toolsItems = [
   const todoItems = [
     {
       text: "To Do",
-      path: "M 250 610 A 100 80 0 0 0 370 620",
+      path: "M 145 425 A 200 98 0 0 0 310 420",
       route: "/dashboard",
       tooltip: "Todo",
       id: "todoCurve",
@@ -294,7 +294,7 @@ const toolsItems = [
 
       {/* Circular Menu Section */}
       <div
-        className="absolute left-[500px] top-[25px] w-[660px] h-[660px]"
+        className="absolute left-[500px] top-[90px] w-[450px] h-[450px]"
         data-name="menu"
       >
         {/* Rim Background */}
@@ -346,8 +346,8 @@ const toolsItems = [
           onClick={() => handleMenuClick("/agents/notes")}
           className="absolute flex items-center justify-center hover:opacity-75 transition-opacity cursor-pointer"
           style={{
-            left: "444.52px",
-            top: "116.23px",
+            left: "294.52px",
+            top: "68.23px",
             background: "transparent",
             border: "none",
             padding: 0,
@@ -378,8 +378,8 @@ const toolsItems = [
             fontFamily: "'Open Sans', sans-serif",
             fontSize: "16px",
             fontVariationSettings: "'wdth' 100",
-            left: "292px",
-            top: "470px",
+            left: "190px",
+            top: "336px",
             background: "transparent",
             border: "none",
             padding: 0,
@@ -395,8 +395,8 @@ const toolsItems = [
             fontFamily: "'Open Sans', sans-serif",
             fontSize: "16px",
             fontVariationSettings: "'wdth' 100",
-            left: "292px",
-            top: "506px",
+            left: "189px",
+            top: "356px",
             background: "transparent",
             border: "none",
             padding: 0,
@@ -412,8 +412,8 @@ const toolsItems = [
             fontFamily: "'Open Sans', sans-serif",
             fontSize: "16px",
             fontVariationSettings: "'wdth' 100",
-            left: "292px",
-            top: "538px",
+            left: "199px",
+            top: "376px",
             background: "transparent",
             border: "none",
             padding: 0,
@@ -429,22 +429,22 @@ const toolsItems = [
           className="absolute font-semibold text-[#b67bfe] whitespace-nowrap hover:opacity-75 transition-opacity cursor-pointer"
           style={{
             fontFamily: "'Open Sans', sans-serif",
-            fontSize: "16px",
-            fontVariationSettings: "'wdth' 100",
-            left: "460px",
-            top: "378.8px",
+            fontSize: "12px",
+            fontVariationSettings: "'wdth' 75",
+            left: "312px",
+            top: "260px",
             background: "transparent",
             border: "none",
             padding: 0,
           }}
           title="Communications"
         >
-          <div style={{ transform: "rotate(103.27deg)" }}>
+          <div style={{ transform: "rotate(-70.27deg)" }}>
             <p
               className="font-semibold leading-normal relative text-[#b67bfe] whitespace  nowrap"
               style={{
                 fontFamily: "'Open Sans', sans-serif",
-                fontSize: "16px",
+                fontSize: "14px",
                 fontVariationSettings: "'wdth' 100",
               }}
             >
@@ -459,15 +459,15 @@ const toolsItems = [
             fontFamily: "'Open Sans', sans-serif",
             fontSize: "16px",
             fontVariationSettings: "'wdth' 100",
-            left: "530px",
-            top: "388.8px",
+            left: "325px",
+            top: "260.50px",
             background: "transparent",
             border: "none",
             padding: 0,
           }}
           title="Email"
         >
-          <div style={{ transform: "rotate(103.27deg)" }}>
+          <div style={{ transform: "rotate(-70.27deg)" }}>
             <p
               className="font-semibold leading-normal relative text-[#b67bfe] whitespace nowrap"
               style={{
