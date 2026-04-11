@@ -62,6 +62,9 @@ class ResumeBase(BaseModel):
 class Resume(ResumeBase):
     id: int
     user_id: int
+    todo_id: Optional[int] = None
+    file_size: Optional[int] = None
+    url: str = ""
     created_at: datetime
     updated_at: datetime
 

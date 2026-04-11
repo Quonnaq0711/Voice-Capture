@@ -9,7 +9,19 @@ import {
   Activity,
   Briefcase,
   MapPin,
-  ChevronDown
+  ChevronDown,
+  Inbox,
+  CheckSquare,
+  Calendar,
+  FolderKanban,
+  Zap,
+  Mail,
+  MessageCircle,
+  Bug,
+  List,
+  LayoutGrid,
+  Wrench,
+  BookText
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
@@ -28,6 +40,7 @@ import ChatHistoryActivities from './ChatHistoryActivities';
 // Import feature components
 import PersonalAssistant from '../chat/PersonalAssistant';
 import CareerAgent from '../agents/CareerAgent';
+import WorkAgent from '../agents/WorkAgent';
 import { profile as profileAPI, activities as activitiesAPI, streamingFetch } from '../../services/api';
 
 // Static images from public/design/ folder
@@ -37,19 +50,29 @@ const BodyAgentImg = '/design/BodyAgent.png';
 export default function UnifiedSidebarRefactored() {
   const { logout, user } = useAuth();
   const navigate = useNavigate();
-  
+
   // Sidebar state
   const [sidebarExpanded, setSidebarExpanded] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [activeTab, setActiveTab] = useState('landing');
-  
+
   // Career sub-tabs state
   const [showCareerSubTabs, setShowCareerSubTabs] = useState(false);
   const [careerSubTab, setCareerSubTab] = useState('insights');
   const [careerInsightsSubTab, setCareerInsightsSubTab] = useState('identity');
   const [isInsightsExpanded, setIsInsightsExpanded] = useState(true); // Control insights sub-items visibility
-  
+
+  // Work sub-tabs state
+  const [showWorkSubTabs, setShowWorkSubTabs] = useState(false);
+  const [workSubTab, setWorkSubTab] = useState('inbox');
+  const [inboxSubTab, setInboxSubTab] = useState('email'); // email, communication, issue-tracker
+  const [tasksSubTab, setTasksSubTab] = useState('triage'); // triage, backlog, board
+  const [toolsSubTab, setToolsSubTab] = useState('notebook'); // notebook (more tools to be added)
+  const [isInboxExpanded, setIsInboxExpanded] = useState(true); // Control inbox sub-items visibility
+  const [isTasksExpanded, setIsTasksExpanded] = useState(true); // Control tasks sub-items visibility
+  const [isToolsExpanded, setIsToolsExpanded] = useState(true); // Control tools sub-items visibility
+
   // Analysis state
   const [analysisProgress, setAnalysisProgress] = useState({
     isAnalyzing: false,
@@ -60,7 +83,7 @@ export default function UnifiedSidebarRefactored() {
     progress: 0,
     error: null
   });
-  
+
   const [sectionStatus, setSectionStatus] = useState({
     professionalIdentity: 'pending',
     workExperience: 'pending',
@@ -68,7 +91,7 @@ export default function UnifiedSidebarRefactored() {
     skillsAnalysis: 'pending',
     marketPosition: 'pending'
   });
-  
+
   const [professionalData, setProfessionalData] = useState({
     professionalIdentity: {
       title: '',
@@ -141,15 +164,24 @@ export default function UnifiedSidebarRefactored() {
   const [isAssistantDialogOpen, setIsAssistantDialogOpen] = useState(false);
   const [initialSessionId, setInitialSessionId] = useState(null);
 
+  // Personal Assistant hidden state with localStorage persistence
+  // Default to hidden (true) when no localStorage value exists (first login)
+  const [isAssistantHidden, setIsAssistantHidden] = useState(() => {
+    const saved = localStorage.getItem('assistant_hidden');
+    // If no saved value, default to hidden (true)
+    // If saved value exists, parse it
+    return saved === null ? true : saved === 'true';
+  });
+
   // User data state
   const [userData, setUserData] = useState({ first_name: '', email: '' });
   const [isImgError, setImgError] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState(null);
   const [loadingUser, setLoadingUser] = useState(true);
-  
+
   // Notifications
   const [notifications, setNotifications] = useState([]);
-  
+
   const addNotification = (notification) => {
     // Generate unique ID using timestamp + random number if no ID provided
     const uniqueId = notification.id || `notification-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -638,29 +670,39 @@ export default function UnifiedSidebarRefactored() {
       setLoadingUser(false);
     }
   };
-    
+
   const fetchAvatar = async () => {
     try {
       const data = await profileAPI.getAvatarUrl();
+      console.log('Avatar data received:', data);
+
       let url = data.url;
-      if (process.env.NODE_ENV !== 'production' && url && url.startsWith('/')) {
-        const backendUrl = process.env.REACT_APP_BACKEND_URL || 'http://localhost:5000';
-        url = backendUrl + url;
+      // In dev mode, we want to go through the proxy if it's a relative URL
+      // So we DON'T prefix with backend URL, we let the updated setupProxy handle /avatars
+      // However, if the URL from backend is already full absolute URL, we use it as is.
+
+      if (url) {
+        const timestamp = new Date().getTime();
+        const urlWithTimestamp = url.includes('?')
+          ? `${url}&t=${timestamp}`
+          : `${url}?t=${timestamp}`;
+
+        console.log('Setting avatar URL:', urlWithTimestamp);
+        setAvatarUrl(urlWithTimestamp);
+        setImgError(false);
+      } else {
+        setAvatarUrl(null);
       }
-      
-      const timestamp = new Date().getTime();
-      const urlWithTimestamp = url.includes('?') 
-        ? `${url}&t=${timestamp}` 
-        : `${url}?t=${timestamp}`;
-      
-      setAvatarUrl(urlWithTimestamp);
     } catch (error) {
       console.error("Error fetching avatar:", error);
+      setImgError(true);
     }
   };
 
   // Handler for logout
   const handleLogout = () => {
+    // Reset assistant hidden state so next login defaults to hidden
+    localStorage.removeItem('assistant_hidden');
     logout();
     navigate('/login');
   };
@@ -669,12 +711,12 @@ export default function UnifiedSidebarRefactored() {
   const handleAccount = () => {
     navigate('/profile', { state: { tab: 'account' } });
   };
-  
+
   // Handler for upload resume
   const handleUploadResume = () => {
     setActiveTab('documents');
   };
-    
+
   // Handler for Chat History
   const handleChatClick = (chat) => {
     handleTrackActivity('view', 'chat_history', `Opened chat: ${chat.name}`, null, { chat_id: chat.id });
@@ -704,6 +746,13 @@ export default function UnifiedSidebarRefactored() {
       id: 'landing',
       name: 'Dashboard',
       icon: Home,
+      disabled: false
+    },
+    {
+      id: 'work-agent',
+      name: 'Work',
+      icon: Briefcase,
+      hasSubTabs: true,
       disabled: false
     },
     {
@@ -782,6 +831,47 @@ export default function UnifiedSidebarRefactored() {
     }
   ];
 
+  // Work sub-tabs configuration
+  const workSubTabs = [
+    {
+      id: 'inbox',
+      name: 'Applications',
+      icon: Inbox,
+      hasSubMenu: true,
+      subItems: [
+        { id: 'email', name: 'Email', icon: Mail },
+        { id: 'communication', name: 'Communication', icon: MessageCircle },
+        { id: 'issue-tracker', name: 'Task Tracker', icon: Bug }
+      ]
+    },
+    {
+      id: 'tasks',
+      name: 'Tasks',
+      icon: CheckSquare,
+      hasSubMenu: true,
+      subItems: [
+        { id: 'triage', name: 'Triage', icon: Inbox },
+        { id: 'backlog', name: 'Backlog', icon: List },
+        { id: 'board', name: 'Board', icon: LayoutGrid }
+      ]
+    },
+    {
+      id: 'schedule',
+      name: 'Scheduler',
+      icon: Calendar,
+      hasSubMenu: false
+    },
+    {
+      id: 'tools',
+      name: 'Tools',
+      icon: Wrench,
+      hasSubMenu: true,
+      subItems: [
+        { id: 'notebook', name: 'Notebook', icon: BookText }
+      ]
+    }
+  ];
+
   // Sidebar handlers
   const toggleSidebar = () => {
     if (isMobile) {
@@ -818,6 +908,66 @@ export default function UnifiedSidebarRefactored() {
     }
   };
 
+  // Handle Work sub-tab click
+  const handleWorkSubTabClick = (subTabId) => {
+    // If clicking inbox when already on inbox, toggle the sub-menu
+    if (subTabId === 'inbox' && workSubTab === 'inbox') {
+      setIsInboxExpanded(!isInboxExpanded);
+    }
+    // If clicking tasks when already on tasks, toggle the sub-menu
+    else if (subTabId === 'tasks' && workSubTab === 'tasks') {
+      setIsTasksExpanded(!isTasksExpanded);
+    }
+    // If clicking tools when already on tools, toggle the sub-menu
+    else if (subTabId === 'tools' && workSubTab === 'tools') {
+      setIsToolsExpanded(!isToolsExpanded);
+    } else {
+      // Otherwise, switch to the clicked tab
+      setWorkSubTab(subTabId);
+      setActiveTab('work-agent');
+
+      // If switching to inbox from another tab, keep it expanded
+      if (subTabId === 'inbox') {
+        setIsInboxExpanded(true);
+      }
+      // If switching to tasks from another tab, keep it expanded
+      if (subTabId === 'tasks') {
+        setIsTasksExpanded(true);
+      }
+      // If switching to tools from another tab, keep it expanded
+      if (subTabId === 'tools') {
+        setIsToolsExpanded(true);
+      }
+    }
+
+    if (isMobile) {
+      setMobileMenuOpen(false);
+    }
+  };
+
+  // Handle Inbox sub-tab click
+  const handleInboxSubTabClick = (subTabId) => {
+    setInboxSubTab(subTabId);
+    if (isMobile) {
+      setMobileMenuOpen(false);
+    }
+  };
+
+  // Handle Tasks sub-tab click
+  const handleTasksSubTabClick = (subTabId) => {
+    setTasksSubTab(subTabId);
+    if (isMobile) {
+      setMobileMenuOpen(false);
+    }
+  };
+
+  const handleToolsSubTabClick = (subTabId) => {
+    setToolsSubTab(subTabId);
+    if (isMobile) {
+      setMobileMenuOpen(false);
+    }
+  };
+
   // Handle navigation from RecentInsights to Career Insights
   const handleCareerInsightsNavigation = (insightId = null) => {
     // Switch to career-insights tab
@@ -840,11 +990,18 @@ export default function UnifiedSidebarRefactored() {
     // Always set active tab first for visual feedback
     setActiveTab(tab.id);
 
+    // Toggle work sub-tabs when clicking Work
+    if (tab.id === 'work-agent') {
+      setShowWorkSubTabs(!showWorkSubTabs);
+      setShowCareerSubTabs(false);
+    }
     // Toggle career sub-tabs when clicking Career
-    if (tab.id === 'career-insights') {
+    else if (tab.id === 'career-insights') {
       setShowCareerSubTabs(!showCareerSubTabs);
+      setShowWorkSubTabs(false);
     } else {
       setShowCareerSubTabs(false);
+      setShowWorkSubTabs(false);
     }
 
     // If it's an agent preview, open the modal
@@ -918,9 +1075,12 @@ export default function UnifiedSidebarRefactored() {
           />
         );
 
+      case 'work-agent':
+        return <WorkAgent activeSubtab={workSubTab} activeInboxSubtab={inboxSubTab} activeTasksSubtab={tasksSubTab} activeToolsSubtab={toolsSubTab} />;
+
       case 'career-insights':
         return renderCareerContent();
-      
+
       case 'documents':
         return (
           <div className="space-y-8">
@@ -931,16 +1091,16 @@ export default function UnifiedSidebarRefactored() {
             </div>
           </div>
         );
-      
+
       case 'chat-history':
         return (
-          <ChatHistoryActivities 
+          <ChatHistoryActivities
             activitiesAPI={activitiesAPI}
             onTrackActivity={handleTrackActivity}
             onChatClick={handleChatClick}
           />
         );
-      
+
       default:
         return (
           <PersonalLandingPage
@@ -954,7 +1114,7 @@ export default function UnifiedSidebarRefactored() {
 
   return (
     <>
-      <div className="min-h-screen bg-gray-50 flex flex-col">
+      <div className="h-screen overflow-hidden bg-gray-50 flex flex-col">
         {/* Top Navigation Bar */}
         <TopNavigation
           onMenuToggle={() => setMobileMenuOpen(!mobileMenuOpen)}
@@ -968,6 +1128,8 @@ export default function UnifiedSidebarRefactored() {
           isMobile={isMobile}
           notifications={notifications}
           onDismissNotification={dismissNotification}
+          isAssistantHidden={isAssistantHidden}
+          onShowAssistant={() => setIsAssistantHidden(false)}
         />
 
         {/* Main Content Area with Sidebar */}
@@ -990,20 +1152,38 @@ export default function UnifiedSidebarRefactored() {
             careerSubTab={careerSubTab}
             careerInsightsSubTab={careerInsightsSubTab}
             isInsightsExpanded={isInsightsExpanded}
+            workSubTabs={workSubTabs}
+            showWorkSubTabs={showWorkSubTabs}
+            workSubTab={workSubTab}
+            inboxSubTab={inboxSubTab}
+            tasksSubTab={tasksSubTab}
+            toolsSubTab={toolsSubTab}
+            isInboxExpanded={isInboxExpanded}
+            isTasksExpanded={isTasksExpanded}
+            isToolsExpanded={isToolsExpanded}
             onToggleSidebar={toggleSidebar}
             onCloseMobileMenu={() => setMobileMenuOpen(false)}
             onTabChange={handleTabChange}
             onCareerSubTabClick={handleCareerSubTabClick}
             onCareerInsightsSubClick={handleCareerInsightsSubClick}
+            onWorkSubTabClick={handleWorkSubTabClick}
+            onInboxSubTabClick={handleInboxSubTabClick}
+            onTasksSubTabClick={handleTasksSubTabClick}
+            onToolsSubTabClick={handleToolsSubTabClick}
             analysisProgress={analysisProgress}
             sectionStatus={sectionStatus}
           />
 
           {/* Main Content */}
-          <div className="flex-1 p-4 md:p-8 overflow-y-auto bg-gradient-to-br from-gray-50 to-blue-50">
+          <div className={`flex-1 bg-gradient-to-br from-gray-50 to-blue-50 ${activeTab === 'work-agent' && (['inbox', 'schedule', 'tools'].includes(workSubTab) || inboxSubTab === 'email')
+            ? 'p-4 overflow-hidden flex flex-col'
+            : 'p-4 md:p-8 overflow-y-auto'
+            }`}>
             {renderTabContent()}
           </div>
         </div>
+
+
       </div>
 
       {/* Agent Preview Modal */}
@@ -1022,6 +1202,8 @@ export default function UnifiedSidebarRefactored() {
         notifications={notifications}
         initialSessionId={initialSessionId}
         onSessionSwitched={() => setInitialSessionId(null)}
+        isHidden={isAssistantHidden}
+        setIsHidden={setIsAssistantHidden}
       />
     </>
   );

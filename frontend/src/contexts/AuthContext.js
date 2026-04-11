@@ -51,10 +51,9 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const checkUser = async () => {
       // Wrap localStorage access in try-catch for private browsing mode compatibility
-      let token, refreshToken;
+      let token;
       try {
         token = localStorage.getItem('token');
-        refreshToken = localStorage.getItem('refresh_token');
       } catch (e) {
         console.warn('localStorage access denied (private browsing mode?):', e);
         setLoading(false);
@@ -63,34 +62,25 @@ export const AuthProvider = ({ children }) => {
 
       if (token) {
         try {
-          // Try to get profile with current token
+          // Try to get profile with current token.
+          // If token is expired, the axios interceptor in api.js automatically
+          // handles refresh — no need to duplicate that logic here.
           const profile = await auth.getProfile(token);
-          setUser({ id: profile.id, token, name: profile.first_name });
+          // Interceptor may have refreshed the token; read the latest from localStorage
+          const currentToken = localStorage.getItem('token') || token;
+          setUser({ id: profile.id, token: currentToken, name: profile.first_name });
         } catch (error) {
-          // If access token is expired, try to refresh it
-          if (error.response && error.response.status === 401 && refreshToken) {
-            try {
-              if (process.env.NODE_ENV === 'development') console.log('Access token expired, attempting to refresh...');
-              const data = await auth.refreshToken();
-              // Retry getting profile with new token
-              const profile = await auth.getProfile(data.access_token);
-              setUser({ id: profile.id, token: data.access_token, name: profile.first_name });
-            } catch (refreshError) {
-              // Refresh failed, tokens are invalid - logout
-              console.warn('Token refresh failed during initial check:', refreshError);
-              logout();
-            }
-          } else {
-            // No refresh token or other error - logout
-            console.warn('Token validation failed during initial check:', error);
-            logout();
-          }
+          // Interceptor already tried token refresh. If we reach here, auth failed completely.
+          // handleAuthenticationFailure() in api.js already cleared localStorage and
+          // triggered a redirect, but we still clean up React state for safety.
+          console.warn('Auth check failed:', error.message || error);
+          setUser(null);
         }
       }
       setLoading(false);
     };
     checkUser();
-  }, [logout]); // logout is now stable via useCallback
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const login = async (email, password) => {
     try {
