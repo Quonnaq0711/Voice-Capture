@@ -1,0 +1,7 @@
+{
+  "id": "brainstorm",
+  "name": "Brainstorm",
+  "description": "Template for brainstorming sessions with ideas, pros/cons analysis, and decisions",
+  "icon": "light-bulb",
+  "content": "<h2>Brainstorm Session</h2><p><strong>Topic:</strong> </p><p><strong>Date:</strong> </p><hr><h3>Ideas</h3><ol><li><strong>Idea 1:</strong> </li><li><strong>Idea 2:</strong> </li><li><strong>Idea 3:</strong> </li></ol><h3>Analysis</h3><table><thead><tr><th>Idea</th><th>Pros</th><th>Cons</th></tr></thead><tbody><tr><td>Idea 1</td><td></td><td></td></tr><tr><td>Idea 2</td><td></td><td></td></tr><tr><td>Idea 3</td><td></td><td></td></tr></tbody></table><h3>Decision</h3><p><strong>Selected Option:</strong> </p><p><strong>Rationale:</strong> </p><h3>Next Steps</h3><ul><li></li></ul>"
+}

@@ -74,6 +74,7 @@ echo "  GPU Memory Utilization:   ${GPU_MEM}"
 echo "  Max Model Length:         ${MAX_LEN} tokens"
 echo "  Data Type:                $DTYPE"
 echo "  Tensor Parallel Size:     $TENSOR_PARALLEL"
+echo "  Tool Calling:             ${ENABLE_TOOL_CHOICE:-true} (parser: ${TOOL_CALL_PARSER:-hermes})"
 [ -n "$QUANTIZATION" ] && echo "  Quantization:             $QUANTIZATION"
 echo ""
 
@@ -115,6 +116,10 @@ echo ""
 # Read max_num_batched_tokens from env (optional)
 MAX_NUM_BATCHED_TOKENS=${VLLM_MAX_NUM_BATCHED_TOKENS:-""}
 
+# Tool calling configuration
+ENABLE_TOOL_CHOICE=${VLLM_ENABLE_TOOL_CHOICE:-"true"}
+TOOL_CALL_PARSER=${VLLM_TOOL_CALL_PARSER:-"hermes"}
+
 # Build startup command
 CMD="/root/miniconda3/envs/python3.12/bin/python -m vllm.entrypoints.openai.api_server \
   --model \"$MODEL\" \
@@ -136,6 +141,12 @@ fi
 
 if [ -n "$MAX_NUM_BATCHED_TOKENS" ]; then
     CMD="$CMD --max-num-batched-tokens \"$MAX_NUM_BATCHED_TOKENS\""
+fi
+
+# Add tool calling support (required for LangGraph agents)
+if [ "$ENABLE_TOOL_CHOICE" = "true" ]; then
+    CMD="$CMD --enable-auto-tool-choice --tool-call-parser \"$TOOL_CALL_PARSER\""
+    echo -e "${GREEN}✓ Tool calling enabled (parser: $TOOL_CALL_PARSER)${NC}"
 fi
 
 # Log command for debugging

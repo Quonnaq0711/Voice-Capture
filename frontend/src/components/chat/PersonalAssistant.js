@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useReducer, useMemo, memo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
+import { MessageCircle, EyeOff, RotateCcw } from 'lucide-react';
 import ChatDialog from './ChatDialog';
 
 // ==================== TIMING CONSTANTS ====================
@@ -210,7 +212,21 @@ const AgentWelcomeBubble = memo(({ currentAgent, onClose }) => {
   );
 });
 
-const PersonalAssistant = ({ user, isDialogOpen: externalIsDialogOpen, setIsDialogOpen: externalSetIsDialogOpen, onDialogClose, onUnreadCountChange, onOpenAgentModal, agentType, notifications = [], initialSessionId, onSessionSwitched }) => {
+const PersonalAssistant = ({
+  user,
+  isDialogOpen: externalIsDialogOpen,
+  setIsDialogOpen: externalSetIsDialogOpen,
+  onDialogClose,
+  onUnreadCountChange,
+  onOpenAgentModal,
+  agentType,
+  notifications = [],
+  initialSessionId,
+  onSessionSwitched,
+  // External hidden state props
+  isHidden: externalIsHidden,
+  setIsHidden: externalSetIsHidden
+}) => {
   const navigate = useNavigate();
   const location = useLocation();
   const [internalIsDialogOpen, setInternalIsDialogOpen] = useState(false);
@@ -221,6 +237,51 @@ const PersonalAssistant = ({ user, isDialogOpen: externalIsDialogOpen, setIsDial
 
   // Always show welcome message on mount
   const [showWelcome, setShowWelcome] = useState(true);
+
+  // Hidden state - use external if provided, otherwise use internal with localStorage
+  // Default to hidden (true) when no localStorage value exists (first login)
+  const [internalIsHidden, setInternalIsHidden] = useState(() => {
+    const saved = localStorage.getItem('assistant_hidden');
+    // If no saved value, default to hidden (true)
+    // If saved value exists, parse it
+    return saved === null ? true : saved === 'true';
+  });
+
+  // Use external hidden state if provided, otherwise use internal
+  const isHidden = externalIsHidden !== undefined ? externalIsHidden : internalIsHidden;
+  const setIsHidden = externalSetIsHidden || setInternalIsHidden;
+
+  // Persist hidden state to localStorage
+  useEffect(() => {
+    localStorage.setItem('assistant_hidden', isHidden.toString());
+  }, [isHidden]);
+
+  // Handle hide/show toggle
+  const handleHide = useCallback((e) => {
+    if (e) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
+    setIsHidden(true);
+    setShowWelcome(false);
+  }, [setIsHidden]);
+
+  // Fan menu state for radial action buttons
+  const [showFanMenu, setShowFanMenu] = useState(false);
+  const fanMenuTimeoutRef = useRef(null);
+
+  const handleFanMenuEnter = useCallback(() => {
+    if (fanMenuTimeoutRef.current) {
+      clearTimeout(fanMenuTimeoutRef.current);
+    }
+    setShowFanMenu(true);
+  }, []);
+
+  const handleFanMenuLeave = useCallback(() => {
+    fanMenuTimeoutRef.current = setTimeout(() => {
+      setShowFanMenu(false);
+    }, 400); // 400ms delay to allow moving between avatar and buttons
+  }, []);
 
   // Notification bubble state
   const [activeNotification, setActiveNotification] = useState(null);
@@ -357,21 +418,10 @@ const PersonalAssistant = ({ user, isDialogOpen: externalIsDialogOpen, setIsDial
     initialMousePos.current = { x: e.clientX, y: e.clientY };
   };
 
-  const handleMouseUp = useCallback((e) => {
+  const handleMouseUp = useCallback(() => {
+    // Only handle drag end - chat is opened via fan menu Chat button
     setIsDragging(false);
-    const mouseTravel = Math.sqrt(
-      Math.pow(e.clientX - initialMousePos.current.x, 2) +
-      Math.pow(e.clientY - initialMousePos.current.y, 2)
-    );
-
-    // If mouse moved less than 5px, consider it a click
-    if (mouseTravel < 5) {
-      if (!hasDialogBeenOpened) {
-        setHasDialogBeenOpened(true);
-      }
-      setIsDialogOpen(true);
-    }
-  }, [initialMousePos, hasDialogBeenOpened, setIsDialogOpen]);
+  }, []);
 
   // Auto-hide welcome message after 10 seconds
   useEffect(() => {
@@ -606,12 +656,98 @@ const PersonalAssistant = ({ user, isDialogOpen: externalIsDialogOpen, setIsDial
 
   // Bubble components are now memoized and defined outside the component
 
-  // SVG for the assistant's avatar
+  // Fan menu configuration - Counter-clockwise sequential opening
+  const FAN_RADIUS = 100; // Distance from center (increased for better visibility)
+
+  // Fan menu action items - ordered for counter-clockwise sequential appearance
+  // Chat (top) → Hide (upper-left 45°) → Reset (left 90°)
+  // Using Lucide React icons for consistency with the rest of the app
+  const fanMenuItems = [
+    {
+      id: 'chat',
+      icon: <MessageCircle className="w-5 h-5" strokeWidth={2} />,
+      label: 'Chat',
+      onClick: () => {
+        setIsDialogOpen(true);
+        setHasDialogBeenOpened(true);
+        setShowFanMenu(false);
+      },
+      color: 'from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700',
+      finalAngle: -90, // Top position (directly above)
+    },
+    {
+      id: 'hide',
+      icon: <EyeOff className="w-5 h-5" strokeWidth={2} />,
+      label: 'Hide',
+      onClick: handleHide,
+      color: 'from-gray-600 to-gray-700 hover:from-gray-700 hover:to-gray-800',
+      finalAngle: -135, // Upper-left (45° counter-clockwise from top)
+    },
+    {
+      id: 'reset',
+      icon: <RotateCcw className="w-5 h-5" strokeWidth={2} />,
+      label: 'Reset Position',
+      onClick: () => {
+        resetPosition();
+        setShowFanMenu(false);
+      },
+      color: 'from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700',
+      finalAngle: -180, // Left position (90° counter-clockwise from top)
+    },
+  ];
+
+  // SVG for the assistant's avatar with fan menu
   const AssistantAvatar = () => (
-    <div className="relative w-32 h-32 filter drop-shadow-lg animate-float">
-      
+    <div
+      className="relative w-32 h-32 filter drop-shadow-lg animate-float"
+      onMouseEnter={handleFanMenuEnter}
+      onMouseLeave={handleFanMenuLeave}
+    >
+      {/* Fan Menu - Sequential counter-clockwise opening animation using Framer Motion */}
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+        <AnimatePresence>
+          {showFanMenu && fanMenuItems.map((item, index) => {
+            // Final position for this button
+            const targetAngleRad = (item.finalAngle * Math.PI) / 180;
+            const targetX = Math.cos(targetAngleRad) * FAN_RADIUS;
+            const targetY = Math.sin(targetAngleRad) * FAN_RADIUS;
+
+            return (
+              <motion.button
+                key={item.id}
+                onClick={item.onClick}
+                onMouseEnter={handleFanMenuEnter}
+                onMouseLeave={handleFanMenuLeave}
+                className={`absolute w-12 h-12 bg-gradient-to-br ${item.color} text-white rounded-full flex items-center justify-center shadow-lg hover:shadow-xl pointer-events-auto`}
+                initial={{ x: 0, y: 0, scale: 0, opacity: 0 }}
+                animate={{
+                  x: targetX,
+                  y: targetY,
+                  scale: 1,
+                  opacity: 1
+                }}
+                exit={{ x: 0, y: 0, scale: 0, opacity: 0 }}
+                transition={{
+                  type: 'spring',
+                  stiffness: 300,
+                  damping: 20,
+                  delay: index * 0.15, // 150ms stagger between each button
+                }}
+                whileHover={{ scale: 1.15 }}
+                whileTap={{ scale: 0.95 }}
+                aria-label={item.label}
+                title={item.label}
+              >
+                {item.icon}
+              </motion.button>
+            );
+          })}
+        </AnimatePresence>
+      </div>
+
+      {/* Avatar SVG */}
       <svg
-        className="w-full h-full cursor-grab transition-transform hover:scale-110 active:cursor-grabbing"
+        className="w-full h-full cursor-grab transition-transform hover:scale-105 active:cursor-grabbing"
         viewBox="0 0 150 150"
         fill="none"
         xmlns="http://www.w3.org/2000/svg"
@@ -636,7 +772,7 @@ const PersonalAssistant = ({ user, isDialogOpen: externalIsDialogOpen, setIsDial
 
         {/* Head */}
         <rect x="35" y="20" width="80" height="60" rx="15" fill="#60A5FA" />
-        
+
         {/* Neck */}
         <rect x="60" y="75" width="30" height="10" fill="#2563EB" />
 
@@ -657,21 +793,25 @@ const PersonalAssistant = ({ user, isDialogOpen: externalIsDialogOpen, setIsDial
         {/* Antenna */}
         <line x1="75" y1="5" x2="75" y2="20" stroke="#60A5FA" strokeWidth="4" />
         <circle cx="75" cy="5" r="5" fill="#93C5FD" className="animate-pulse" />
-        
+
         {/* Arms */}
         <rect x="5" y="70" width="15" height="40" rx="7.5" fill="#60A5FA" />
         <rect x="130" y="70" width="15" height="40" rx="7.5" fill="#60A5FA" />
-
       </svg>
     </div>
   );
+
+  // Show minimized button when hidden
+  // When hidden, don't render the assistant (minimized icon is rendered in TopNavigation)
+  if (isHidden) {
+    return null;
+  }
 
   return (
     <div
       ref={assistantRef}
       className="fixed z-50"
       style={{ left: `${position.x}px`, top: `${position.y}px` }}
-
     >
       {/* Show welcome bubble on initial load */}
       {showWelcome && user?.first_name && navState.state !== NavigationState.AGENT_WELCOME && (
@@ -690,9 +830,9 @@ const PersonalAssistant = ({ user, isDialogOpen: externalIsDialogOpen, setIsDial
       {navState.state === NavigationState.AGENT_WELCOME && (
         <AgentWelcomeBubble currentAgent={getCurrentAgent()} onClose={() => dispatchNav({ type: NavigationActions.HIDE_AGENT_WELCOME })} />
       )}
-      
+
       <AssistantAvatar />
-      
+
       {hasDialogBeenOpened && (
         <div style={{ display: isDialogOpen ? 'block' : 'none' }}>
           <ChatDialog

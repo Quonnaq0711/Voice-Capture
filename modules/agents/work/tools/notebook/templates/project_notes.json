@@ -1,0 +1,7 @@
+{
+  "id": "project_notes",
+  "name": "Project Notes",
+  "description": "Template for documenting project overview, goals, milestones, and resources",
+  "icon": "folder",
+  "content": "<h2>Project Notes</h2><p><strong>Project Name:</strong> </p><p><strong>Start Date:</strong> </p><p><strong>Target End Date:</strong> </p><hr><h3>Overview</h3><p></p><h3>Goals & Objectives</h3><ul><li></li></ul><h3>Key Milestones</h3><ol><li><strong>Milestone 1:</strong>  - <em>Target Date:</em> </li><li><strong>Milestone 2:</strong>  - <em>Target Date:</em> </li></ol><h3>Team Members</h3><ul><li></li></ul><h3>Resources & Links</h3><ul><li></li></ul><h3>Risks & Dependencies</h3><ul><li></li></ul><h3>Notes</h3><p></p>"
+}

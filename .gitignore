@@ -54,6 +54,9 @@ logs/
 # Resume files
 backend/resumes/
 
+# Attachment files
+backend/attachments/
+
 # Avatar files
 backend/avatars/
 

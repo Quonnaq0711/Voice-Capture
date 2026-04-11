@@ -10,6 +10,7 @@ module.exports = {
         pulse: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
         'fade-in': 'fadeIn 0.3s ease-in-out',
         pulseSlow: '1.5 ease-in-out infinite',
+        'slide-in': 'slideIn 0.25s ease-out',
       },
       keyframes: {
         float: {
@@ -26,7 +27,11 @@ module.exports = {
         },
         pulseSlow: {
           '0%, 100%': { opacity: 1 },
-          '50%':{ opacity: 0.4}
+          '50%': { opacity: 0.4 }
+        },
+        slideIn: {
+          '0%': { opacity: 0, transform: 'translateY(-8px)' },
+          '100%': { opacity: 1, transform: 'translateY(0)' },
         },
       },
       colors: {
@@ -47,5 +52,6 @@ module.exports = {
   },
   plugins: [
     require('@tailwindcss/forms'),
+    require('@tailwindcss/typography'),
   ],
 }
