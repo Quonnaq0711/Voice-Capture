@@ -1,0 +1,35 @@
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# Install system dependencies (ffmpeg required by faster-whisper for audio decoding)
+RUN apt-get update && apt-get install -y \
+    curl \
+    ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
+# Upgrade pip
+RUN pip install --no-cache-dir --upgrade pip
+
+# Copy requirements and install
+COPY modules/services/voice/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy voice service files (maintaining module structure for imports)
+COPY modules/services/voice/ /app/modules/services/voice/
+
+# Create __init__.py files for module resolution
+RUN mkdir -p /app/modules/services && \
+    touch /app/modules/__init__.py && \
+    touch /app/modules/services/__init__.py
+
+# Create non-root user
+RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
+USER appuser
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD curl -f http://localhost:8004/api/voice/health || exit 1
+
+EXPOSE 8004
+
+CMD ["gunicorn", "modules.services.voice.src.main:app", "-w", "2", "-k", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8004", "--timeout", "120"]

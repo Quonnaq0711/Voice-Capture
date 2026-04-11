@@ -1,4 +1,4 @@
-import { Menu, UserCircle, LogOut, ChevronDown } from 'lucide-react';
+import { Menu, UserCircle, LogOut, ChevronDown, Bot } from 'lucide-react';
 import NotificationPanel from '../ui/NotificationPanel';
 
 export default function TopNavigation({
@@ -12,10 +12,10 @@ export default function TopNavigation({
     loadingUser,
     isMobile,
     notifications = [],
-    onDismissNotification
-})
-
-{
+    onDismissNotification,
+    isAssistantHidden = false,
+    onShowAssistant
+}) {
     return (
         <nav className="bg-white border-b border-gray-200 sticky top-0 z-50">
             <div className="max-w-full mx-auto px-4 sm:px-6 lg:px-8">
@@ -47,6 +47,20 @@ export default function TopNavigation({
 
                     {/* Right side - User profile and logout */}
                     <div className="flex items-center space-x-3">
+                        {/* Minimized Assistant Button - shown when assistant is hidden */}
+                        {isAssistantHidden && (
+                            <button
+                                onClick={onShowAssistant}
+                                className="relative p-2 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 text-white hover:from-blue-600 hover:to-blue-700 transition-all duration-200 hover:scale-105 shadow-sm hover:shadow-md"
+                                aria-label="Ask Your Personal Assistant"
+                                title="Ask Your Personal Assistant"
+                            >
+                                <Bot className="h-5 w-5" />
+                                {/* Subtle pulse indicator */}
+                                <span className="absolute top-0 right-0 w-2 h-2 bg-green-400 rounded-full border border-white" />
+                            </button>
+                        )}
+
                         {/* Notification Panel */}
                         <NotificationPanel
                             notifications={notifications}

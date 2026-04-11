@@ -30,6 +30,69 @@ logger = logging.getLogger(__name__)
 # Create database tables
 Base.metadata.create_all(bind=engine)
 
+# Lightweight schema migrations (SQLite-safe, idempotent)
+try:
+    from sqlalchemy import inspect, text
+    inspector = inspect(engine)
+    if "extracted_tasks" in inspector.get_table_names():
+        columns = [col["name"] for col in inspector.get_columns("extracted_tasks")]
+        if "ai_summary" not in columns:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE extracted_tasks ADD COLUMN ai_summary JSON"))
+            logger.info("Migration: added ai_summary column to extracted_tasks")
+    # Add ai_summary column to todos table
+    if "todos" in inspector.get_table_names():
+        columns = [col["name"] for col in inspector.get_columns("todos")]
+        if "ai_summary" not in columns:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE todos ADD COLUMN ai_summary JSON"))
+            logger.info("Migration: added ai_summary column to todos")
+    # Add todo_id and file_size columns to resumes table (task attachments)
+    if "resumes" in inspector.get_table_names():
+        columns = [col["name"] for col in inspector.get_columns("resumes")]
+        if "todo_id" not in columns:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE resumes ADD COLUMN todo_id INTEGER REFERENCES todos(id) ON DELETE SET NULL"))
+            logger.info("Migration: added todo_id column to resumes")
+        if "file_size" not in columns:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE resumes ADD COLUMN file_size INTEGER"))
+            logger.info("Migration: added file_size column to resumes")
+        if "ai_content_summary" not in columns:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE resumes ADD COLUMN ai_content_summary TEXT"))
+            logger.info("Migration: added ai_content_summary column to resumes")
+        if "ai_summary_updated_at" not in columns:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE resumes ADD COLUMN ai_summary_updated_at DATETIME"))
+            logger.info("Migration: added ai_summary_updated_at column to resumes")
+    # Add scheduling columns to todos table (scheduler ↔ board sync)
+    if "todos" in inspector.get_table_names():
+        columns = [col["name"] for col in inspector.get_columns("todos")]
+        if "scheduled_start" not in columns:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE todos ADD COLUMN scheduled_start DATETIME"))
+            logger.info("Migration: added scheduled_start column to todos")
+        if "scheduled_end" not in columns:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE todos ADD COLUMN scheduled_end DATETIME"))
+            logger.info("Migration: added scheduled_end column to todos")
+        if "scheduled_calendar_event_id" not in columns:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE todos ADD COLUMN scheduled_calendar_event_id VARCHAR(255)"))
+            logger.info("Migration: added scheduled_calendar_event_id column to todos")
+    # Normalize legacy status values: "pending" → "todo", "completed" → "done"
+    if "todos" in inspector.get_table_names():
+        with engine.begin() as conn:
+            result = conn.execute(text("UPDATE todos SET status = 'todo' WHERE status = 'pending'"))
+            if result.rowcount > 0:
+                logger.info(f"Migration: normalized {result.rowcount} todos from status 'pending' → 'todo'")
+            result = conn.execute(text("UPDATE todos SET status = 'done' WHERE status = 'completed'"))
+            if result.rowcount > 0:
+                logger.info(f"Migration: normalized {result.rowcount} todos from status 'completed' → 'done'")
+except Exception as e:
+    logger.warning(f"Schema migration check skipped: {e}")
+
 # Create FastAPI application
 app = FastAPI(
     title="Idii. AI Assistant Platform",

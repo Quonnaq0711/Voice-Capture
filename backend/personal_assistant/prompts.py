@@ -130,7 +130,8 @@ Optimized: "What is machine learning and artificial intelligence, and what are t
 Original: "i want to know about career change from marketing to tech but dont know where start"
 Optimized: "I'm interested in transitioning from a marketing career to the technology industry. What steps should I take to make this career change successfully?"
 
-Now optimize the following user query while preserving its original meaning and intent:
+Now optimize the following user query while preserving its original meaning and intent.
+IMPORTANT: Output ONLY the optimized query text itself. Do NOT include any preamble, explanation, labels, or quotation marks.
 
 Original Query: {user_query}
 

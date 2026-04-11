@@ -84,8 +84,11 @@ const handleAuthenticationFailure = () => {
 
   console.warn('Authentication failure detected, logging out user');
 
-  // Clear token and user state
-  auth.logout();
+  // Clear tokens SYNCHRONOUSLY before redirect to prevent reload loop.
+  // auth.logout() is async (has API retries) so tokens might not be cleared
+  // before window.location.href triggers a page reload.
+  localStorage.removeItem('token');
+  localStorage.removeItem('refresh_token');
 
   // Redirect to login page immediately
   // Note: isLoggingOut will be reset when page reloads
@@ -424,12 +427,7 @@ export const chat = {
 
   // Optimize query
   optimizeQuery: async (query) => {
-    // Use relative path in production (proxied through Nginx), localhost in development
-    const apiUrl = process.env.NODE_ENV === 'production'
-      ? '/api/pa/optimize'
-      : (process.env.REACT_APP_PA_URL || 'http://localhost:6001') + '/api/chat/optimize';
-
-    const response = await axios.post(apiUrl,
+    const response = await axios.post('/api/pa/optimize',
       { query: query },
       {
         headers: {

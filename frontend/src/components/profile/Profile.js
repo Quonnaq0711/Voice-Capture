@@ -1,7 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { usePasswordCountDown } from '../../contexts/PasswordReset';
+import { useAuth } from '../../contexts/AuthContext';
 import { profile as profileAPI, auth } from '../../services/api';
+import { oauth } from '../../services/workApi';
 import {
   UserCircleIcon,
   KeyIcon,
@@ -21,8 +23,18 @@ import {
   SparklesIcon,
   CloudArrowUpIcon,
   DocumentIcon,
-  EyeIcon
+  EyeIcon,
+  PlusIcon,
+  LinkIcon,
+  ArrowPathIcon,
+  EnvelopeIcon,
+  CalendarIcon,
+  ChatBubbleLeftRightIcon,
+  TicketIcon,
+  HashtagIcon,
+  Squares2X2Icon
 } from '@heroicons/react/24/outline';
+import { CheckCircleIcon as CheckCircleSolidIcon } from '@heroicons/react/24/solid';
 
 // Toast notification component
 // Uses ref to avoid re-triggering timer when onClose changes
@@ -40,9 +52,8 @@ const Toast = ({ message, type, onClose }) => {
   }, []); // Empty deps - timer only starts once on mount
 
   return (
-    <div className={`fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg transition-all duration-300 ${
-      type === 'success' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'
-    }`}>
+    <div className={`fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg transition-all duration-300 ${type === 'success' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'
+      }`}>
       <div className="flex items-center">
         {type === 'success' ? (
           <CheckIcon className="h-5 w-5 mr-2" />
@@ -64,7 +75,7 @@ const ConfirmDialog = ({ isOpen, title, message, onConfirm, onCancel }) => {
       <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
         {/* Background overlay */}
         <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={onCancel}></div>
-        
+
         {/* Dialog panel */}
         <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
           <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
@@ -106,6 +117,371 @@ const ConfirmDialog = ({ isOpen, title, message, onConfirm, onCancel }) => {
   );
 };
 
+// Available integrations for Applications tab
+const AVAILABLE_INTEGRATIONS = {
+  email: {
+    name: 'Email Providers',
+    description: 'Connect your email accounts to see messages in your inbox',
+    icon: EnvelopeIcon,
+    color: 'red',
+    integrations: [
+      { id: 'gmail', name: 'Gmail', description: 'Google Workspace & personal accounts', icon: EnvelopeIcon, color: 'red', authType: 'oauth', oauthProvider: 'google' },
+      { id: 'outlook', name: 'Outlook', description: 'Microsoft 365 & Outlook.com', icon: EnvelopeIcon, color: 'blue', authType: 'oauth', oauthProvider: 'microsoft' },
+      { id: 'yahoo', name: 'Yahoo Mail', description: 'Yahoo personal & business', icon: EnvelopeIcon, color: 'purple', authType: 'oauth', oauthProvider: 'yahoo', comingSoon: true },
+      { id: 'protonmail', name: 'ProtonMail', description: 'Encrypted email service', icon: EnvelopeIcon, color: 'indigo', authType: 'oauth', oauthProvider: 'proton', comingSoon: true },
+    ],
+  },
+  communication: {
+    name: 'Communication Platforms',
+    description: 'Get notified about messages and mentions from team chat',
+    icon: ChatBubbleLeftRightIcon,
+    color: 'purple',
+    integrations: [
+      { id: 'slack', name: 'Slack', description: 'Channels, DMs, and mentions', icon: HashtagIcon, color: 'purple', authType: 'oauth', oauthProvider: 'slack' },
+      { id: 'teams', name: 'Microsoft Teams', description: 'Teams chats and channels', icon: ChatBubbleLeftRightIcon, color: 'indigo', authType: 'oauth', oauthProvider: 'microsoft' },
+      { id: 'discord', name: 'Discord', description: 'Server messages and DMs', icon: ChatBubbleLeftRightIcon, color: 'indigo', authType: 'oauth', oauthProvider: 'discord', comingSoon: true },
+    ],
+  },
+  projects: {
+    name: 'Task Trackers',
+    description: 'Track issues, tasks, and project updates',
+    icon: TicketIcon,
+    color: 'blue',
+    integrations: [
+      { id: 'jira', name: 'Jira', description: 'Atlassian Jira issues', icon: TicketIcon, color: 'blue', authType: 'oauth', oauthProvider: 'atlassian' },
+      { id: 'github', name: 'GitHub', description: 'Issues, PRs, and notifications', icon: TicketIcon, color: 'gray', authType: 'oauth', oauthProvider: 'github' },
+      { id: 'asana', name: 'Asana', description: 'Tasks and projects', icon: TicketIcon, color: 'orange', authType: 'oauth', oauthProvider: 'asana', comingSoon: true },
+      { id: 'linear', name: 'Linear', description: 'Modern issue tracking', icon: TicketIcon, color: 'indigo', authType: 'oauth', oauthProvider: 'linear', comingSoon: true },
+      { id: 'notion', name: 'Notion', description: 'Database and page updates', icon: TicketIcon, color: 'gray', authType: 'oauth', oauthProvider: 'notion', comingSoon: true },
+    ],
+  },
+};
+
+// Applications Tab Component - Manage connected OAuth accounts
+const ApplicationsTab = () => {
+  const { user } = useAuth();
+  const [connectedAccounts, setConnectedAccounts] = useState([]);
+  const [accountsLoading, setAccountsLoading] = useState(true);
+  const [connectingSource, setConnectingSource] = useState(null);
+  const [oauthError, setOauthError] = useState(null);
+  const [oauthSuccess, setOauthSuccess] = useState(null);
+  const [selectedCategory, setSelectedCategory] = useState('email');
+
+  // Fetch connected accounts on mount
+  useEffect(() => {
+    const fetchConnectedAccounts = async () => {
+      if (!user?.id) return;
+      try {
+        setAccountsLoading(true);
+        const accounts = await oauth.getAccounts(user.id);
+        // Transform backend response to match our UI format
+        const transformedAccounts = (accounts || []).map(acc => ({
+          id: String(acc.id),
+          sourceId: acc.provider === 'google' ? 'gmail' : acc.provider,
+          email: acc.account_email,
+          name: acc.account_name,
+          connectedAt: acc.created_at?.split('T')[0],
+          avatar: null,
+          isValid: acc.is_valid,
+        }));
+        setConnectedAccounts(transformedAccounts);
+      } catch (error) {
+        console.error('Failed to fetch connected accounts:', error);
+        setConnectedAccounts([]);
+      } finally {
+        setAccountsLoading(false);
+      }
+    };
+    fetchConnectedAccounts();
+  }, [user?.id]);
+
+  // Handle OAuth callback from URL
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const oauthStatus = urlParams.get('oauth');
+    const provider = urlParams.get('provider');
+
+    if (oauthStatus === 'success' && provider) {
+      setOauthSuccess(`Successfully connected ${provider === 'google' ? 'Gmail' : provider}!`);
+      // Refresh accounts list
+      if (user?.id) {
+        oauth.getAccounts(user.id).then(accounts => {
+          // Transform backend response to match our UI format
+          const transformedAccounts = (accounts || []).map(acc => ({
+            id: String(acc.id),
+            sourceId: acc.provider === 'google' ? 'gmail' : acc.provider,
+            email: acc.account_email,
+            name: acc.account_name,
+            connectedAt: acc.created_at?.split('T')[0],
+            avatar: null,
+            isValid: acc.is_valid,
+          }));
+          setConnectedAccounts(transformedAccounts);
+        }).catch(console.error);
+      }
+      // Clean URL
+      window.history.replaceState({}, document.title, window.location.pathname);
+      setTimeout(() => setOauthSuccess(null), 5000);
+    } else if (oauthStatus === 'error') {
+      const errorMsg = urlParams.get('error') || 'OAuth connection failed';
+      setOauthError(errorMsg);
+      window.history.replaceState({}, document.title, window.location.pathname);
+      setTimeout(() => setOauthError(null), 5000);
+    }
+  }, [user?.id]);
+
+  // Get accounts connected for a specific source
+  const getConnectedAccountsForSource = useCallback((sourceId) => {
+    return connectedAccounts.filter(acc => acc.sourceId === sourceId);
+  }, [connectedAccounts]);
+
+  // Check if a source has any connected accounts
+  const isSourceConnected = useCallback((sourceId) => {
+    return connectedAccounts.some(acc => acc.sourceId === sourceId);
+  }, [connectedAccounts]);
+
+  // Get total connected accounts count
+  const getTotalConnectedCount = useCallback(() => connectedAccounts.length, [connectedAccounts]);
+
+  // Handle OAuth connection
+  const handleConnectSource = async (integration) => {
+    if (integration.comingSoon) {
+      setOauthError(`${integration.name} integration coming soon!`);
+      setTimeout(() => setOauthError(null), 3000);
+      return;
+    }
+
+    setConnectingSource(integration.id);
+
+    try {
+      let provider = integration.id;
+      if (integration.id === 'gmail' || integration.id === 'google_calendar') {
+        provider = 'google';
+      }
+
+      if (provider === 'google') {
+        const authData = await oauth.getGoogleAuthUrl(user.id);
+        if (authData.authorization_url) {
+          sessionStorage.setItem('oauth_state', authData.state);
+          sessionStorage.setItem('oauth_provider', provider);
+
+          // Fix for remote dev: If URL is localhost:6004, rewrite to /api/work proxy
+          let authUrl = authData.authorization_url;
+          if (authUrl.includes('localhost:6004')) {
+            authUrl = authUrl.replace('http://localhost:6004', '/api/work');
+          }
+          window.location.href = authUrl;
+        } else {
+          throw new Error('Failed to get authorization URL');
+        }
+      } else {
+        setOauthError(`${integration.name} integration coming soon!`);
+        setConnectingSource(null);
+        setTimeout(() => setOauthError(null), 3000);
+      }
+    } catch (error) {
+      console.error('OAuth connection failed:', error);
+      setOauthError(error.message || 'Failed to initiate OAuth flow. Please try again.');
+      setConnectingSource(null);
+      setTimeout(() => setOauthError(null), 5000);
+    }
+  };
+
+  // Handle disconnecting an account
+  const handleDisconnectAccount = async (accountId) => {
+    if (!user?.id) return;
+    try {
+      await oauth.disconnectAccount(accountId, user.id);
+      setConnectedAccounts(prev => prev.filter(acc => acc.id !== accountId));
+      setOauthSuccess('Account disconnected successfully');
+      setTimeout(() => setOauthSuccess(null), 3000);
+    } catch (error) {
+      console.error('Failed to disconnect account:', error);
+      setOauthError('Failed to disconnect account. Please try again.');
+      setTimeout(() => setOauthError(null), 5000);
+    }
+  };
+
+  const getColorClasses = (color) => {
+    const colors = {
+      red: { bg: 'bg-red-100', text: 'text-red-600' },
+      blue: { bg: 'bg-blue-100', text: 'text-blue-600' },
+      purple: { bg: 'bg-purple-100', text: 'text-purple-600' },
+      indigo: { bg: 'bg-indigo-100', text: 'text-indigo-600' },
+      orange: { bg: 'bg-orange-100', text: 'text-orange-600' },
+      green: { bg: 'bg-green-100', text: 'text-green-600' },
+      gray: { bg: 'bg-gray-100', text: 'text-gray-600' },
+    };
+    return colors[color] || colors.gray;
+  };
+
+  return (
+    <div className="max-w-4xl mx-auto space-y-6">
+
+      {/* Status Messages */}
+      {oauthError && (
+        <div className="p-4 bg-red-50 border border-red-200 rounded-xl flex items-center gap-3">
+          <XMarkIcon className="w-5 h-5 text-red-600 flex-shrink-0" />
+          <span className="text-red-800">{oauthError}</span>
+        </div>
+      )}
+      {oauthSuccess && (
+        <div className="p-4 bg-green-50 border border-green-200 rounded-xl flex items-center gap-3">
+          <CheckCircleSolidIcon className="w-5 h-5 text-green-600 flex-shrink-0" />
+          <span className="text-green-800">{oauthSuccess}</span>
+        </div>
+      )}
+
+      {/* Category Tabs */}
+      <div className="flex items-center gap-2 flex-wrap">
+        {Object.entries(AVAILABLE_INTEGRATIONS).map(([key, category]) => {
+          const Icon = category.icon;
+          const isActive = selectedCategory === key;
+          const connectedCount = category.integrations.filter(i => isSourceConnected(i.id)).length;
+
+          return (
+            <button
+              key={key}
+              onClick={() => setSelectedCategory(key)}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${isActive
+                ? 'bg-gray-900 text-white shadow-lg'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+            >
+              <Icon className="w-4 h-4" />
+              {category.name}
+              {connectedCount > 0 && (
+                <span className={`px-1.5 py-0.5 rounded-full text-xs ${isActive ? 'bg-white/20' : 'bg-green-100 text-green-700'
+                  }`}>
+                  {connectedCount}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Integrations Content */}
+      {accountsLoading ? (
+        <div className="flex items-center justify-center py-12">
+          <ArrowPathIcon className="w-8 h-8 text-gray-400 animate-spin" />
+        </div>
+      ) : (
+        <div>
+          <p className="text-sm text-gray-500 mb-6">
+            {AVAILABLE_INTEGRATIONS[selectedCategory].description}
+          </p>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {AVAILABLE_INTEGRATIONS[selectedCategory].integrations.map(integration => {
+              const Icon = integration.icon;
+              const accounts = getConnectedAccountsForSource(integration.id);
+              const isConnecting = connectingSource === integration.id;
+              const hasAccounts = accounts.length > 0;
+              const colorClasses = getColorClasses(integration.color);
+
+              return (
+                <div
+                  key={integration.id}
+                  className={`border rounded-2xl overflow-hidden transition-all ${integration.comingSoon
+                    ? 'border-gray-200 bg-gray-50 opacity-60'
+                    : hasAccounts
+                      ? 'border-green-200 bg-green-50/50'
+                      : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-md'
+                    }`}
+                >
+                  {/* Integration Header */}
+                  <div className="p-4 flex items-center gap-4">
+                    <div className={`p-3 rounded-xl ${colorClasses.bg}`}>
+                      <Icon className={`w-6 h-6 ${colorClasses.text}`} />
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-semibold text-gray-900">{integration.name}</h3>
+                        {integration.comingSoon && (
+                          <span className="px-2 py-0.5 bg-gray-200 text-gray-600 rounded-full text-xs font-medium">
+                            Coming Soon
+                          </span>
+                        )}
+                        {hasAccounts && (
+                          <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs font-medium flex items-center gap-1">
+                            <CheckCircleSolidIcon className="w-3 h-3" />
+                            Connected
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-sm text-gray-500">{integration.description}</p>
+                    </div>
+                    {!integration.comingSoon && (
+                      <button
+                        onClick={() => handleConnectSource(integration)}
+                        disabled={isConnecting}
+                        className={`px-4 py-2 rounded-xl text-sm font-medium transition-all flex items-center gap-2 ${isConnecting
+                          ? 'bg-gray-100 text-gray-400 cursor-wait'
+                          : hasAccounts
+                            ? 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                            : 'bg-blue-600 text-white hover:bg-blue-700 shadow-md hover:shadow-lg'
+                          }`}
+                      >
+                        {isConnecting ? (
+                          <>
+                            <ArrowPathIcon className="w-4 h-4 animate-spin" />
+                            Connecting...
+                          </>
+                        ) : hasAccounts ? (
+                          <>
+                            <PlusIcon className="w-4 h-4" />
+                            Add Another
+                          </>
+                        ) : (
+                          <>
+                            <LinkIcon className="w-4 h-4" />
+                            Connect
+                          </>
+                        )}
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Connected Accounts List */}
+                  {hasAccounts && (
+                    <div className="border-t border-green-200 bg-white">
+                      {accounts.map(account => (
+                        <div
+                          key={account.id}
+                          className="px-4 py-3 flex items-center gap-3 border-b border-gray-100 last:border-b-0"
+                        >
+                          <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-sm font-medium text-gray-600">
+                            {(account.name || account.email || account.workspace || '?').charAt(0).toUpperCase()}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-900 truncate">
+                              {account.email || account.workspace || account.site || account.organization}
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              Connected {account.connectedAt}
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => handleDisconnectAccount(account.id)}
+                            className="px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          >
+                            Disconnect
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 // Individual Agent Profile Components
 const CareerProfile = ({ profile, setProfile, onSave, loading }) => {
   const handleInputChange = (field, value) => {
@@ -141,7 +517,7 @@ const CareerProfile = ({ profile, setProfile, onSave, loading }) => {
           <BriefcaseIcon className="h-6 w-6 text-blue-600 mr-3" />
           <h3 className="text-lg font-semibold text-gray-900">Basic Career Information</h3>
         </div>
-        
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Current Job</label>
@@ -153,7 +529,7 @@ const CareerProfile = ({ profile, setProfile, onSave, loading }) => {
               placeholder="e.g., Software Engineer"
             />
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Company</label>
             <input
@@ -164,7 +540,7 @@ const CareerProfile = ({ profile, setProfile, onSave, loading }) => {
               placeholder="e.g., Google, Microsoft"
             />
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Industry</label>
             <select
@@ -186,7 +562,7 @@ const CareerProfile = ({ profile, setProfile, onSave, loading }) => {
               <option value="Other">Other</option>
             </select>
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Experience Level</label>
             <select
@@ -202,7 +578,7 @@ const CareerProfile = ({ profile, setProfile, onSave, loading }) => {
               <option value="Executive/C-Level">Executive/C-Level</option>
             </select>
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Work Style Preference</label>
             <select
@@ -217,7 +593,7 @@ const CareerProfile = ({ profile, setProfile, onSave, loading }) => {
               <option value="Flexible">Flexible</option>
             </select>
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Leadership Experience</label>
             <select
@@ -243,7 +619,7 @@ const CareerProfile = ({ profile, setProfile, onSave, loading }) => {
           <AcademicCapIcon className="h-6 w-6 text-purple-600 mr-3" />
           <h3 className="text-lg font-semibold text-gray-900">Skills & Competencies</h3>
         </div>
-        
+
         <div className="grid grid-cols-1 gap-6">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Technical Skills (comma separated)</label>
@@ -301,7 +677,7 @@ const CareerProfile = ({ profile, setProfile, onSave, loading }) => {
           <SparklesIcon className="h-6 w-6 text-green-600 mr-3" />
           <h3 className="text-lg font-semibold text-gray-900">Career Goals & Aspirations</h3>
         </div>
-        
+
         <div className="grid grid-cols-1 gap-6">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Short-term Goals (1-2 years)</label>
@@ -313,7 +689,7 @@ const CareerProfile = ({ profile, setProfile, onSave, loading }) => {
               placeholder="What do you want to achieve in the next 1-2 years?"
             />
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Long-term Career Vision (5-10 years)</label>
             <textarea
@@ -324,7 +700,7 @@ const CareerProfile = ({ profile, setProfile, onSave, loading }) => {
               placeholder="Describe your long-term career aspirations and vision..."
             />
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Preferred Career Path</label>
             <select
@@ -342,7 +718,7 @@ const CareerProfile = ({ profile, setProfile, onSave, loading }) => {
               <option value="Cross-functional">Cross-functional</option>
             </select>
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Industries of Interest (comma separated)</label>
             <input
@@ -363,7 +739,7 @@ const CareerProfile = ({ profile, setProfile, onSave, loading }) => {
           <HeartIcon className="h-6 w-6 text-orange-600 mr-3" />
           <h3 className="text-lg font-semibold text-gray-900">Work Preferences & Values</h3>
         </div>
-        
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Work-Life Balance Priority</label>
@@ -379,7 +755,7 @@ const CareerProfile = ({ profile, setProfile, onSave, loading }) => {
               <option value="Flexible/Seasonal">Flexible/Seasonal</option>
             </select>
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Company Size Preference</label>
             <select
@@ -395,7 +771,7 @@ const CareerProfile = ({ profile, setProfile, onSave, loading }) => {
               <option value="No preference">No preference</option>
             </select>
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Risk Tolerance in Career</label>
             <select
@@ -409,7 +785,7 @@ const CareerProfile = ({ profile, setProfile, onSave, loading }) => {
               <option value="Aggressive">Aggressive (High-growth, high-risk opportunities)</option>
             </select>
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Geographic Flexibility</label>
             <select
@@ -426,14 +802,14 @@ const CareerProfile = ({ profile, setProfile, onSave, loading }) => {
             </select>
           </div>
         </div>
-        
+
         <div className="mt-6">
           <label className="block text-sm font-medium text-gray-700 mb-2">Core Work Values (comma separated)</label>
           <input
             type="text"
             value={getArrayDisplayValue('work_values')}
-              onChange={(e) => handleArrayInputChange('work_values', e.target.value)}
-              onBlur={(e) => handleArrayBlur('work_values', e.target.value)}
+            onChange={(e) => handleArrayInputChange('work_values', e.target.value)}
+            onBlur={(e) => handleArrayBlur('work_values', e.target.value)}
             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all"
             placeholder="e.g., Innovation, Impact, Autonomy, Collaboration, Growth"
           />
@@ -446,7 +822,7 @@ const CareerProfile = ({ profile, setProfile, onSave, loading }) => {
           <PuzzlePieceIcon className="h-6 w-6 text-indigo-600 mr-3" />
           <h3 className="text-lg font-semibold text-gray-900">Career Challenges & Development</h3>
         </div>
-        
+
         <div className="grid grid-cols-1 gap-6">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Current Career Challenges</label>
@@ -458,7 +834,7 @@ const CareerProfile = ({ profile, setProfile, onSave, loading }) => {
               placeholder="What challenges are you currently facing in your career?"
             />
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Professional Strengths (comma separated)</label>
             <input
@@ -470,7 +846,7 @@ const CareerProfile = ({ profile, setProfile, onSave, loading }) => {
               placeholder="e.g., Strategic thinking, Team building, Technical expertise"
             />
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Areas for Professional Growth (comma separated)</label>
             <input
@@ -482,7 +858,7 @@ const CareerProfile = ({ profile, setProfile, onSave, loading }) => {
               placeholder="e.g., Executive presence, Cross-cultural communication, Data science"
             />
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Preferred Learning & Development Methods (comma separated)</label>
             <input
@@ -496,7 +872,7 @@ const CareerProfile = ({ profile, setProfile, onSave, loading }) => {
           </div>
         </div>
       </div>
-        
+
       <div className="flex justify-end">
         <button
           onClick={onSave}
@@ -522,7 +898,7 @@ const MoneyProfile = ({ profile, setProfile, onSave, loading }) => {
           <CurrencyDollarIcon className="h-6 w-6 text-green-600 mr-3" />
           <h3 className="text-lg font-semibold text-gray-900">Financial Information</h3>
         </div>
-        
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Income Range</label>
@@ -540,7 +916,7 @@ const MoneyProfile = ({ profile, setProfile, onSave, loading }) => {
               <option value="Over $150k">Over $150k</option>
             </select>
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Investment Experience</label>
             <select
@@ -555,7 +931,7 @@ const MoneyProfile = ({ profile, setProfile, onSave, loading }) => {
               <option value="Expert">Expert</option>
             </select>
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Risk Tolerance</label>
             <select
@@ -570,7 +946,7 @@ const MoneyProfile = ({ profile, setProfile, onSave, loading }) => {
             </select>
           </div>
         </div>
-        
+
         <div className="mt-6">
           <label className="block text-sm font-medium text-gray-700 mb-2">Financial Goals</label>
           <textarea
@@ -581,7 +957,7 @@ const MoneyProfile = ({ profile, setProfile, onSave, loading }) => {
             placeholder="Describe your financial goals and objectives..."
           />
         </div>
-        
+
         <div className="mt-6 flex justify-end">
           <button
             onClick={onSave}
@@ -625,7 +1001,7 @@ const BodyProfile = ({ profile, setProfile, onSave, loading }) => {
           <HeartIcon className="h-6 w-6 text-red-600 mr-3" />
           <h3 className="text-lg font-semibold text-gray-900">Health & Fitness</h3>
         </div>
-        
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Fitness Level</label>
@@ -641,7 +1017,7 @@ const BodyProfile = ({ profile, setProfile, onSave, loading }) => {
               <option value="Athlete">Athlete</option>
             </select>
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Dietary Preferences</label>
             <select
@@ -658,7 +1034,7 @@ const BodyProfile = ({ profile, setProfile, onSave, loading }) => {
               <option value="Mediterranean">Mediterranean</option>
             </select>
           </div>
-          
+
           <div className="md:col-span-2">
             <label className="block text-sm font-medium text-gray-700 mb-2">Exercise Preferences (comma separated)</label>
             <input
@@ -671,7 +1047,7 @@ const BodyProfile = ({ profile, setProfile, onSave, loading }) => {
             />
           </div>
         </div>
-        
+
         <div className="mt-6">
           <label className="block text-sm font-medium text-gray-700 mb-2">Health Goals</label>
           <textarea
@@ -682,7 +1058,7 @@ const BodyProfile = ({ profile, setProfile, onSave, loading }) => {
             placeholder="Describe your health and fitness goals..."
           />
         </div>
-        
+
         <div className="mt-6 flex justify-end">
           <button
             onClick={onSave}
@@ -726,7 +1102,7 @@ const TravelProfile = ({ profile, setProfile, onSave, loading }) => {
           <MapPinIcon className="h-6 w-6 text-purple-600 mr-3" />
           <h3 className="text-lg font-semibold text-gray-900">Travel Preferences</h3>
         </div>
-        
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Travel Style</label>
@@ -744,7 +1120,7 @@ const TravelProfile = ({ profile, setProfile, onSave, loading }) => {
               <option value="Relaxation">Relaxation</option>
             </select>
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Travel Budget</label>
             <select
@@ -760,7 +1136,7 @@ const TravelProfile = ({ profile, setProfile, onSave, loading }) => {
               <option value="Over $10000">Over $10000</option>
             </select>
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Travel Frequency</label>
             <select
@@ -776,7 +1152,7 @@ const TravelProfile = ({ profile, setProfile, onSave, loading }) => {
               <option value="Frequently">Frequently</option>
             </select>
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Preferred Destinations (comma separated)</label>
             <input
@@ -789,7 +1165,7 @@ const TravelProfile = ({ profile, setProfile, onSave, loading }) => {
             />
           </div>
         </div>
-        
+
         <div className="mt-6 flex justify-end">
           <button
             onClick={onSave}
@@ -833,7 +1209,7 @@ const MindProfile = ({ profile, setProfile, onSave, loading }) => {
           <AcademicCapIcon className="h-6 w-6 text-indigo-600 mr-3" />
           <h3 className="text-lg font-semibold text-gray-900">Personal Development</h3>
         </div>
-        
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Learning Style</label>
@@ -849,7 +1225,7 @@ const MindProfile = ({ profile, setProfile, onSave, loading }) => {
               <option value="Reading/Writing">Reading/Writing</option>
             </select>
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Personality Type</label>
             <input
@@ -860,7 +1236,7 @@ const MindProfile = ({ profile, setProfile, onSave, loading }) => {
               placeholder="e.g., INTJ, ENFP (Myers-Briggs)"
             />
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Strengths (comma separated)</label>
             <input
@@ -872,7 +1248,7 @@ const MindProfile = ({ profile, setProfile, onSave, loading }) => {
               placeholder="e.g., Communication, Problem-solving, Leadership"
             />
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Areas for Improvement (comma separated)</label>
             <input
@@ -885,7 +1261,7 @@ const MindProfile = ({ profile, setProfile, onSave, loading }) => {
             />
           </div>
         </div>
-        
+
         <div className="mt-6 flex justify-end">
           <button
             onClick={onSave}
@@ -912,7 +1288,7 @@ const FamilyProfile = ({ profile, setProfile, onSave, loading }) => {
           <HomeIcon className="h-6 w-6 text-orange-600 mr-3" />
           <h3 className="text-lg font-semibold text-gray-900">Family & Lifestyle</h3>
         </div>
-        
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Family Status</label>
@@ -931,7 +1307,7 @@ const FamilyProfile = ({ profile, setProfile, onSave, loading }) => {
               <option value="Widowed">Widowed</option>
             </select>
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Work-Life Balance</label>
             <select
@@ -947,7 +1323,7 @@ const FamilyProfile = ({ profile, setProfile, onSave, loading }) => {
             </select>
           </div>
         </div>
-        
+
         <div className="mt-6">
           <label className="block text-sm font-medium text-gray-700 mb-2">Relationship Goals</label>
           <textarea
@@ -958,7 +1334,7 @@ const FamilyProfile = ({ profile, setProfile, onSave, loading }) => {
             placeholder="Describe your relationship and family goals..."
           />
         </div>
-        
+
         <div className="mt-6 flex justify-end">
           <button
             onClick={onSave}
@@ -998,7 +1374,7 @@ const HobbyProfile = ({ profile, setProfile, onSave, loading }) => {
           <PuzzlePieceIcon className="h-6 w-6 text-pink-600 mr-3" />
           <h3 className="text-lg font-semibold text-gray-900">Hobbies & Interests</h3>
         </div>
-        
+
         <div className="grid grid-cols-1 gap-6">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Hobbies (comma separated)</label>
@@ -1011,7 +1387,7 @@ const HobbyProfile = ({ profile, setProfile, onSave, loading }) => {
               placeholder="e.g., Reading, Photography, Cooking, Gaming"
             />
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Interests (comma separated)</label>
             <input
@@ -1023,7 +1399,7 @@ const HobbyProfile = ({ profile, setProfile, onSave, loading }) => {
               placeholder="e.g., Technology, Art, Music, Sports"
             />
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Creative Pursuits (comma separated)</label>
             <input
@@ -1036,7 +1412,7 @@ const HobbyProfile = ({ profile, setProfile, onSave, loading }) => {
             />
           </div>
         </div>
-        
+
         <div className="mt-6 flex justify-end">
           <button
             onClick={onSave}
@@ -1080,7 +1456,7 @@ const KnowledgeProfile = ({ profile, setProfile, onSave, loading }) => {
           <BookOpenIcon className="h-6 w-6 text-teal-600 mr-3" />
           <h3 className="text-lg font-semibold text-gray-900">Education & Learning</h3>
         </div>
-        
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Education Level</label>
@@ -1098,7 +1474,7 @@ const KnowledgeProfile = ({ profile, setProfile, onSave, loading }) => {
               <option value="Professional Certification">Professional Certification</option>
             </select>
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Preferred Learning Methods (comma separated)</label>
             <input
@@ -1111,19 +1487,19 @@ const KnowledgeProfile = ({ profile, setProfile, onSave, loading }) => {
             />
           </div>
         </div>
-        
+
         <div className="mt-6">
           <label className="block text-sm font-medium text-gray-700 mb-2">Learning Goals (comma separated)</label>
           <input
             type="text"
             value={getArrayDisplayValue('learning_goals')}
-              onChange={(e) => handleArrayInputChange('learning_goals', e.target.value)}
-              onBlur={(e) => handleArrayBlur('learning_goals', e.target.value)}
+            onChange={(e) => handleArrayInputChange('learning_goals', e.target.value)}
+            onBlur={(e) => handleArrayBlur('learning_goals', e.target.value)}
             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-all"
             placeholder="e.g., Learn new programming language, Improve communication skills"
           />
         </div>
-        
+
         <div className="mt-6 flex justify-end">
           <button
             onClick={onSave}
@@ -1167,7 +1543,7 @@ const SpiritualProfile = ({ profile, setProfile, onSave, loading }) => {
           <SparklesIcon className="h-6 w-6 text-yellow-600 mr-3" />
           <h3 className="text-lg font-semibold text-gray-900">Spiritual & Mindfulness</h3>
         </div>
-        
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Mindfulness Level</label>
@@ -1183,7 +1559,7 @@ const SpiritualProfile = ({ profile, setProfile, onSave, loading }) => {
               <option value="Expert">Expert</option>
             </select>
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Spiritual Practices (comma separated)</label>
             <input
@@ -1196,19 +1572,19 @@ const SpiritualProfile = ({ profile, setProfile, onSave, loading }) => {
             />
           </div>
         </div>
-        
+
         <div className="mt-6">
           <label className="block text-sm font-medium text-gray-700 mb-2">Stress Management Techniques (comma separated)</label>
           <input
             type="text"
             value={getArrayDisplayValue('stress_management')}
-              onChange={(e) => handleArrayInputChange('stress_management', e.target.value)}
-              onBlur={(e) => handleArrayBlur('stress_management', e.target.value)}
+            onChange={(e) => handleArrayInputChange('stress_management', e.target.value)}
+            onBlur={(e) => handleArrayBlur('stress_management', e.target.value)}
             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-transparent transition-all"
             placeholder="e.g., Deep breathing, Exercise, Music, Nature walks"
           />
         </div>
-        
+
         <div className="mt-6 flex justify-end">
           <button
             onClick={onSave}
@@ -1233,14 +1609,14 @@ const Profile = () => {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const { banner, daysLeft, closeBanner } = usePasswordCountDown();
-  
+
   // User data state
   const [userData, setUserData] = useState({
     first_name: '',
     last_name: '',
     email: ''
   });
-  
+
   // Password change state
   const [passwordData, setPasswordData] = useState({
     current_password: '',
@@ -1248,11 +1624,11 @@ const Profile = () => {
     confirm_password: ''
   });
   const [showPasswordChange, setShowPasswordChange] = useState(false);
-  
+
   // Avatar state
   const [avatarUrl, setAvatarUrl] = useState(null);
   const [isImgError, setImgError] = useState(false);
-  
+
   // Profile state
   const [profile, setProfile] = useState({
     // Career fields
@@ -1261,46 +1637,46 @@ const Profile = () => {
     experience: '',
     career_goals: '',
     skills: [],
-    
+
     // Money fields
     income_range: '',
     financial_goals: '',
     investment_experience: '',
     risk_tolerance: '',
-    
+
     // Body fields
     fitness_level: '',
     health_goals: '',
     dietary_preferences: '',
     exercise_preferences: [],
-    
+
     // Travel fields
     travel_style: '',
     preferred_destinations: [],
     travel_budget: '',
     travel_frequency: '',
-    
+
     // Mind fields
     learning_style: '',
     personality_type: '',
     strengths: [],
     areas_for_improvement: [],
-    
+
     // Family Life fields
     family_status: '',
     relationship_goals: '',
     work_life_balance: '',
-    
+
     // Hobby fields
     hobbies: [],
     interests: [],
     creative_pursuits: [],
-    
+
     // Knowledge fields
     education_level: '',
     learning_goals: [],
     preferred_learning_methods: [],
-    
+
     // Spiritual fields
     spiritual_practices: [],
     mindfulness_level: '',
@@ -1345,22 +1721,28 @@ const Profile = () => {
   const fetchAvatar = async () => {
     try {
       const data = await profileAPI.getAvatarUrl();
-      // In development mode, prepend backend URL to relative avatar paths
       let url = data.url;
-      if (process.env.NODE_ENV !== 'production' && url && url.startsWith('/')) {
-        const backendUrl = process.env.REACT_APP_BACKEND_URL || 'http://localhost:5000';
-        url = backendUrl + url;
+
+      // Fix: Do not manually prepend backend URL for relative paths.
+      // Let the proxy handle it, just like in UnifiedSidebar.js.
+      // if (process.env.NODE_ENV !== 'production' && url && url.startsWith('/')) {
+      //   const backendUrl = process.env.REACT_APP_BACKEND_URL || 'http://localhost:5000';
+      //   url = backendUrl + url;
+      // }
+
+      if (url) {
+        const timestamp = new Date().getTime();
+        const urlWithTimestamp = url.includes('?')
+          ? `${url}&t=${timestamp}`
+          : `${url}?t=${timestamp}`;
+        setAvatarUrl(urlWithTimestamp);
+        setImgError(false);
+      } else {
+        setAvatarUrl(null);
       }
-
-      // Add timestamp to force cache refresh
-      const timestamp = new Date().getTime();
-      const urlWithTimestamp = url.includes('?')
-        ? `${url}&t=${timestamp}`
-        : `${url}?t=${timestamp}`;
-
-      setAvatarUrl(urlWithTimestamp);
     } catch (error) {
-      console.error('Error fetching avatar:', error);
+      console.error("Error fetching avatar:", error);
+      setImgError(true);
     }
   };
 
@@ -1370,11 +1752,11 @@ const Profile = () => {
       setError('New passwords do not match');
       return;
     }
-    
+
     setLoading(true);
     setError('');
     setMessage('');
-    
+
     try {
       await profileAPI.changePassword({
         current_password: passwordData.current_password,
@@ -1457,7 +1839,7 @@ const Profile = () => {
     setLoading(true);
     setImgError(true);
     setMessage('');
-    
+
     try {
       await profileAPI.deleteAvatar();
       setAvatarUrl(null);
@@ -1473,7 +1855,7 @@ const Profile = () => {
     setLoading(true);
     setError('');
     setMessage('');
-    
+
     try {
       await profileAPI.saveProfile(profile);
       setMessage('Profile saved successfully');
@@ -1521,7 +1903,7 @@ const Profile = () => {
     }
   };
 
-   return (
+  return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
@@ -1529,7 +1911,7 @@ const Profile = () => {
           <button
             onClick={() => navigate('/dashboard')}
             className="flex items-center text-gray-600 hover:text-gray-900 mb-4 transition-colors"
-            >
+          >
             <ArrowLeftIcon className="h-5 w-5 mr-2" />
             Back to Dashboard
           </button>
@@ -1554,8 +1936,8 @@ const Profile = () => {
               <span className="text-red-800">{error}</span>
             </div>
           </div>
-         )}
-         
+        )}
+
         {banner && (
           <div className="relative bg-yellow-200 text-yellow-900 px-4 py-3 border border-black flex items-center justify-between rounded-md">
             <p className="text-sm sm:text-base">
@@ -1569,7 +1951,7 @@ const Profile = () => {
               ×
             </button>
           </div>
-        )}                            
+        )}
 
         {/* Main Tabs */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden top-8">
@@ -1577,25 +1959,33 @@ const Profile = () => {
             <nav className="flex space-x-8 px-6">
               <button
                 onClick={() => setActiveTab('account')}
-                className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
-                  activeTab === 'account'
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
+                className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === 'account'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
               >
                 <UserCircleIcon className="h-5 w-5 inline mr-2" />
                 Account Settings
               </button>
               <button
                 onClick={() => setActiveTab('profile')}
-                className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
-                  activeTab === 'profile'
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
+                className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === 'profile'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
               >
                 <UserCircleIcon className="h-5 w-5 inline mr-2" />
                 Personal Profile
+              </button>
+              <button
+                onClick={() => setActiveTab('applications')}
+                className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === 'applications'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+              >
+                <Squares2X2Icon className="h-5 w-5 inline mr-2" />
+                Applications
               </button>
             </nav>
           </div>
@@ -1617,11 +2007,11 @@ const Profile = () => {
                   <div className="flex items-center justify-between mb-6">
                     <div className="flex items-center space-x-4">
                       <div className="relative">
-                        {avatarUrl && !isImgError? (
+                        {avatarUrl && !isImgError ? (
                           <img
                             src={avatarUrl}
                             alt="Profile"
-                            onError={()=> setImgError(true)}
+                            onError={() => setImgError(true)}
                             className="h-24 w-24 rounded-full object-cover border-4 border-white shadow-lg ring-4 ring-blue-100"
                           />
                         ) : (
@@ -1656,7 +2046,7 @@ const Profile = () => {
                       <p className="text-xs text-gray-500 text-center px-2">
                         JPG, PNG, GIF, or WebP up to 5MB
                       </p>
-                      {avatarUrl &&  (
+                      {avatarUrl && (
                         <button
                           onClick={handleAvatarDelete}
                           className="bg-gradient-to-r from-red-500 to-pink-500 text-white px-6 py-3 rounded-xl hover:from-red-600 hover:to-pink-600 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
@@ -1743,13 +2133,13 @@ const Profile = () => {
                         <p className="text-sm text-gray-600">Password and security settings</p>
                       </div>
                     </div>
-                    
+
                     <div className="space-y-6">
                       <div className="flex items-center justify-between p-4 bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl border border-green-100">
                         <div className="flex items-center">
                           <div className="w-3 h-3 bg-green-500 rounded-full mr-3"></div>
                           <div>
-                             <p className="font-semibold text-gray-900">Password Protection</p>
+                            <p className="font-semibold text-gray-900">Password Protection</p>
                           </div>
                         </div>
                         <button
@@ -1760,7 +2150,7 @@ const Profile = () => {
                           Change Password
                         </button>
                       </div>
-                      
+
                       {showPasswordChange && (
                         <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-6 rounded-xl border border-blue-100 mt-6">
                           <form onSubmit={handlePasswordChange} className="space-y-4">
@@ -1833,13 +2223,13 @@ const Profile = () => {
                       {agentTabs.map((tab) => {
                         const Icon = tab.icon;
                         const isActive = activeAgentTab === tab.id;
-                        
+
                         // Define color classes for each tab
                         const getTabClasses = () => {
                           if (!isActive) {
                             return 'text-gray-500 hover:text-gray-700 hover:bg-gray-50';
                           }
-                          
+
                           switch (tab.color) {
                             case 'blue':
                               return 'bg-blue-50 text-blue-700 border-b-2 border-blue-500';
@@ -1863,7 +2253,7 @@ const Profile = () => {
                               return 'bg-gray-50 text-gray-700 border-b-2 border-gray-500';
                           }
                         };
-                        
+
                         return (
                           <button
                             key={tab.id}
@@ -1884,6 +2274,10 @@ const Profile = () => {
                   {renderAgentProfile()}
                 </div>
               </div>
+            )}
+
+            {activeTab === 'applications' && (
+              <ApplicationsTab />
             )}
           </div>
         </div>

@@ -3,7 +3,7 @@
 #
 # Development Environment Deployment Script
 # This script starts all services locally for development
-# Ports: Frontend(1000), Backend(5000), PA(6001), Career(6002), Ollama(12434/12435)
+# Ports: Frontend(1000), Backend(5000), PA(6001), Career(6002), Voice(6003), Work(6004), Ollama(12434/12435)
 #
 
 set -e  # Exit on error
@@ -29,6 +29,8 @@ PROJECT_ROOT="$SCRIPT_DIR"
 BACKEND_DIR="$PROJECT_ROOT/backend"
 PA_DIR="$PROJECT_ROOT/backend/personal_assistant"
 CAREER_DIR="$PROJECT_ROOT/modules/agents/career/src"
+WORK_DIR="$PROJECT_ROOT/modules/agents/work/src"
+VOICE_DIR="$PROJECT_ROOT/modules/services/voice/src"
 FRONTEND_DIR="$PROJECT_ROOT/frontend"
 PID_DIR="$PROJECT_ROOT/.dev-pids"
 
@@ -49,6 +51,8 @@ set +a
 BACKEND_PORT=${BACKEND_PORT:-6000}
 PA_PORT=${PA_PORT:-6001}
 CAREER_PORT=${CAREER_PORT:-6002}
+WORK_PORT=${WORK_PORT:-6004}
+VOICE_PORT=${VOICE_PORT:-6003}
 FRONTEND_PORT=${FRONTEND_PORT:-1000}
 OLLAMA1_PORT=${OLLAMA1_PORT:-12434}
 OLLAMA2_PORT=${OLLAMA2_PORT:-12435}
@@ -67,6 +71,8 @@ echo "  Frontend:         http://localhost:$FRONTEND_PORT"
 echo "  Backend API:      http://localhost:$BACKEND_PORT"
 echo "  Personal Asst:    http://localhost:$PA_PORT"
 echo "  Career Agent:     http://localhost:$CAREER_PORT"
+echo "  Work Agent:       http://localhost:$WORK_PORT"
+echo "  Voice STT:        http://localhost:$VOICE_PORT"
 
 # Display LLM-specific ports based on provider
 if [ "${LLM_PROVIDER:-ollama}" = "vllm" ]; then
@@ -138,6 +144,8 @@ PORTS_OK=true
 check_port $BACKEND_PORT "Backend" || PORTS_OK=false
 check_port $PA_PORT "Personal Assistant" || PORTS_OK=false
 check_port $CAREER_PORT "Career Agent" || PORTS_OK=false
+check_port $WORK_PORT "Work Agent" || PORTS_OK=false
+check_port $VOICE_PORT "Voice STT" || PORTS_OK=false
 check_port $FRONTEND_PORT "Frontend" || PORTS_OK=false
 
 # Check LLM-specific ports based on provider
@@ -342,11 +350,33 @@ cd "$PROJECT_ROOT"
 echo -e "${GREEN}✓${NC} Career Agent started (PID: $CAREER_PID)"
 echo -e "${YELLOW}   Logs: tail -f $PID_DIR/career.log${NC}"
 
+# Start Work Agent (Port 8003)
+echo -e "${BLUE}Starting Work Agent on port $WORK_PORT...${NC}"
+cd "$PROJECT_ROOT"
+nohup python3 -m uvicorn modules.agents.work.src.main:app --host 0.0.0.0 --port $WORK_PORT --reload \
+    > "$PID_DIR/work.log" 2>&1 &
+WORK_PID=$!
+echo $WORK_PID > "$PID_DIR/work.pid"
+echo -e "${GREEN}✓${NC} Work Agent started (PID: $WORK_PID)"
+echo -e "${YELLOW}   Logs: tail -f $PID_DIR/work.log${NC}"
+
+# Start Voice STT Service (Port 6003)
+echo -e "${BLUE}Starting Voice STT on port $VOICE_PORT...${NC}"
+cd "$PROJECT_ROOT"
+nohup python3 -m uvicorn modules.services.voice.src.main:app --host 0.0.0.0 --port $VOICE_PORT --reload \
+    > "$PID_DIR/voice.log" 2>&1 &
+VOICE_PID=$!
+echo $VOICE_PID > "$PID_DIR/voice.pid"
+echo -e "${GREEN}✓${NC} Voice STT started (PID: $VOICE_PID)"
+echo -e "${YELLOW}   Logs: tail -f $PID_DIR/voice.log${NC}"
+
 # Wait for services to be ready
 echo ""
 wait_for_service "http://localhost:$BACKEND_PORT/docs" "Backend" || exit 1
 wait_for_service "http://localhost:$PA_PORT/api/chat/health" "Personal Assistant" || exit 1
 wait_for_service "http://localhost:$CAREER_PORT/api/chat/health" "Career Agent" || exit 1
+wait_for_service "http://localhost:$WORK_PORT/api/work/health" "Work Agent" || exit 1
+wait_for_service "http://localhost:$VOICE_PORT/api/voice/health" "Voice STT" || exit 1
 
 echo ""
 echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
@@ -364,6 +394,8 @@ cat > "$FRONTEND_DIR/.env.development.local" << EOF
 REACT_APP_BACKEND_URL=http://localhost:$BACKEND_PORT
 REACT_APP_PA_URL=http://localhost:$PA_PORT
 REACT_APP_CAREER_URL=http://localhost:$CAREER_PORT
+REACT_APP_WORK_URL=http://localhost:$WORK_PORT
+REACT_APP_VOICE_URL=http://localhost:$VOICE_PORT
 REACT_APP_ENVIRONMENT=development
 
 # Development mode flag
@@ -392,6 +424,8 @@ echo -e "  🌐 Frontend:         ${GREEN}http://localhost:$FRONTEND_PORT${NC}"
 echo -e "  📡 Backend API:      ${GREEN}http://localhost:$BACKEND_PORT/docs${NC}"
 echo -e "  🤖 Personal Asst:    ${GREEN}http://localhost:$PA_PORT/api/chat/health${NC}"
 echo -e "  💼 Career Agent:     ${GREEN}http://localhost:$CAREER_PORT/api/chat/health${NC}"
+echo -e "  📋 Work Agent:       ${GREEN}http://localhost:$WORK_PORT/api/work/health${NC}"
+echo -e "  🎤 Voice STT:        ${GREEN}http://localhost:$VOICE_PORT/api/voice/health${NC}"
 
 # Display LLM endpoints based on provider
 if [ "$LLM_PROVIDER" = "vllm" ]; then
@@ -406,6 +440,8 @@ echo -e "  Stop all services:   ${CYAN}./stop-dev.sh${NC}"
 echo -e "  View backend logs:   ${CYAN}tail -f .dev-pids/backend.log${NC}"
 echo -e "  View PA logs:        ${CYAN}tail -f .dev-pids/pa.log${NC}"
 echo -e "  View career logs:    ${CYAN}tail -f .dev-pids/career.log${NC}"
+echo -e "  View work logs:      ${CYAN}tail -f .dev-pids/work.log${NC}"
+echo -e "  View voice logs:     ${CYAN}tail -f .dev-pids/voice.log${NC}"
 echo ""
 echo -e "${BLUE}Starting frontend (Ctrl+C to stop)...${NC}"
 echo ""

@@ -1,7 +1,10 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { XMarkIcon, PaperAirplaneIcon, PlusIcon, ClockIcon, Cog6ToothIcon, TrashIcon, ChevronDownIcon, DocumentDuplicateIcon, PencilIcon, StopIcon, CheckIcon, SparklesIcon, ArrowUturnLeftIcon } from '@heroicons/react/24/outline';
+import { XMarkIcon, PaperAirplaneIcon, PlusIcon, ClockIcon, Cog6ToothIcon, TrashIcon, ChevronDownIcon, DocumentDuplicateIcon, PencilIcon, StopIcon, CheckIcon, SparklesIcon, ArrowUturnLeftIcon, MicrophoneIcon, SpeakerWaveIcon } from '@heroicons/react/24/outline';
+import { useVoiceDictation } from '../../hooks/useVoiceDictation';
+import { usePressTalk } from '../../hooks/usePressTalk';
+import { useTTS } from '../../hooks/useTTS';
 import { XCircleIcon } from '@heroicons/react/24/solid';
 import { chat, sessions, profile as profileAPI, activities as activitiesAPI } from '../../services/api';
 import { sendMessage as defaultSendMessage, sendMessageStream as defaultSendMessageStream, checkHealth, clearMemory, generateSessionId, handleApiError, removeMessagesAfterIndex, updateMessageAtIndex } from '../../services/chatApi';
@@ -807,7 +810,129 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
       setOriginalInput('');
     }
   };
-  
+
+  // Voice input — shared callbacks for both modes
+  const [voiceError, setVoiceError] = useState(null);
+  const voiceErrorTimer = useRef(null);
+  const voiceTranscript = useCallback((text) => {
+    setInput(prev => prev ? prev + ' ' + text : text);
+  }, []);
+  const voiceErrorCb = useCallback((msg) => {
+    console.error('[Voice]', msg);
+    setVoiceError(msg);
+    clearTimeout(voiceErrorTimer.current);
+    voiceErrorTimer.current = setTimeout(() => setVoiceError(null), 4000);
+  }, []);
+
+  // TTS for voice chat — speaks AI response aloud during streaming
+  const { isSpeaking, feedChunk, flush: flushTTS, stop: stopTTS } = useTTS();
+  const voiceChatRef = useRef(false);
+  const handleSubmitRef = useRef(null);
+
+  // PTT voice chat: auto-submit transcription and TTS the response
+  const voiceChatTranscript = useCallback((text) => {
+    if (!text.trim()) return;
+    voiceChatRef.current = true;
+    stopTTS();
+    setInput(text);
+    handleSubmitRef.current?.({ preventDefault: () => {} }, text);
+  }, [stopTTS]);
+
+  // Mode 1: Toggle dictation (click) — chunked, real-time, fills input
+  const { isRecording, isProcessing, toggleRecording } = useVoiceDictation({
+    chunkInterval: 3000,
+    onTranscript: voiceTranscript,
+    onError: voiceErrorCb,
+  });
+
+  // Mode 2: Press-to-talk (long press) — auto-sends + TTS response
+  const {
+    isRecording: isPTTRecording,
+    isProcessing: pttProcessing,
+    start: startPTT,
+    stop: stopPTT,
+    cancel: cancelPTT,
+  } = usePressTalk({ onTranscript: voiceChatTranscript, onError: voiceErrorCb });
+
+  // Gesture detection: short click = toggle dictation, long press >= 300ms = PTT
+  const pressTimerRef = useRef(null);
+  const pttGestureRef = useRef(false);
+
+  const voiceActive = isRecording || isPTTRecording || isProcessing || pttProcessing;
+  const micDisabled = isNavigating || isCancelling || isLoading || isOptimizing;
+
+  const handleMicDown = useCallback((e) => {
+    e.preventDefault();
+    if (micDisabled) return;
+
+    // Stop TTS before any voice interaction
+    if (isSpeaking) { stopTTS(); return; }
+
+    // If processing either mode, ignore
+    if (isProcessing || pttProcessing) return;
+    // If currently dictating, release will stop it (no timer needed)
+    if (isRecording) return;
+    // If PTT already active, ignore
+    if (isPTTRecording) return;
+
+    // Capture pointer so pointerup fires on this element even if finger moves away
+    e.target.setPointerCapture(e.pointerId);
+
+    pttGestureRef.current = false;
+    pressTimerRef.current = setTimeout(() => {
+      pressTimerRef.current = null;
+      pttGestureRef.current = true;
+      startPTT();
+    }, 300);
+  }, [micDisabled, isSpeaking, stopTTS, isProcessing, pttProcessing, isRecording, isPTTRecording, startPTT]);
+
+  const handleMicUp = useCallback(() => {
+    // Case 1: Released before 300ms — short click
+    if (pressTimerRef.current) {
+      clearTimeout(pressTimerRef.current);
+      pressTimerRef.current = null;
+      toggleRecording();
+      return;
+    }
+    // Case 2: PTT was active — release stops it
+    if (pttGestureRef.current) {
+      pttGestureRef.current = false;
+      stopPTT();
+      return;
+    }
+    // Case 3: Was dictating (handleMicDown returned early) — stop
+    if (isRecording) {
+      toggleRecording();
+    }
+  }, [isRecording, toggleRecording, stopPTT]);
+
+  // Cancel PTT timer if pointer leaves before 300ms (prevents accidental activation)
+  const handleMicLeave = useCallback(() => {
+    if (pressTimerRef.current) {
+      clearTimeout(pressTimerRef.current);
+      pressTimerRef.current = null;
+    }
+  }, []);
+
+  // Clean up if button becomes disabled mid-gesture (e.g. message sent)
+  useEffect(() => {
+    if (micDisabled) {
+      if (pressTimerRef.current) {
+        clearTimeout(pressTimerRef.current);
+        pressTimerRef.current = null;
+      }
+      if (pttGestureRef.current) {
+        pttGestureRef.current = false;
+        cancelPTT();
+      }
+    }
+  }, [micDisabled, cancelPTT]);
+
+  // Clean up voice error dismiss timer on unmount
+  useEffect(() => {
+    return () => clearTimeout(voiceErrorTimer.current);
+  }, []);
+
   // Auto-resize textarea function
   const autoResizeTextarea = useCallback(() => {
     if (textareaRef.current) {
@@ -1473,6 +1598,10 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
   const handleCancel = async () => {
     if (!isLoading) return;
 
+    // Stop TTS and clear voice chat state
+    stopTTS();
+    voiceChatRef.current = false;
+
     // Flag cancellation so any late EventSource can be immediately closed
     cancelPendingRef.current = true;
 
@@ -1547,7 +1676,13 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
 
   const handleSubmit = async (e, messageOverride = null) => {
     e.preventDefault();
-    
+
+    // Block submit while voice is active (unless auto-submitting from voice chat)
+    if (voiceActive && !voiceChatRef.current) return;
+
+    // Stop any ongoing TTS from previous voice chat
+    stopTTS();
+
     // If a response is already loading, treat the submission as a cancellation request.
     if (isLoading) {
       handleCancel();
@@ -1558,9 +1693,13 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
     const userMessage = (messageOverride || input).trim();
 
     // Input validation: check length constraints
-    if (!userMessage || userMessage.length < MIN_MESSAGE_LENGTH || isNavigating) return;
+    if (!userMessage || userMessage.length < MIN_MESSAGE_LENGTH || isNavigating) {
+      voiceChatRef.current = false;
+      return;
+    }
     if (userMessage.length > MAX_MESSAGE_LENGTH) {
       console.warn(`Message too long: ${userMessage.length} chars (max: ${MAX_MESSAGE_LENGTH})`);
+      voiceChatRef.current = false;
       return;
     }
 
@@ -1667,6 +1806,7 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
 
     try {
       // Use streaming response
+      const isVoiceChat = voiceChatRef.current;
       const eventSource = sendMessageStream(
         userMessage,
         sessionIdForGenerating,
@@ -1674,7 +1814,10 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
         // onToken callback - update the streaming message
         async (token, options = {}) => {
           streamingResponse += token;
-          
+
+          // Feed token to TTS for voice chat mode
+          if (isVoiceChat) feedChunk(token);
+
           // If this is the initial message, save it to database immediately
           if (options.isInitialMessage) {
             const sessionToSaveIn = updatedSessionAtSendTime || currentSessionAtSendTime;
@@ -1722,6 +1865,9 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
         },
         // onComplete callback - finalize the message
         async (fullResponse, professionalData, followUpQuestionsData) => {
+          // Flush remaining TTS buffer for voice chat
+          if (isVoiceChat) { flushTTS(); voiceChatRef.current = false; }
+
           // Clear submitting state and remove session from generating sessions on completion
           setIsSubmitting(false);
           const sessionIdForClearing = updatedSessionAtSendTime?.id || currentSessionAtSendTime?.id;
@@ -1808,6 +1954,9 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
         },
         // onError callback - handle errors
         async (errorMessage) => {
+          // Stop TTS on error
+          if (isVoiceChat) { stopTTS(); voiceChatRef.current = false; }
+
           // Remove session from generating sessions on error
           const sessionIdForClearing = updatedSessionAtSendTime?.id || currentSessionAtSendTime?.id;
           if (sessionIdForClearing) {
@@ -1874,6 +2023,9 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
 
       
     } catch (error) {
+      // Clean up voice chat state if streaming failed to start
+      if (voiceChatRef.current) { stopTTS(); voiceChatRef.current = false; }
+
       // Handle errors that occur when starting the streaming (e.g., EventSource creation failure)
       // Note: Streaming callbacks (onComplete, onError) handle cleanup when streaming finishes normally
       console.error('Error starting streaming response:', error);
@@ -1928,6 +2080,7 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
     }
     // Note: No finally block here! The streaming is async - cleanup happens in onComplete/onError callbacks
   };
+  handleSubmitRef.current = handleSubmit;
 
   // Handle resize functionality
   const handleResizeStart = useCallback((e, direction) => {
@@ -2698,14 +2851,16 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
               }
             }}
             placeholder={
-              isNavigating 
-                ? "Redirecting to agent..." 
-                : isCancelling 
-                ? "Cancelling..." 
-                : isLoading 
-                ? "Thinking..." 
+              isNavigating
+                ? "Redirecting to agent..."
+                : isCancelling
+                ? "Cancelling..."
+                : isLoading
+                ? "Thinking..."
                 : isOptimizing
                 ? "Optimizing your input..."
+                : voiceActive
+                ? "Listening..."
                 : "Ask me anything..."
             }
             disabled={isNavigating || isCancelling || isLoading || isOptimizing}
@@ -2716,63 +2871,121 @@ const ChatDialog = ({ onClose, assistantPosition, setAssistantPosition, onUnread
               height: 'auto',
               resize: 'none'
             }}
-            className={`w-full p-2 pr-24 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors resize-none ${
+            className={`w-full p-2 pr-28 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors resize-none ${
               isNavigating || isCancelling || isLoading || isOptimizing ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : ''
             }`}
           />
-          {/* Optimize Button */}
-          <button
-            onClick={isOptimized ? revertOptimization : optimizeInput}
-            type="button"
-            disabled={isNavigating || isCancelling || isLoading || isOptimizing || !input.trim()}
-            className={`chat-input-buttons absolute bottom-2 right-16 p-2 rounded-lg transition-colors ${
-              isNavigating || isCancelling || isLoading || isOptimizing || !input.trim()
-                ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                : isOptimized
-                ? 'bg-orange-500 text-white hover:bg-orange-600'
-                : 'bg-green-500 text-white hover:bg-green-600'
-            }`}
-            title={
-              isOptimizing
-                ? 'Optimizing...'
-                : isOptimized
-                ? 'Revert to original input'
-                : 'Optimize input content'
-            }
-          >
-            {isOptimizing ? (
-              <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-            ) : isOptimized ? (
-              <ArrowUturnLeftIcon className="w-5 h-5" />
-            ) : (
-              <SparklesIcon className="w-5 h-5" />
-            )}
-          </button>
-          
-          {/* Send Button */}
-          <button
-            onClick={isLoading && !isCancelling ? handleCancel : undefined}
-            type={isLoading && !isCancelling ? 'button' : 'submit'}
-            disabled={isNavigating || isOptimizing || (isLoading ? false : !input.trim())}
-            className={`chat-input-buttons absolute bottom-2 right-4 p-2 rounded-lg transition-colors ${
-              isNavigating || isOptimizing || (isLoading ? false : !input.trim())
-                ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                : isLoading && !isCancelling
-                ? 'bg-red-500 text-white hover:bg-red-600'
-                : isCancelling
-                ? 'bg-gray-400 text-gray-600 cursor-not-allowed'
-                : 'bg-blue-500 text-white hover:bg-blue-600'
-            }`}
-            title={isLoading && !isCancelling ? 'Cancel request' : 'Send message'}
-          >
-            {isCancelling ? (
-              <div className="w-5 h-5 border-2 border-gray-600 border-t-transparent rounded-full animate-spin"></div>
-            ) : isLoading ? (
-              <StopIcon className="w-5 h-5" />
-            ) : (
-              <PaperAirplaneIcon className="w-5 h-5" />
-            )}
-          </button>
+          {/* Action Buttons */}
+          <div className="absolute bottom-2 right-4 flex items-center gap-1">
+            {/* Optimize Button */}
+            <button
+              onClick={isOptimized ? revertOptimization : optimizeInput}
+              type="button"
+              disabled={isNavigating || isCancelling || isLoading || isOptimizing || voiceActive || !input.trim()}
+              className={`chat-input-buttons p-2 rounded-lg transition-colors ${
+                isNavigating || isCancelling || isLoading || isOptimizing || voiceActive || !input.trim()
+                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                  : isOptimized
+                  ? 'bg-orange-500 text-white hover:bg-orange-600'
+                  : 'bg-green-500 text-white hover:bg-green-600'
+              }`}
+              title={
+                isOptimizing
+                  ? 'Optimizing...'
+                  : isOptimized
+                  ? 'Revert to original input'
+                  : 'Optimize input content'
+              }
+            >
+              {isOptimizing ? (
+                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+              ) : isOptimized ? (
+                <ArrowUturnLeftIcon className="w-5 h-5" />
+              ) : (
+                <SparklesIcon className="w-5 h-5" />
+              )}
+            </button>
+
+            {/* Voice Input Button — click: dictation | long press: push-to-talk */}
+            <div className="relative">
+              {voiceError && (
+                <div className="absolute bottom-full mb-1 right-0 bg-red-600 text-white text-xs rounded px-2 py-1 whitespace-nowrap shadow-lg z-10">
+                  {voiceError}
+                </div>
+              )}
+              {isSpeaking ? (
+                <button
+                  onClick={stopTTS}
+                  type="button"
+                  className="chat-input-buttons p-2 rounded-lg transition-all duration-150 bg-green-500 text-white hover:bg-green-600 animate-pulse"
+                  title="Click to stop speaking"
+                >
+                  <SpeakerWaveIcon className="w-5 h-5" />
+                </button>
+              ) : (
+                <button
+                  onPointerDown={handleMicDown}
+                  onPointerUp={handleMicUp}
+                  onPointerLeave={handleMicLeave}
+                  onPointerCancel={handleMicUp}
+                  onContextMenu={(e) => e.preventDefault()}
+                  type="button"
+                  disabled={micDisabled}
+                  className={`chat-input-buttons p-2 rounded-lg select-none touch-none transition-all duration-150 ${
+                    micDisabled
+                      ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                      : isPTTRecording
+                      ? 'bg-blue-500 text-white scale-110 ring-2 ring-blue-300 animate-pulse'
+                      : isRecording
+                      ? 'bg-red-500 text-white hover:bg-red-600 animate-pulse'
+                      : isProcessing || pttProcessing
+                      ? 'bg-amber-500 text-white'
+                      : 'bg-purple-500 text-white hover:bg-purple-600'
+                  }`}
+                  title={
+                    isPTTRecording
+                      ? 'Release to transcribe'
+                      : isRecording
+                      ? 'Click to stop dictation'
+                      : isProcessing || pttProcessing
+                      ? 'Processing speech...'
+                      : 'Click: dictation | Hold: push-to-talk'
+                  }
+                >
+                  {(isProcessing || pttProcessing) ? (
+                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  ) : (
+                    <MicrophoneIcon className="w-5 h-5" />
+                  )}
+                </button>
+              )}
+            </div>
+
+            {/* Send Button */}
+            <button
+              onClick={isLoading && !isCancelling ? handleCancel : undefined}
+              type={isLoading && !isCancelling ? 'button' : 'submit'}
+              disabled={isNavigating || isOptimizing || voiceActive || (isLoading ? false : !input.trim())}
+              className={`chat-input-buttons p-2 rounded-lg transition-colors ${
+                isNavigating || isOptimizing || voiceActive || (isLoading ? false : !input.trim())
+                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                  : isLoading && !isCancelling
+                  ? 'bg-red-500 text-white hover:bg-red-600'
+                  : isCancelling
+                  ? 'bg-gray-400 text-gray-600 cursor-not-allowed'
+                  : 'bg-blue-500 text-white hover:bg-blue-600'
+              }`}
+              title={isLoading && !isCancelling ? 'Cancel request' : 'Send message'}
+            >
+              {isCancelling ? (
+                <div className="w-5 h-5 border-2 border-gray-600 border-t-transparent rounded-full animate-spin"></div>
+              ) : isLoading ? (
+                <StopIcon className="w-5 h-5" />
+              ) : (
+                <PaperAirplaneIcon className="w-5 h-5" />
+              )}
+            </button>
+          </div>
         </div>
       </form>
 

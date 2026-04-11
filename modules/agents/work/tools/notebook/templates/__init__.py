@@ -1,0 +1,3 @@
+"""
+Note templates package
+"""
