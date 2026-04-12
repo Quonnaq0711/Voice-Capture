@@ -2349,31 +2349,28 @@ const InboxView = ({ activeInboxSubtab = 'email' }) => {
 
   // Default: Email view
   return (
-
-    //{/* <div className="h-full flex flex-col bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden"> */}
-      //{/* OAuth Success/Error Notifications */}
-      // {oauthSuccess && (
-      //   <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 px-4 py-2.5 bg-green-100 border border-green-300 text-green-800 rounded-xl shadow-lg animate-fade-in">
-      //     <CheckCircleIcon className="w-5 h-5" />
-      //     <span className="text-sm font-medium">{oauthSuccess}</span>
-      //     <button onClick={() => setOauthSuccess(null)} className="ml-2 text-green-600 hover:text-green-800">
-      //       <XMarkIcon className="w-4 h-4" />
-      //     </button>
-      //   </div>
-      // )}
-      // {oauthError && (
-      //   <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 px-4 py-2.5 bg-red-100 border border-red-300 text-red-800 rounded-xl shadow-lg animate-fade-in">
-      //     <ExclamationCircleIcon className="w-5 h-5" />
-      //     <span className="text-sm font-medium">{oauthError}</span>
-      //     <button onClick={() => setOauthError(null)} className="ml-2 text-red-600 hover:text-red-800">
-      //       <XMarkIcon className="w-4 h-4" />
-      //     </button>
-      //   </div>
-      // )}
+    <div className="w-full h-screen relative bg-sky-950 overflow-y-auto">
+      {/* OAuth Success/Error Notifications */}
+      {oauthSuccess && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 px-4 py-2.5 bg-green-100 border border-green-300 text-green-800 rounded-xl shadow-lg animate-fade-in">
+          <CheckCircleIcon className="w-5 h-5" />
+          <span className="text-sm font-medium">{oauthSuccess}</span>
+          <button onClick={() => setOauthSuccess(null)} className="ml-2 text-green-600 hover:text-green-800">
+            <XMarkIcon className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+      {oauthError && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 px-4 py-2.5 bg-red-100 border border-red-300 text-red-800 rounded-xl shadow-lg animate-fade-in">
+          <ExclamationCircleIcon className="w-5 h-5" />
+          <span className="text-sm font-medium">{oauthError}</span>
+          <button onClick={() => setOauthError(null)} className="ml-2 text-red-600 hover:text-red-800">
+            <XMarkIcon className="w-4 h-4" />
+          </button>
+        </div>
+      )}
       
-
-     <div className="w-full h-screen relative bg-sky-950 overflow-y-auto">
-    
+      {/* Header */}
     <div className="w-[1340px] h-16 left-0 top-[35px] absolute">
         <div className="left-[1379px] top-[14px] absolute justify-start text-white text-base font-normal font-['Open_Sans']">Account</div>
         {/* Smartie Icon */}
@@ -2388,6 +2385,8 @@ const InboxView = ({ activeInboxSubtab = 'email' }) => {
             <div className="w-1 h-1 left-[32.58px] top-[12.33px] absolute bg-neutral-400 rounded-full" />
             <div className="w-0.5 h-1.5 left-[26.07px] top-0 absolute bg-slate-400" />
         </div> */}
+
+        {/* Work Icon */}
         <div className="w-44 h-0 left-0 top-[25px] absolute outline outline-1 outline-white"></div>
         <div className="w-8 h-8 left-[180px] top-2 absolute bg-pink-600" />
         <div className="left-[230px] top-[6px] absolute justify-start text-white text-2xl font-bold font-['Space_Mono']">Work</div>
@@ -2405,8 +2404,8 @@ const InboxView = ({ activeInboxSubtab = 'email' }) => {
               placeholder="Search messages..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-[1317px] h-10 left-[50px] top-[195px] absolute bg-white/5 rounded-[10px] text-sm font-normal font-['Inter'] 
-              focus:ring-2 focus:ring-blue-500 focus:border-transparent border-gray-300 pl-10 pr-3 py-2 focus:bg-white 
+              className="w-[1317px] h-10 left-[50px] top-[195px] absolute bg-white/10 rounded-[10px] text-sm font-normal font-['Inter'] placeholder-slate-200 
+              focus:ring-2 focus:ring-slate-500 focus:border-transparent border-slate-300 pl-10 pr-3 py-2 focus:bg-white/100
               transition-colors"
             />
           </div>
