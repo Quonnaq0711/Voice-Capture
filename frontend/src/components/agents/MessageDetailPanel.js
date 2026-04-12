@@ -1109,11 +1109,11 @@ function MessageDetailPanel({
 
   if (!message) {
     return (
-      <div className="h-full flex items-center justify-center bg-gray-50 text-gray-400">
-        <div className="text-center">
-          <EnvelopeOpenIcon className="w-16 h-16 mx-auto mb-4 text-gray-300" />
-          <p className="text-lg font-medium text-gray-500">Select a message to view</p>
-          <p className="text-sm">Click on any message from the list</p>
+      <div className="h-full flex items-center justify-center bg-sky-950 text-slate-400">
+        <div className="text-center px-8">
+          <EnvelopeOpenIcon className="w-16 h-16 mx-auto mb-4 text-slate-300" />
+          <p className="text-lg font-medium text-slate-500 ">Select a message to view</p>
+          <p className="text-sm ">Click on any message from the list</p>
         </div>
       </div>
     );
@@ -1126,39 +1126,30 @@ function MessageDetailPanel({
   // Collapsed: show only name (or derive from email)
   // Expanded: always show "Name <email>" format
   // If recipient email matches accountEmail, show "me" instead of name
-  const formatRecipient = (recipient, showEmail = false, accountEmail = null) => {
-    let name = '';
-    let email = '';
+ const formatRecipient = (recipient, showEmail = false, accountEmail = null) => {
+  if (!recipient) return '';
 
-    if (recipient.includes('<')) {
-      // Has "Name <email>" format
-      const parts = recipient.split('<');
-      name = parts[0].trim();
-      email = parts[1].replace('>', '').trim();
-      // If no name, derive from email
-      if (!name) {
-        name = email.split('@')[0];
-      }
-    } else {
-      // Just email format - derive name from email
-      email = recipient.trim();
-      name = email.split('@')[0];
-    }
+  let name = '';
+  let email = '';
 
-    // Check if recipient is the current account - show "me" instead
-    const isMe = accountEmail && email.toLowerCase() === accountEmail.toLowerCase();
-    const displayName = isMe ? 'me' : name;
+  const parts = recipient.match(/^([^<]*)<([^>]+)>/);
+  if (parts) {
+    name = parts[1].trim();
+    email = parts[2].trim();
+    if (!name) name = email.split('@')[0].replace(/[._-]/g, ' ');
+  } else {
+    email = recipient.trim();
+    name = email.split('@')[0].replace(/[._-]/g, ' ');
+  }
 
-    if (showEmail) {
-      // Expanded: show "Name <email>" format
-      return `${displayName} <${email}>`;
-    }
-    // Collapsed: show only name
-    return displayName;
-  };
+  const isMe = accountEmail && email.toLowerCase() === accountEmail.toLowerCase();
+  const displayName = isMe ? 'me' : name;
+
+  return showEmail && !isMe ? `${displayName} <${email}>` : displayName;
+};
 
   return (
-    <div className="h-full flex flex-col bg-white overflow-hidden">
+    <div className="h-full flex flex-col bg-sky-950 overflow-hidden">
       {/* Gmail-Style Header with Actions */}
       <div className="flex-shrink-0 border-b border-gray-200 bg-white">
         {/* Action Toolbar - Gmail Style Compact */}

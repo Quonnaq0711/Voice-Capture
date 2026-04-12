@@ -126,6 +126,8 @@ import {
   SignalLow,
   Ban,
 } from 'lucide-react';
+import emailIcon from '../../assets/email10.png';
+import composeIcon from '../../assets/pencil1.png';
 
 // ============================================================================
 // HELPERS
@@ -2347,65 +2349,91 @@ const InboxView = ({ activeInboxSubtab = 'email' }) => {
 
   // Default: Email view
   return (
-    <div className="h-full flex flex-col bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-      {/* OAuth Success/Error Notifications */}
-      {oauthSuccess && (
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 px-4 py-2.5 bg-green-100 border border-green-300 text-green-800 rounded-xl shadow-lg animate-fade-in">
-          <CheckCircleIcon className="w-5 h-5" />
-          <span className="text-sm font-medium">{oauthSuccess}</span>
-          <button onClick={() => setOauthSuccess(null)} className="ml-2 text-green-600 hover:text-green-800">
-            <XMarkIcon className="w-4 h-4" />
-          </button>
-        </div>
-      )}
-      {oauthError && (
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 px-4 py-2.5 bg-red-100 border border-red-300 text-red-800 rounded-xl shadow-lg animate-fade-in">
-          <ExclamationCircleIcon className="w-5 h-5" />
-          <span className="text-sm font-medium">{oauthError}</span>
-          <button onClick={() => setOauthError(null)} className="ml-2 text-red-600 hover:text-red-800">
-            <XMarkIcon className="w-4 h-4" />
-          </button>
-        </div>
-      )}
 
-      {/* Top Bar - Simplified */}
-      <div className="px-4 py-3 border-b border-gray-200 bg-white">
-        <div className="flex items-center gap-3">
-          {/* Search */}
-          <div className="relative flex-1">
-            <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+    //{/* <div className="h-full flex flex-col bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden"> */}
+      //{/* OAuth Success/Error Notifications */}
+      // {oauthSuccess && (
+      //   <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 px-4 py-2.5 bg-green-100 border border-green-300 text-green-800 rounded-xl shadow-lg animate-fade-in">
+      //     <CheckCircleIcon className="w-5 h-5" />
+      //     <span className="text-sm font-medium">{oauthSuccess}</span>
+      //     <button onClick={() => setOauthSuccess(null)} className="ml-2 text-green-600 hover:text-green-800">
+      //       <XMarkIcon className="w-4 h-4" />
+      //     </button>
+      //   </div>
+      // )}
+      // {oauthError && (
+      //   <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 px-4 py-2.5 bg-red-100 border border-red-300 text-red-800 rounded-xl shadow-lg animate-fade-in">
+      //     <ExclamationCircleIcon className="w-5 h-5" />
+      //     <span className="text-sm font-medium">{oauthError}</span>
+      //     <button onClick={() => setOauthError(null)} className="ml-2 text-red-600 hover:text-red-800">
+      //       <XMarkIcon className="w-4 h-4" />
+      //     </button>
+      //   </div>
+      // )}
+      
+
+     <div className="w-full h-screen relative bg-sky-950 overflow-y-auto">
+    
+    <div className="w-[1340px] h-16 left-0 top-[35px] absolute">
+        <div className="left-[1379px] top-[14px] absolute justify-start text-white text-base font-normal font-['Open_Sans']">Account</div>
+        {/* Smartie Icon */}
+        {/* <div className="w-14 h-12 left-[1196px] top-[1px] absolute">
+            <div className="w-9 h-7 left-[7.82px] top-[18.05px] absolute bg-slate-500 rounded-2xl" />
+            <div className="w-7 h-6 left-[11.73px] top-[5.72px] absolute bg-slate-400 rounded-xl" />
+            <div className="w-1.5 h-4 left-[47.35px] top-[25.10px] absolute bg-slate-400 rounded-[10px]" />
+            <div className="w-1.5 h-4 left-0 top-[25.10px] absolute bg-slate-400 rounded-[10px]" />
+            <div className="w-2 h-2 left-[15.21px] top-[10.13px] absolute bg-white rounded-full" />
+            <div className="w-2 h-2 left-[30.41px] top-[10.13px] absolute bg-white rounded-full" />
+            <div className="w-1 h-1 left-[17.38px] top-[12.33px] absolute bg-neutral-400 rounded-full" />
+            <div className="w-1 h-1 left-[32.58px] top-[12.33px] absolute bg-neutral-400 rounded-full" />
+            <div className="w-0.5 h-1.5 left-[26.07px] top-0 absolute bg-slate-400" />
+        </div> */}
+        <div className="w-44 h-0 left-0 top-[25px] absolute outline outline-1 outline-white"></div>
+        <div className="w-8 h-8 left-[180px] top-2 absolute bg-pink-600" />
+        <div className="left-[230px] top-[6px] absolute justify-start text-white text-2xl font-bold font-['Space_Mono']">Work</div>
+      </div>
+
+      {/* Email Section Tag*/}
+      <div className="left-[85px] top-[154px] absolute justify-start text-white text-sm font-semibold font-['Inter']">Email</div>
+    <img className="w-6 h-6 left-[48px] top-[145px] absolute origin-top-left" src={emailIcon} Alt="Email"/>
+      
+
+      {/* Search Bar - Simplified */}
+        <div>
             <input
               type="text"
               placeholder="Search messages..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm placeholder-gray-400"
+          className="w-[1317px] h-10 left-[50px] top-[195px] absolute bg-white/5 rounded-[10px] text-sm font-normal font-['Inter'] 
+              focus:ring-2 focus:ring-blue-500 focus:border-transparent border-gray-300 pl-10 pr-3 py-2 focus:bg-white 
+              transition-colors"
             />
           </div>
-        </div>
-      </div>
+     
 
-      {/* Main Content with Sidebar - Outlook Style */}
-      <div className="flex-1 flex overflow-hidden min-h-0 items-stretch">
+     {/* Main Content with Sidebar - Outlook Style */}
+        <div className="flex h-[800px] left-[77px] top-[250px] absolute bg-sky-950 rounded-lg shadow">
         {/* Left Sidebar - Folders & Accounts (Resizable) */}
         <div
-          className="bg-gray-50 border-r border-gray-200 flex flex-col flex-shrink-0 h-full"
-          style={{ width: sidebarWidth }}
+          className="flex flex-col flex-shrink-0 h-full"
+          style={{ width: sidebarWidth, boxShadow: '4px 0 8px rgba(0,0,0,0.3), 12px 0 24px rgba(0,0,0,0.15)' }}
         >
           {/* Scrollable Content */}
-          <div className="flex-1 overflow-y-auto">
-            {/* Account Selector - Shows full email addresses */}
-            <div className="p-3 border-b border-gray-200 flex-shrink-0">
-              <div className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Accounts</div>
+          <div className="bg-sky-950 flex-1 overflow-y-auto scroll-smooth"
+            style={{ boxShadow: '4px 0 8px rgba(0,0,0,0.3), 12px 0 24px rgba(0,0,0,0.15)' }}
+          >
+            <div className="flex flex-col justify-start items-start gap-2.5">
+              {/* <div className="left-[1279px] top-[14px] absolute justify-start text-white text-base font-normal font-['Open_Sans']">Accounts</div> */}
               {/* All Accounts option */}
+              <span className="justify-center px-4 text-slate-200 text-sm font-bold font-['Open_Sans']">All Accounts</span>
+              <span className="text-xs px-2 text-slate-200 flex-shrink-0">{connectedAccounts.filter(a => a.sourceId === 'gmail').length === 0
+                ? "No accounts" : `${connectedAccounts.filter(a => a.sourceId === 'gmail').length} accounts`}</span>
               <button
                 onClick={() => setSelectedAccountId('all')}
-                className={`w-full px-2 py-2 rounded-lg text-sm font-medium text-left flex items-center gap-2 mb-1 transition-colors
-                ${selectedAccountId === 'all' ? 'bg-blue-100 text-blue-700' : 'text-gray-700 hover:bg-gray-100'}`}
+                className={`max-w-screen- xl rounded-lg text-sm font-medium text-left flex items-center gap-2 mb-1 transition-colors
+                ${selectedAccountId === 'all' ? 'bg-blue-100 text-blue-700' : 'text-slate-200 hover:bg-slate-100'}`}
               >
-                <div className="w-3 h-3 rounded-full bg-gradient-to-r from-blue-500 via-green-500 to-purple-500 flex-shrink-0" />
-                <span className="flex-1 truncate">All Accounts</span>
-                <span className="text-xs text-gray-400 flex-shrink-0">{connectedAccounts.filter(a => a.sourceId === 'gmail').length}</span>
               </button>
               {/* Individual accounts - Full email display */}
               {connectedAccounts.filter(a => a.sourceId === 'gmail').map(acc => {
@@ -2446,9 +2474,9 @@ const InboxView = ({ activeInboxSubtab = 'email' }) => {
             </div>
 
             {/* Folder List - No scroll, display all */}
-            <div className="flex-shrink-0 py-2">
-              <div className="px-3 py-1">
-                <div className="text-xs font-medium text-gray-500 uppercase tracking-wider">Folders</div>
+            <div className="flex-shrink-0 py-2 flex-1 flex-col justify-start items-start gap-2.5 ">
+              <div className="px-3 py-1.5">
+                <div className="text-xs font-medium text-slate-300 uppercase tracking-wider">Folders</div>
               </div>
               {[
                 { id: 'INBOX', name: 'Inbox', icon: InboxIcon },
@@ -2470,13 +2498,13 @@ const InboxView = ({ activeInboxSubtab = 'email' }) => {
                     onClick={() => setSelectedFolder(folder.id)}
                     className={`w-full px-4 py-1.5 flex items-center gap-3 text-sm transition-colors ${isActive
                       ? 'bg-blue-100 text-blue-700 font-medium border-r-2 border-blue-600'
-                      : 'text-gray-600 hover:bg-gray-100'
+                      : 'text-slate-400 hover:bg-slate-100/50'
                       }`}
                   >
                     <FolderIcon className="w-4 h-4" />
                     <span className="flex-1 text-left">{folder.name}</span>
                     {count > 0 && (
-                      <span className={`px-1.5 py-0.5 rounded-full text-xs font-medium ${isActive ? 'bg-blue-200 text-blue-800' : 'bg-gray-200 text-gray-600'
+                      <span className={`px-1.5 py-0.5 rounded-full text-xs font-medium ${isActive ? 'bg-blue-200 text-blue-800' : 'bg-slate-100 text-slate-200'
                         }`}>
                         {count}
                       </span>
@@ -2485,37 +2513,36 @@ const InboxView = ({ activeInboxSubtab = 'email' }) => {
                 );
               })}
             </div>
+            </div>
 
-          </div>
 
           {/* New Email Button */}
-          <div className="p-3 border-t border-gray-200 flex-shrink-0">
+          <div className="p-3 bg-sky-950 flex-shrink-0" style={{ boxShadow: '0 -2px 4px rgba(0,0,0,0.1)' }} >
             <button
               onClick={handleNewEmail}
               disabled={connectedAccounts.length === 0}
-              className="w-full px-3 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <PencilSquareIcon className="w-4 h-4" />
-              New Email
+              className="w-full flex items-end justify-center"
+              >
+              <img src={composeIcon} alt="Compose New Email" className="w-4 h-4 left-[60px]" />
             </button>
           </div>
         </div>
 
         {/* Resize Handle - Sidebar */}
         <div
-          className="w-1.5 bg-gray-200 hover:bg-blue-400 cursor-col-resize flex-shrink-0 transition-colors active:bg-blue-500 h-full"
+          className="w-1 bg-slate-200cursor-col-resize flex-shrink-0 transition-colors active:bg-slate-300 h-full"
           onMouseDown={(e) => handleResizeStart(e, 'sidebar')}
         />
 
         {/* Message List (Resizable) */}
         <div
-          className="border-r border-gray-200 flex flex-col bg-white flex-shrink-0 h-full"
-          style={{ width: messageListWidth }}
+          className="flex flex-col bg-sky-950 flex-shrink-0 h-full"
+          style={{ width: messageListWidth, boxShadow: '4px 0 8px rgba(0,0,0,0.3), 12px 0 24px rgba(0,0,0,0.15)' }}
         >
           {/* Actions Bar */}
-          <div className="px-3 py-2 border-b border-gray-100 bg-gray-50 flex items-center gap-1">
+          {/* <div className="px-3 py-2 border-b border-gray-100 bg-sky-950 flex items-center gap-1">
             {/* Refresh button */}
-            {connectedAccounts.length > 0 && (
+            {/* {connectedAccounts.length > 0 && (
               <button
                 onClick={handleRefreshMessages}
                 disabled={messagesLoading}
@@ -2531,8 +2558,9 @@ const InboxView = ({ activeInboxSubtab = 'email' }) => {
             <button className="p-1.5 text-gray-400 hover:text-gray-600 rounded" title="Mark all as read">
               <CheckCircleIcon className="w-4 h-4" />
             </button>
-          </div>
-          <div ref={messageListContainerRef} className="flex-1 overflow-y-auto" style={{ overflowAnchor: 'none' }}>
+          </div> */} 
+          
+          <div ref={messageListContainerRef} className="flex-1 overflow-y-auto" style={{ overflowAnchor: 'none', boxShadow: '4px 0 8px rgba(0,0,0,0.3), 12px 0 24px rgba(0,0,0,0.15)' }}>
             {/* Account error banner - shown when token refresh fails */}
             {accountErrors.length > 0 && (
               <div className="mx-2 mt-2 mb-1">
@@ -2557,8 +2585,8 @@ const InboxView = ({ activeInboxSubtab = 'email' }) => {
             )}
 
             {/* Loading state for initial load */}
-            {accountsLoading && (
-              <div className="flex flex-col items-center justify-center h-32 text-gray-400">
+            {!accountsLoading && (     // Remove bang from accountsLoading
+              <div className="flex flex-col items-center justify-center h-32 text-slate-200">
                 <ArrowPathIcon className="w-8 h-8 animate-spin mb-2" />
                 <p className="text-sm">Loading accounts...</p>
               </div>
@@ -2572,13 +2600,13 @@ const InboxView = ({ activeInboxSubtab = 'email' }) => {
             ))}
 
             {/* Infinite scroll sentinel - triggers auto-load when visible (Outlook style) */}
-            {!accountsLoading && filteredMessages.length > 0 && (
+            {accountsLoading && filteredMessages.length > 0 && (
               <div ref={scrollSentinelRef} className="h-1" />
             )}
 
             {/* Loading more indicator at bottom */}
             {loadingMore && (
-              <div className="flex items-center justify-center py-4 text-gray-400">
+              <div className="flex items-center justify-center py-4 text-slate-400">
                 <ArrowPathIcon className="w-5 h-5 animate-spin" />
                 <span className="ml-2 text-sm">Loading more messages...</span>
               </div>
@@ -2586,17 +2614,17 @@ const InboxView = ({ activeInboxSubtab = 'email' }) => {
 
             {/* End of messages indicator */}
             {!accountsLoading && filteredMessages.length > 0 && !hasMoreMessages && !loadingMore && (
-              <div className="flex items-center justify-center py-3 text-gray-400 text-xs">
+              <div className="flex items-center justify-center py-3 text-slate-400 text-xs">
                 — End of messages —
               </div>
             )}
 
-            {!accountsLoading && filteredMessages.length === 0 && (
-              <div className="flex flex-col items-center justify-center h-full text-gray-400 p-8">
+            {accountsLoading && filteredMessages.length === 0 && (  //Add bang to accountsLoading
+              <div className="flex flex-col items-center justify-center h-full text-slate-400 p-8">
                 <InboxIcon className="w-12 h-12 mb-3" />
                 {connectedAccounts.length === 0 ? (
                   <>
-                    <p className="text-lg font-medium text-gray-500">No accounts connected</p>
+                    <p className="text-lg font-medium text-slate-500">No accounts connected</p>
                     <p className="text-sm mb-4">Connect your Gmail account to see your emails here</p>
                     <button
                       onClick={() => {
@@ -2605,7 +2633,7 @@ const InboxView = ({ activeInboxSubtab = 'email' }) => {
                           .find(s => s.id === 'gmail');
                         if (gmailIntegration) handleConnectSource(gmailIntegration);
                       }}
-                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
+                      className="px-4 py-2 bg-white/10 text-slate-200 rounded-lg hover:bg-slate-600 transition-colors flex items-center gap-2"
                     >
                       <PlusIcon className="w-4 h-4" />
                       Connect Gmail
@@ -2613,7 +2641,7 @@ const InboxView = ({ activeInboxSubtab = 'email' }) => {
                   </>
                 ) : (
                   <>
-                    <p className="text-lg font-medium text-gray-500">No messages found</p>
+                    <p className="text-lg font-medium text-slate-500">No messages found</p>
                     <p className="text-sm">Your inbox is empty or try adjusting your filters</p>
                   </>
                 )}
@@ -2624,7 +2652,7 @@ const InboxView = ({ activeInboxSubtab = 'email' }) => {
 
         {/* Resize Handle - Message List */}
         <div
-          className="w-1.5 bg-gray-200 hover:bg-blue-400 cursor-col-resize flex-shrink-0 transition-colors active:bg-blue-500 h-full"
+          className="w-1 bg-slate-200cursor-col-resize flex-shrink-0 transition-colors active:bg-slate-300 h-full"
           onMouseDown={(e) => handleResizeStart(e, 'messageList')}
         />
 

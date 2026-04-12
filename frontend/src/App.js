@@ -22,8 +22,8 @@ import {
 // Feature components
 import { Profile } from "./components/profile";
 import { OnboardingWizard } from "./components/onboarding";
-import { UnifiedSidebar } from "./components/dashboard";
-import { CareerAgent, TravelAgent, BodyAgent } from "./components/agents";
+// import { UnifiedSidebar } from "./components/dashboard";
+import { CareerAgent, TravelAgent, BodyAgent, WorkAgent } from "./components/agents";
 import { NewLandingPage } from "./components/landing";
 import { ErrorBoundary } from "./components/ui";
 import WorkPage from "./components/work/WorkPage";
@@ -96,9 +96,9 @@ function App() {
               <Route
                 path="/dashboard"
                 element={
-                  <PrivateRoute>
-                    <UnifiedSidebar />
-                  </PrivateRoute>
+                  // <PrivateRoute>
+                    <WorkAgent />
+                   // </PrivateRoute> */}
                 }
               />
               <Route
