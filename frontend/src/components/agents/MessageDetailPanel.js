@@ -1149,11 +1149,12 @@ function MessageDetailPanel({
 };
 
   return (
-    <div className="h-full flex flex-col bg-sky-950 overflow-hidden">
+<div className="w-[1440px] h-[924px] relative overflow-hidden">
+    {/* <div className=" w-full h-screen flex flex-col bg-sky-950 overflow-hidden"> */}
       {/* Gmail-Style Header with Actions */}
-      <div className="flex-shrink-0 border-b border-gray-200 bg-white">
+      <div className="flex-shrink-0 border-b border-slate-200 bg-sky-950 px-4 py-2 flex items-center justify-between">
         {/* Action Toolbar - Gmail Style Compact */}
-        <div className="px-2 py-1 flex items-center justify-end border-b border-gray-100">
+        <div className="px-2 py-1 flex items-center justify-end border-b border-slate-100">
           <div className="flex items-center">
             {/* Reply */}
             <button
@@ -1195,7 +1196,7 @@ function MessageDetailPanel({
             )}
 
             {/* Separator */}
-            <div className="w-px h-4 bg-gray-300 mx-1" />
+            <div className="w-px h-4 bg-slate-300 mx-1" />
 
             {/* Archive button - only show if not in trash/archive */}
             {selectedFolder !== 'TRASH' && selectedFolder !== 'ARCHIVE' && (
@@ -1247,20 +1248,20 @@ function MessageDetailPanel({
             <div className="relative">
               <button
                 onClick={() => setShowSnoozeMenu(!showSnoozeMenu)}
-                className="p-1.5 text-gray-600 hover:bg-gray-100 rounded-full transition-colors"
+                className="p-1.5 text-slate-300 hover:bg-white/10 rounded-full transition-colors"
                 title="More"
               >
                 <EllipsisHorizontalIcon className="w-4 h-4" />
               </button>
               {showSnoozeMenu && (
-                <div className="absolute top-full right-0 mt-1 w-48 bg-white rounded-lg shadow-xl border border-gray-200 py-1 z-20">
+                <div className="absolute top-full right-0 mt-1 w-48 bg-sky-950 text-slate-300 rounded-lg shadow-xl border border-slate-200 py-1 z-20">
                   {SNOOZE_OPTIONS.map(option => (
                     <button
                       key={option.id}
-                      className="w-full text-left px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 flex items-center justify-between"
+                      className="w-full text-left px-3 py-1.5 text-sm text-slate-300 hover:bg-white/10 flex items-center justify-between"
                     >
                       <span>{option.label}</span>
-                      {option.time && <span className="text-xs text-gray-400">{option.time}</span>}
+                      {option.time && <span className="text-xs text-slate-400">{option.time}</span>}
                     </button>
                   ))}
                 </div>
@@ -1271,7 +1272,7 @@ function MessageDetailPanel({
 
         {/* Subject Line - Compact */}
         <div className="px-4 pt-2 pb-1">
-          <h2 className="text-base font-semibold text-gray-900 leading-tight">
+          <h2 className="text-base font-semibold text-slate-300 leading-tight">
             {message.subject || '(No subject)'}
           </h2>
         </div>
@@ -2229,4 +2230,4 @@ function MessageDetailPanel({
   );
 }
 
-export default React.memo(MessageDetailPanel);
+export default MessageDetailPanel;

@@ -2603,7 +2603,7 @@ const InboxView = ({ activeInboxSubtab = 'email' }) => {
         
         {/*No results found message */}
         {searchQueryMessages.length === 0 && searchQuery && (
-          <div className="absolute left-0 top-full mt-1 w-full bg-sky-950 text-slate-400 text-sm p-2">
+          <div className="absolute left-0 top-full mt-1 w-full bg-sky-950 text-slate-400 text-sm p-2 z-40 rounded">
             No messages found.
           </div>
         )}
@@ -8549,9 +8549,9 @@ const TasksView = ({ activeSubTab = 'backlog' }) => {
                           {/* Data Sources Section */}
                           <div>
                             <div className="flex items-center justify-between mb-3">
-                              <h5 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Data Sources</h5>
+                              <h5 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Data Sources</h5>
                               {connectedAccounts.filter(acc => acc.sourceId === 'gmail' || acc.sourceId === 'outlook').length > 0 && (
-                                <span className="text-xs text-gray-400">
+                                <span className="text-xs text-slate-400">
                                   {connectedAccounts.filter(acc => acc.sourceId === 'gmail' || acc.sourceId === 'outlook').length} connected
                                 </span>
                               )}
@@ -8561,8 +8561,8 @@ const TasksView = ({ activeSubTab = 'backlog' }) => {
                               {/* Email Source */}
                               <div className={`rounded-xl border-2 transition-all ${
                                 extractionSettings.sources.includes('email')
-                                  ? 'border-purple-300 bg-purple-50/50'
-                                  : 'border-gray-100 bg-gray-50/50 hover:border-gray-200'
+                                  ? 'border-blue-300 bg-blue-600'
+                                  : 'bg-slate-400 hover:bg-white/10'
                               }`}>
                                 <label
                                   className="flex items-center gap-3 p-3 cursor-pointer"
@@ -8589,7 +8589,7 @@ const TasksView = ({ activeSubTab = 'backlog' }) => {
                                         : 'text-gray-500'
                                     }`} />
                                   </div>
-                                  <div className="flex-1 min-w-0">
+                                  {/* <div className="flex-1 min-w-0">
                                     <span className={`text-sm font-medium ${
                                       extractionSettings.sources.includes('email')
                                         ? 'text-gray-900'
@@ -8604,7 +8604,7 @@ const TasksView = ({ activeSubTab = 'backlog' }) => {
                                             : `${extractionSettings.selectedAccounts.email.length} of ${connectedAccounts.filter(acc => acc.sourceId === 'gmail' || acc.sourceId === 'outlook').length} accounts`}
                                       </p>
                                     )}
-                                  </div>
+                                  </div> */}
                                   {extractionSettings.sources.includes('email') && connectedAccounts.filter(acc => acc.sourceId === 'gmail' || acc.sourceId === 'outlook').length > 1 && (
                                     <ChevronDownIcon className="w-4 h-4 text-gray-400" />
                                   )}

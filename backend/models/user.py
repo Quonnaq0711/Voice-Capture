@@ -47,4 +47,4 @@ class User(Base):
     notebooks = relationship("Notebook", back_populates="user", cascade="all, delete-orphan")
     notes = relationship("Note", back_populates="user", cascade="all, delete-orphan")
 
-    user_data = relationship("UserData", back_populates="user", cascade="all, delete-orphans")
+    user_data = relationship("UserData", back_populates="user", cascade="all, delete-orphan")
