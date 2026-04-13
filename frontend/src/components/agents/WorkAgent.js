@@ -96,6 +96,7 @@ import {
   Cog6ToothIcon,
   ArrowDownTrayIcon,
   MicrophoneIcon,
+  Bars3Icon,
 } from '@heroicons/react/24/outline';
 import {
   CheckCircleIcon as CheckCircleSolidIcon,
@@ -1337,6 +1338,24 @@ const InboxView = ({ activeInboxSubtab = 'email' }) => {
     }
   }, [user?.id, selectedFolder, selectedAccountId, fetchFullMessage]);
 
+  const searchQueryMessages = useMemo(() => {
+  if (!searchQuery.trim()) return realMessages;
+  const q = searchQuery.toLowerCase();
+  return realMessages.filter(msg =>
+    [
+      msg.subject,
+      msg.sender,
+      msg.from,
+      msg.body,
+      msg.snippet,
+      msg.to,
+      msg.recipient,
+    ]
+      .filter(Boolean)
+      .some(field => field.toLowerCase().includes(q))
+  );
+}, [realMessages, searchQuery]);
+
   // ==================== Compose Helper Functions ====================
 
   // Extract all known recipients from messages for autocomplete
@@ -2349,7 +2368,7 @@ const InboxView = ({ activeInboxSubtab = 'email' }) => {
 
   // Default: Email view
   return (
-    <div className="w-full h-screen relative bg-sky-950 overflow-y-auto">
+    < div className="w-full h-screen relative bg-sky-950 overflow-y-auto">
       {/* OAuth Success/Error Notifications */}
       {oauthSuccess && (
         <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 px-4 py-2.5 bg-green-100 border border-green-300 text-green-800 rounded-xl shadow-lg animate-fade-in">
@@ -2398,32 +2417,58 @@ const InboxView = ({ activeInboxSubtab = 'email' }) => {
       
 
       {/* Search Bar - Simplified */}
-        <div>
+        <div className=" flex items-center px-3 py-2">
             <input
               type="text"
               placeholder="Search messages..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-[1317px] h-10 left-[50px] top-[195px] absolute bg-white/10 rounded-[10px] text-sm font-normal font-['Inter'] placeholder-slate-200 
-              focus:ring-2 focus:ring-slate-500 focus:border-transparent border-slate-300 pl-10 pr-3 py-2 focus:bg-white/100
+              className="w-[1317px] h-6 left-[37px] top-[195px] absolute bg-white/10 rounded-[10px] text-sm font-normal font-['Inter'] placeholder-slate-500 
+              focus:ring-2 focus:ring-slate-500 focus:border-transparent pl-10 pr-3 py-2 focus:bg-white/100
               transition-colors"
-            />
+        />
+        {/* Results found indicator */}
+        <div className="absolute left-[37px] top-[227px] mt-1 px-3 py-1 bg-sky-950 text-slate-400 text-sm rounded">
+        {searchQuery && (
+    <button
+      onClick={() => setSearchQuery('')}
+      className="absolute right-5 text-slate-400 hover:text-slate-200 transition-colors"
+    >
+      <XMarkIcon className="w-6 h-6" />
+    </button>
+        )}
+        
+        {/*No results found message */}
+        {searchQueryMessages.length === 0 && searchQuery && (
+          <div className="absolute left-0 top-full mt-1 w-full bg-sky-950 text-slate-400 text-sm p-2">
+            No messages found.
           </div>
+        )}
+      <button
+        onClick={() => setSearchQuery('')}
+        className="absolute right-2 text-slate-400 hover:text-slate-200 transition-colors"
+      >
+        <Bars3Icon className="w-6 h-6  top-[186px] left-[1368px] absolute" />
+      </button>
+        </div>
+        </div>
+  
      
 
      {/* Main Content with Sidebar - Outlook Style */}
-        <div className="flex h-[800px] left-[77px] top-[250px] absolute bg-sky-950 rounded-lg shadow">
+        <div className="flex w-[1480px] h-[calc(100vh-250px)] left-[37px] top-[250px] pr-6 absolute bg-sky-950 rounded-lg shadow">
         {/* Left Sidebar - Folders & Accounts (Resizable) */}
         <div
           className="flex flex-col flex-shrink-0 h-full"
-          style={{ width: sidebarWidth, boxShadow: '4px 0 8px rgba(0,0,0,0.3), 12px 0 24px rgba(0,0,0,0.15)' }}
+          style={{ width: sidebarWidth }}
         >
           {/* Scrollable Content */}
-          <div className="bg-sky-950 flex-1 overflow-y-auto scroll-smooth"
-            style={{ boxShadow: '4px 0 8px rgba(0,0,0,0.3), 12px 0 24px rgba(0,0,0,0.15)' }}
+          <div className="bg-sky-950 flex-1 "
+            // overflow-y-auto"
+            // style={{ boxShadow: '4px 0 8px rgba(0,0,0,0.3), 12px 0 24px rgba(0,0,0,0.15)' }}
           >
-            <div className="flex flex-col justify-start items-start gap-2.5">
-              {/* <div className="left-[1279px] top-[14px] absolute justify-start text-white text-base font-normal font-['Open_Sans']">Accounts</div> */}
+            <div className="flex flex-col justify-start items-start gap-2.5  border-b-slate-200">
+              
               {/* All Accounts option */}
               <span className="justify-center px-4 text-slate-200 text-sm font-bold font-['Open_Sans']">All Accounts</span>
               <span className="text-xs px-2 text-slate-200 flex-shrink-0">{connectedAccounts.filter(a => a.sourceId === 'gmail').length === 0
@@ -2434,6 +2479,7 @@ const InboxView = ({ activeInboxSubtab = 'email' }) => {
                 ${selectedAccountId === 'all' ? 'bg-blue-100 text-blue-700' : 'text-slate-200 hover:bg-slate-100'}`}
               >
               </button>
+              
               {/* Individual accounts - Full email display */}
               {connectedAccounts.filter(a => a.sourceId === 'gmail').map(acc => {
                 const color = getAccountColor(acc.email);
@@ -2475,7 +2521,7 @@ const InboxView = ({ activeInboxSubtab = 'email' }) => {
             {/* Folder List - No scroll, display all */}
             <div className="flex-shrink-0 py-2 flex-1 flex-col justify-start items-start gap-2.5 ">
               <div className="px-3 py-1.5">
-                <div className="text-xs font-medium text-slate-300 uppercase tracking-wider">Folders</div>
+                <div className="text-xs font-medium text-slate-200 uppercase tracking-wider">Folders</div>
               </div>
               {[
                 { id: 'INBOX', name: 'Inbox', icon: InboxIcon },
@@ -2497,7 +2543,7 @@ const InboxView = ({ activeInboxSubtab = 'email' }) => {
                     onClick={() => setSelectedFolder(folder.id)}
                     className={`w-full px-4 py-1.5 flex items-center gap-3 text-sm transition-colors ${isActive
                       ? 'bg-blue-100 text-blue-700 font-medium border-r-2 border-blue-600'
-                      : 'text-slate-400 hover:bg-slate-100/50'
+                      : 'text-slate-200 hover:bg-white/10'
                       }`}
                   >
                     <FolderIcon className="w-4 h-4" />
@@ -2516,7 +2562,7 @@ const InboxView = ({ activeInboxSubtab = 'email' }) => {
 
 
           {/* New Email Button */}
-          <div className="p-3 bg-sky-950 flex-shrink-0" style={{ boxShadow: '0 -2px 4px rgba(0,0,0,0.1)' }} >
+          <div className="p-3 bg-sky-950 flex-shrink-0">
             <button
               onClick={handleNewEmail}
               disabled={connectedAccounts.length === 0}
@@ -2536,7 +2582,7 @@ const InboxView = ({ activeInboxSubtab = 'email' }) => {
         {/* Message List (Resizable) */}
         <div
           className="flex flex-col bg-sky-950 flex-shrink-0 h-full"
-          style={{ width: messageListWidth, boxShadow: '4px 0 8px rgba(0,0,0,0.3), 12px 0 24px rgba(0,0,0,0.15)' }}
+          style={{ width: messageListWidth }}
         >
           {/* Actions Bar */}
           {/* <div className="px-3 py-2 border-b border-gray-100 bg-sky-950 flex items-center gap-1">
@@ -2559,7 +2605,9 @@ const InboxView = ({ activeInboxSubtab = 'email' }) => {
             </button>
           </div> */} 
           
-          <div ref={messageListContainerRef} className="flex-1 overflow-y-auto" style={{ overflowAnchor: 'none', boxShadow: '4px 0 8px rgba(0,0,0,0.3), 12px 0 24px rgba(0,0,0,0.15)' }}>
+          <div ref={messageListContainerRef} className="flex-1 overflow-y-auto"
+            // style={{ overflowAnchor: 'none', boxShadow: '4px 0 8px rgba(0,0,0,0.3), 12px 0 24px rgba(0,0,0,0.15)' }}
+          >
             {/* Account error banner - shown when token refresh fails */}
             {accountErrors.length > 0 && (
               <div className="mx-2 mt-2 mb-1">
@@ -2656,7 +2704,9 @@ const InboxView = ({ activeInboxSubtab = 'email' }) => {
         />
 
         {/* Message Detail - Takes remaining space */}
-        <div className="flex-1 min-w-0 h-full overflow-hidden">
+        <div className="flex-1 min-w-0 h-full overflow-hidden"
+          // style={{ boxShadow: '4px 0 8px rgba(0.3,0,0,0.3), 12px 0 24px rgba(0.15,0,0,0.15)' }}
+        >
           <MessageDetailPanel
             message={selectedMessage}
             bodyLoading={messageBodyLoading}

@@ -1158,7 +1158,7 @@ function MessageDetailPanel({
             {/* Reply */}
             <button
               onClick={() => handleReply(message)}
-              className="p-1.5 text-gray-600 hover:bg-gray-100 rounded-full transition-colors"
+              className="p-1.5 text-slate-300 hover:bg-white/10 rounded-full transition-colors"
               title="Reply"
             >
               <ArrowUturnLeftIcon className="w-4 h-4" />
@@ -1166,7 +1166,7 @@ function MessageDetailPanel({
             {/* Reply All */}
             <button
               onClick={() => handleReplyAll(message)}
-              className="p-1.5 text-gray-600 hover:bg-gray-100 rounded-full transition-colors"
+              className="p-1.5 text-slate-300 hover:bg-white/10 rounded-full transition-colors"
               title="Reply all"
             >
               <ArrowPathRoundedSquareIcon className="w-4 h-4" />
@@ -1174,7 +1174,7 @@ function MessageDetailPanel({
             {/* Forward */}
             <button
               onClick={() => handleForward(message)}
-              className="p-1.5 text-gray-600 hover:bg-gray-100 rounded-full transition-colors"
+              className="p-1.5 text-slate-300 hover:bg-white/10 rounded-full transition-colors"
               title="Forward"
             >
               <PaperAirplaneIcon className="w-4 h-4" />
@@ -1187,7 +1187,7 @@ function MessageDetailPanel({
             {onCreateTask && (
               <button
                 onClick={() => onCreateTask(message)}
-                className="p-1.5 text-gray-600 hover:bg-blue-100 hover:text-blue-600 rounded-full transition-colors"
+                className="p-1.5 text-slate-300 hover:bg-white/10 rounded-full transition-colors"
                 title="Create Task from Email"
               >
                 <ClipboardDocumentListIcon className="w-4 h-4" />
@@ -1202,7 +1202,7 @@ function MessageDetailPanel({
               <button
                 onClick={() => handleArchiveMessage(message)}
                 disabled={actionLoading === 'archive'}
-                className={`p-1.5 text-gray-600 hover:bg-gray-100 rounded-full transition-colors ${actionLoading === 'archive' ? 'opacity-50' : ''
+                className={`p-1.5 text-slate-300 hover:bg-white/10 rounded-full transition-colors ${actionLoading === 'archive' ? 'opacity-50' : ''
                   }`}
                 title="Archive"
               >
@@ -1214,7 +1214,7 @@ function MessageDetailPanel({
               <button
                 onClick={() => handleUntrashMessage(message)}
                 disabled={actionLoading === 'untrash'}
-                className={`p-1.5 text-gray-600 hover:bg-gray-100 rounded-full transition-colors ${actionLoading === 'untrash' ? 'opacity-50' : ''
+                className={`p-1.5 text-slate-300 hover:bg-white/10 rounded-full transition-colors ${actionLoading === 'untrash' ? 'opacity-50' : ''
                   }`}
                 title="Move to Inbox"
               >
@@ -1224,7 +1224,7 @@ function MessageDetailPanel({
               <button
                 onClick={() => handleTrashMessage(message)}
                 disabled={actionLoading === 'trash'}
-                className={`p-1.5 text-gray-600 hover:bg-gray-100 rounded-full transition-colors ${actionLoading === 'trash' ? 'opacity-50' : ''
+                className={`p-1.5 text-slate-300 hover:bg-white/10 rounded-full transition-colors ${actionLoading === 'trash' ? 'opacity-50' : ''
                   }`}
                 title="Delete"
               >

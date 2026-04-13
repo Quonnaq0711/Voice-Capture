@@ -33,6 +33,7 @@ import { LegalPage } from './components/legal';
 // Toast notifications
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
+import MessageDetailPanel from "./components/agents/MessageDetailPanel";
 
 // Placeholder components for agent routes
 const AgentPage = ({ agentName }) => (
@@ -94,10 +95,18 @@ function App() {
                 }
               />
               <Route
-                path="/dashboard"
+                path="/inbox"
                 element={
                   // <PrivateRoute>
                     <WorkAgent />
+                   // </PrivateRoute> */}
+                }
+              />
+              <Route
+                path="/inbox2"
+                element={
+                  // <PrivateRoute>
+                    <MessageDetailPanel />
                    // </PrivateRoute> */}
                 }
               />

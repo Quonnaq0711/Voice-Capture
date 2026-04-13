@@ -4,7 +4,7 @@
 
 body {
   margin: 0;
-  background-color: 'bg-gradient-to-br from-sky-950 via-slate-900 to-sky-950 overflow-hidden';
+  background-color: 'bg-gradient-to-br from-sky-950 via-slate-900 to-sky-950';
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
     'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
     sans-serif;
