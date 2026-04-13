@@ -427,6 +427,44 @@ services:
               capabilities: [gpu]
     runtime: nvidia
 
+  career-agent-staging:
+    build:
+      context: .
+      dockerfile: modules/agents/career/Dockerfile.prod
+    container_name: idii-career-agent-staging
+    restart: unless-stopped
+    ports:
+      - "8002:8002"
+    env_file:
+      - .env.staging
+    environment:
+      # vLLM API endpoint (OpenAI-compatible)
+      VLLM_API_BASE: "http://vllm-server:8888/v1"
+      DB_TYPE: postgresql
+      DB_HOST: db-staging
+      DB_PORT: 5432
+      DB_NAME: idii-staging
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+    depends_on:
+      - db-staging
+      - vllm-server
+    networks:
+      - staging-network
+    volumes:
+      # Share resumes with backend
+      - /home/idii/data/user-uploads/resumes:/app/resumes
+      # SQLite backup kept for migration reference
+      - /home/idii/data/database:/app/db-backup:ro
+    # Use default CMD from Dockerfile (gunicorn with 4 workers)
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.5'
+        reservations:
+          memory: 1G
+
   work-agent-staging:
     build:
       context: .

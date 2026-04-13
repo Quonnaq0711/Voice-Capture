@@ -40,8 +40,11 @@ class User(Base):
     activities = relationship("UserActivity", back_populates="user", cascade="all, delete-orphan")
     daily_recommendations = relationship("DailyRecommendation", back_populates="user", cascade="all, delete-orphan", lazy="dynamic")
     refresh_tokens = relationship("RefreshToken", back_populates="user", cascade="all, delete-orphan")
+    user_data = relationship("UserData", back_populates="user", cascade="all, delete-orphans")
     todos = relationship("Todo", back_populates="user", cascade="all, delete-orphan")
     oauth_tokens = relationship("OAuthToken", back_populates="user", cascade="all, delete-orphan")
     extracted_tasks = relationship("ExtractedTask", back_populates="user", cascade="all, delete-orphan")
     notebooks = relationship("Notebook", back_populates="user", cascade="all, delete-orphan")
     notes = relationship("Note", back_populates="user", cascade="all, delete-orphan")
+
+    user_data = relationship("UserData", back_populates="user", cascade="all, delete-orphans")
