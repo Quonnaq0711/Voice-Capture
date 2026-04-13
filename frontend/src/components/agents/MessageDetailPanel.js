@@ -1149,8 +1149,12 @@ function MessageDetailPanel({
 };
 
   return (
-<div className="w-[1440px] h-[924px] relative overflow-hidden">
-    {/* <div className=" w-full h-screen flex flex-col bg-sky-950 overflow-hidden"> */}
+    <div className="w-[1440px] h-[924px] relative overflow-hidden">
+  <div className="w-[1440px] h-[924px] left-0 top-0 absolute bg-sky-950/95" />
+      <div
+    className="w-[918px] h-[843px] left-[261px] top-[36px] absolute bg-white/10 rounded-[20px]"
+  />
+
       {/* Gmail-Style Header with Actions */}
       <div className="flex-shrink-0 border-b border-slate-200 bg-sky-950 px-4 py-2 flex items-center justify-between">
         {/* Action Toolbar - Gmail Style Compact */}
@@ -1272,9 +1276,9 @@ function MessageDetailPanel({
 
         {/* Subject Line - Compact */}
         <div className="px-4 pt-2 pb-1">
-          <h2 className="text-base font-semibold text-slate-300 leading-tight">
+          <div className="justify-start text-white text-sm font-semibold font-['Inter']">
             {message.subject || '(No subject)'}
-          </h2>
+          </div>
         </div>
 
         {/* Sender Info Row - Gmail/Outlook Style Compact */}
