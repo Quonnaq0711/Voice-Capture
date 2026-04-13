@@ -126,6 +126,7 @@ import {
   SignalMedium,
   SignalLow,
   Ban,
+  ListFilter
 } from 'lucide-react';
 import emailIcon from '../../assets/email10.png';
 import composeIcon from '../../assets/pencil1.png';
@@ -2503,7 +2504,7 @@ const InboxView = ({ activeInboxSubtab = 'email' }) => {
       }`}
       title="Filter messages"
     >
-      <FunnelIcon className="w-4 h-4" />
+      <ListFilter className="w-4 h-4" />
       {activeFilterCount > 0 && (
         <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-blue-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">
           {activeFilterCount}

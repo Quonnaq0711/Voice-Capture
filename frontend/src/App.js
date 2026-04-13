@@ -106,7 +106,7 @@ function App() {
                 path="/inbox2"
                 element={
                   // <PrivateRoute>
-                    <MessageDetailPanel />
+                    <MessageDetailPanel />  // Remove this route used for designing the message detail panel
                    // </PrivateRoute> */}
                 }
               />
