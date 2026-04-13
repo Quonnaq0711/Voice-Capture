@@ -1338,23 +1338,76 @@ const InboxView = ({ activeInboxSubtab = 'email' }) => {
     }
   }, [user?.id, selectedFolder, selectedAccountId, fetchFullMessage]);
 
+  // Search Bar Filters 
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [filters, setFilters] = useState({
+  status: null,      // 'unread' | 'starred' | 'archived' | 'sent' | null
+  account: null,     // account id or null
+  dateRange: null,   // 'today' | 'week' | 'month' | 'year' | null
+  });
+  
+  const filterRef = useRef(null);
   const searchQueryMessages = useMemo(() => {
-  if (!searchQuery.trim()) return realMessages;
-  const q = searchQuery.toLowerCase();
-  return realMessages.filter(msg =>
-    [
-      msg.subject,
-      msg.sender,
-      msg.from,
-      msg.body,
-      msg.snippet,
-      msg.to,
-      msg.recipient,
-    ]
-      .filter(Boolean)
-      .some(field => field.toLowerCase().includes(q))
-  );
-}, [realMessages, searchQuery]);
+  let result = realMessages;
+
+  // Search query
+  if (searchQuery.trim()) {
+    const q = searchQuery.toLowerCase();
+    result = result.filter(msg =>
+      [msg.subject, msg.sender, msg.from, msg.body, msg.snippet, msg.to, msg.recipient]
+        .filter(Boolean)
+        .some(field => field.toLowerCase().includes(q))
+    );
+  }
+
+    // Status filter
+    if (filters.status === 'read')      result = result.filter(msg => msg.is_read || msg.isRead);
+    if (filters.status === 'unread')    result = result.filter(msg => !msg.is_read && !msg.isRead);
+    if (filters.status === 'starred')   result = result.filter(msg => msg.is_starred || msg.isStarred);
+    if (filters.status === 'archived')  result = result.filter(msg => msg.is_archived || msg.isArchived);
+    if (filters.status === 'sent') result = result.filter(msg => msg.is_sent || msg.isSent);
+    if (filters.status === 'draft') result = result.filter(msg => msg.is_draft || msg.isDraft);
+    if (filters.status === 'trash') result = result.filter(msg => msg.is_trashed || msg.isTrashed);
+    if (filters.status === 'spam') result = result.filter(msg => msg.is_spam || msg.isSpam);
+    if (filters.status === 'important') result = result.filter(msg => msg.priority === 'high' || msg.is_important || msg.isImportant);
+    if (filters.status === 'sender') result = result.filter(msg => msg.from?.email === searchQuery || msg.from?.name === searchQuery);
+    if (filters.status === 'keyword') result = result.filter(msg => (msg.body || '').toLowerCase().includes(searchQuery.toLowerCase()));
+
+    // Account filter
+    if (filters.account) {
+      result = result.filter(msg => msg.account_id === filters.account || msg.accountId === filters.account);
+    }
+
+  // Date range filter
+  if (filters.dateRange) {
+    const now = new Date();
+    const cutoff = {
+      today: new Date(now.setHours(0, 0, 0, 0)),
+      week:  new Date(now.setDate(now.getDate() - 7)),
+      month: new Date(now.setMonth(now.getMonth() - 1)),
+      year:  new Date(now.setFullYear(now.getFullYear() - 1)),
+    }[filters.dateRange];
+    result = result.filter(msg => new Date(msg.date || msg.created_at) >= cutoff);
+  }
+
+  return result;
+}, [realMessages, searchQuery, filters]);
+  
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handler = (e) => {
+      if (filterRef.current && !filterRef.current.contains(e.target)) {
+      setFiltersOpen(false);
+    }
+  };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const activeFilterCount = Object.values(filters).filter(Boolean).length;
+
+  const clearFilters = () => setFilters({ status: null, account: null, dateRange: null });
 
   // ==================== Compose Helper Functions ====================
 
@@ -2368,9 +2421,10 @@ const InboxView = ({ activeInboxSubtab = 'email' }) => {
 
   // Default: Email view
   return (
+  
     < div className="w-full h-screen relative bg-sky-950 overflow-y-auto">
       {/* OAuth Success/Error Notifications */}
-      {oauthSuccess && (
+       {oauthSuccess && (
         <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 px-4 py-2.5 bg-green-100 border border-green-300 text-green-800 rounded-xl shadow-lg animate-fade-in">
           <CheckCircleIcon className="w-5 h-5" />
           <span className="text-sm font-medium">{oauthSuccess}</span>
@@ -2390,7 +2444,7 @@ const InboxView = ({ activeInboxSubtab = 'email' }) => {
       )}
       
       {/* Header */}
-    <div className="w-[1340px] h-16 left-0 top-[35px] absolute">
+    <div className="w-[1340px] h-16 left-0 top-[25px] absolute ">
         <div className="left-[1379px] top-[14px] absolute justify-start text-white text-base font-normal font-['Open_Sans']">Account</div>
         {/* Smartie Icon */}
         {/* <div className="w-14 h-12 left-[1196px] top-[1px] absolute">
@@ -2406,14 +2460,14 @@ const InboxView = ({ activeInboxSubtab = 'email' }) => {
         </div> */}
 
         {/* Work Icon */}
-        <div className="w-44 h-0 left-0 top-[25px] absolute outline outline-1 outline-white"></div>
-        <div className="w-8 h-8 left-[180px] top-2 absolute bg-pink-600" />
-        <div className="left-[230px] top-[6px] absolute justify-start text-white text-2xl font-bold font-['Space_Mono']">Work</div>
+        <div className="w-44 h-0 left-0 top-[20px] absolute outline outline-1 outline-white"></div>
+        <div className="w-8 h-8 left-[180px] top-1 absolute bg-pink-600" />
+        <div className="left-[230px] top-[4px] absolute justify-start text-white text-2xl font-bold font-['Space_Mono']">Work</div>
       </div>
 
       {/* Email Section Tag*/}
-      <div className="left-[85px] top-[154px] absolute justify-start text-white text-sm font-semibold font-['Inter']">Email</div>
-    <img className="w-6 h-6 left-[48px] top-[145px] absolute origin-top-left" src={emailIcon} Alt="Email"/>
+      <div className="left-[85px] top-[134px] absolute justify-start text-white text-sm font-semibold font-['Inter']">Email</div>
+    <img className="w-6 h-6 left-[48px] top-[125px] absolute origin-top-left" src={emailIcon} Alt="Email"/>
       
 
       {/* Search Bar - Simplified */}
@@ -2423,12 +2477,12 @@ const InboxView = ({ activeInboxSubtab = 'email' }) => {
               placeholder="Search messages..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-[1317px] h-6 left-[37px] top-[195px] absolute bg-white/10 rounded-[10px] text-sm font-normal font-['Inter'] placeholder-slate-500 
+              className="w-[1317px] h-6 left-[37px] top-[175px] absolute bg-white/10 rounded-[10px] text-sm font-normal font-['Inter'] placeholder-slate-500 
               focus:ring-2 focus:ring-slate-500 focus:border-transparent pl-10 pr-3 py-2 focus:bg-white/100
               transition-colors"
         />
         {/* Results found indicator */}
-        <div className="absolute left-[37px] top-[227px] mt-1 px-3 py-1 bg-sky-950 text-slate-400 text-sm rounded">
+        <div className="absolute left-[337px] top-[207px] mt-1 px-3 py-1 bg-sky-950 text-slate-400 text-sm rounded flex items-center gap-1">
         {searchQuery && (
     <button
       onClick={() => setSearchQuery('')}
@@ -2436,7 +2490,115 @@ const InboxView = ({ activeInboxSubtab = 'email' }) => {
     >
       <XMarkIcon className="w-6 h-6" />
     </button>
+          )}
+          
+  {/* Filter button */}
+          <div ref={filterRef} className="absolute left-[1020px]  top-[-25px] -translate-y-1/2 z-50">
+    <button
+      onClick={() => setFiltersOpen(prev => !prev)}
+      className={`relative p-1 rounded transition-colors ${
+        filtersOpen || activeFilterCount > 0
+          ? 'text-blue-400 bg-white/10'
+          : 'text-slate-400 hover:text-slate-200 hover:bg-white/10'
+      }`}
+      title="Filter messages"
+    >
+      <FunnelIcon className="w-4 h-4" />
+      {activeFilterCount > 0 && (
+        <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-blue-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">
+          {activeFilterCount}
+        </span>
+      )}
+    </button>
+
+    {/* Dropdown */}
+    {filtersOpen && (
+      <div className="absolute right-0 top-full mt-2 w-56 bg-sky-950 border border-white/10 rounded-xl shadow-xl z-50 overflow-hidden">
+
+        {/* Status */}
+        <div className="px-3 pt-3 pb-1">
+          <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Status</p>
+          <div className="flex flex-wrap gap-1">
+            {['read','unread', 'starred', 'archived', 'sent', 'important', 'sender', 'keyword', 'spam', 'trash', 'draft'].map(s => (
+              <button
+                key={s}
+                onClick={() => setFilters(f => ({ ...f, status: f.status === s ? null : s }))}
+                className={`px-2 py-0.5 rounded-full text-xs font-medium transition-colors capitalize ${
+                  filters.status === s
+                     ? 'bg-white/100 text-blue-700 font-medium border border-blue-300 '
+                    : 'bg-white/20 text-slate-200 hover:bg-white/10'
+                }`}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="border-t border-white/10 mx-3 my-2" />
+
+        {/* Account */}
+        <div className="px-3 pb-2">
+          <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Account</p>
+          <div className="flex flex-col gap-1">
+            {connectedAccounts.map(acc => (
+              <button
+                key={acc.id}
+                onClick={() => setFilters(f => ({ ...f, account: f.account === acc.id ? null : acc.id }))}
+                className={`flex items-center gap-2 px-2 py-1 rounded-lg text-xs transition-colors ${
+                  filters.account === acc.id
+                    ? 'bg-white/100 text-blue-700 font-medium border border-blue-300 '
+                    : 'bg-white/20 text-slate-200 hover:bg-white/10'
+                }`}
+              >
+                <span className="w-2 h-2 rounded-full bg-green-400 flex-shrink-0" />
+                {acc.email || acc.name}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="border-t border-white/10 mx-3 my-2" />
+
+        {/* Date range */}
+        <div className="px-3 pb-3">
+          <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Date Range</p>
+          <div className="flex flex-wrap gap-1">
+            {[
+              { label: 'Today', value: 'today' },
+              { label: 'This Week', value: 'week' },
+              { label: 'This Month', value: 'month' },
+              { label: 'This Year', value: 'year' },
+            ].map(({ label, value }) => (
+              <button
+                key={value}
+                onClick={() => setFilters(f => ({ ...f, dateRange: f.dateRange === value ? null : value }))}
+                className={`px-2 py-0.5 rounded-full text-xs font-medium transition-colors ${
+                  filters.dateRange === value
+                    ? 'bg-white/100 text-blue-700 font-medium border border-blue-300 '
+                    : 'bg-white/20 text-slate-200 hover:bg-white/10'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Clear all */}
+        {activeFilterCount > 0 && (
+          <div className="border-t border-white/10 px-3 py-2">
+            <button
+              onClick={clearFilters}
+              className="w-full text-xs text-red-400 hover:text-red-300 transition-colors text-center"
+            >
+              Clear all filters
+            </button>
+          </div>
         )}
+      </div>
+    )}
+  </div>
         
         {/*No results found message */}
         {searchQueryMessages.length === 0 && searchQuery && (
@@ -2448,7 +2610,7 @@ const InboxView = ({ activeInboxSubtab = 'email' }) => {
         onClick={() => setSearchQuery('')}
         className="absolute right-2 text-slate-400 hover:text-slate-200 transition-colors"
       >
-        <Bars3Icon className="w-6 h-6  top-[186px] left-[1368px] absolute" />
+        {/* <XMarkIcon className="w-6 h-6  top-[186px] left-[68px] absolute" /> */}
       </button>
         </div>
         </div>
@@ -2456,7 +2618,7 @@ const InboxView = ({ activeInboxSubtab = 'email' }) => {
      
 
      {/* Main Content with Sidebar - Outlook Style */}
-        <div className="flex w-[1480px] h-[calc(100vh-250px)] left-[37px] top-[250px] pr-6 absolute bg-sky-950 rounded-lg shadow">
+        <div className="flex w-[1480px] h-[calc(100vh-295px)] left-[37px] top-[250px] pr-6 absolute bg-sky-950 rounded-lg shadow">
         {/* Left Sidebar - Folders & Accounts (Resizable) */}
         <div
           className="flex flex-col flex-shrink-0 h-full"
@@ -4023,6 +4185,7 @@ const InboxView = ({ activeInboxSubtab = 'email' }) => {
         />
       )}
     </div >
+    
   );
 };
 
