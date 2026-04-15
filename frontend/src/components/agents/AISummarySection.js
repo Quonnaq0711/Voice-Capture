@@ -102,17 +102,17 @@ export function AISummarySection({ taskId, bullets, loading, error, fetchBullets
   const btnType = inForm ? 'button' : undefined;
 
   return (
-    <div>
+    <div >
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
-          <SparklesIcon className="w-3.5 h-3.5 text-purple-500" />
-          <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">AI Summary</h3>
+          <SparklesIcon className="w-3.5 h-3.5 text-pink-600" />
+          <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-wider">AI Summary</h3>
         </div>
         {bullets && !loading && (
           <button
             type={btnType}
             onClick={() => fetchBullets(taskId, true)}
-            className="inline-flex items-center gap-1 px-1.5 py-0.5 text-xs text-gray-400 hover:text-purple-600 hover:bg-purple-50 rounded transition-colors"
+            className="inline-flex items-center gap-1 px-1.5 py-0.5 text-xs text-slate-300 hover:text-blue-600 hover:bg-white/10 rounded transition-colors"
             title="Regenerate"
           >
             <ArrowPathIcon className="w-3 h-3" />
@@ -123,12 +123,12 @@ export function AISummarySection({ taskId, bullets, loading, error, fetchBullets
       {loading ? (
         <BulletSkeleton />
       ) : error ? (
-        <div className="flex items-center gap-2 text-xs text-gray-400">
+        <div className="flex items-center gap-2 text-xs text-slate-300">
           <span>{error}</span>
           <button
             type={btnType}
             onClick={() => fetchBullets(taskId)}
-            className="text-purple-500 hover:text-purple-700 font-medium"
+            className="text-slate-300 hover:text-blue-600 hover:bg-white/10 font-medium"
           >
             Retry
           </button>
@@ -137,8 +137,8 @@ export function AISummarySection({ taskId, bullets, loading, error, fetchBullets
         <ul className="space-y-2.5">
           {bullets.map((bullet, idx) => (
             <li key={idx} className="flex items-start gap-2.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-purple-400 mt-[7px] flex-shrink-0" />
-              <span className="text-sm text-gray-700 leading-relaxed">{bullet}</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-white/10 mt-[7px] flex-shrink-0" />
+              <span className="text-sm text-slate-300 leading-relaxed">{bullet}</span>
             </li>
           ))}
         </ul>
@@ -146,13 +146,13 @@ export function AISummarySection({ taskId, bullets, loading, error, fetchBullets
         <button
           type={btnType}
           onClick={() => fetchBullets(taskId)}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-purple-600 bg-purple-50 border border-purple-200 rounded-lg hover:bg-purple-100 transition-colors"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-300 rounded-lg hover:text-blue-600 hover:bg-white/10 transition-colors"
         >
           <SparklesIcon className="w-3.5 h-3.5" />
           Generate AI Summary
         </button>
       ) : (
-        <p className="text-sm text-gray-400 italic">No description available</p>
+        <p className="text-sm text-slate-300 italic">No description available</p>
       )}
     </div>
   );

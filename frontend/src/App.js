@@ -22,11 +22,13 @@ import {
 // Feature components
 import { Profile } from "./components/profile";
 import { OnboardingWizard } from "./components/onboarding";
-// import { UnifiedSidebar } from "./components/dashboard";
+import { UnifiedSidebar } from "./components/dashboard";
 import { CareerAgent, TravelAgent, BodyAgent, WorkAgent } from "./components/agents";
 import { NewLandingPage } from "./components/landing";
 import { ErrorBoundary } from "./components/ui";
 import WorkPage from "./components/work/WorkPage";
+// import TriageDetailPanel from "./components/agents/TriageDetailPanel";
+import TriageStandalone from "./components/agents/triage2";
 
 import { LegalPage } from './components/legal';
 
@@ -107,6 +109,14 @@ function App() {
                 element={
                   // <PrivateRoute>
                     <MessageDetailPanel />  // Remove this route used for designing the message detail panel
+                   // </PrivateRoute> */}
+                }
+              />
+              <Route
+                path="/triage"
+                element={
+                  // <PrivateRoute>
+                    <UnifiedSidebar />
                    // </PrivateRoute> */}
                 }
               />

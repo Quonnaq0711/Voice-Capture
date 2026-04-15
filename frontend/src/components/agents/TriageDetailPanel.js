@@ -15,17 +15,18 @@ import {
 } from '@heroicons/react/24/outline';
 import { taskExtraction, gmail } from '../../services/workApi';
 import { useBullets, AISummarySection } from './AISummarySection';
+import inboxIcon from '../../assets/mail-in1.png';
 
 // ============================================================================
 // CONSTANTS & HELPERS
 // ============================================================================
 
 const SOURCE_CONFIGS = {
-  email: { icon: EnvelopeIcon, color: 'text-red-600', bg: 'bg-red-50', label: 'Email' },
-  calendar: { icon: CalendarIcon, color: 'text-blue-600', bg: 'bg-blue-50', label: 'Calendar' },
-  gtask: { icon: CheckCircleIcon, color: 'text-green-600', bg: 'bg-green-50', label: 'Google Tasks' },
-  jira: { icon: TicketIcon, color: 'text-blue-700', bg: 'bg-blue-50', label: 'Jira' },
-  slack: { icon: ChatBubbleLeftRightIcon, color: 'text-purple-600', bg: 'bg-purple-50', label: 'Slack' },
+  email: { icon: EnvelopeIcon, color: 'text-slate-300', label: 'Email' },
+  calendar: { icon: CalendarIcon, color: 'text-slate-300', label: 'Calendar' },
+  gtask: { icon: CheckCircleIcon, color: 'text-slate-300', label: 'Google Tasks' },
+  jira: { icon: TicketIcon, color: 'text-slate-300', label: 'Jira' },
+  slack: { icon: ChatBubbleLeftRightIcon, color: 'text-slate-300', label: 'Slack' },
 };
 
 const formatDateTime = (dateString) => {
@@ -86,8 +87,8 @@ const PropertyRow = ({ icon: Icon, label, children }) => {
   return (
     <div className="flex items-start py-2 gap-3">
       <div className="flex items-center gap-2 w-28 flex-shrink-0 pt-0.5">
-        {Icon && <Icon className="w-3.5 h-3.5 text-gray-400" />}
-        <span className="text-xs font-medium text-gray-500">{label}</span>
+        {Icon && <Icon className="w-3.5 h-3.5 text-slate-400" />}
+        <span className="text-xs font-medium text-slate-500">{label}</span>
       </div>
       <div className="flex-1 min-w-0">{children}</div>
     </div>
@@ -174,23 +175,23 @@ const OriginalEmailSection = React.memo(({ task, connectedAccounts, userId, emai
   if (!accountId) return null;
 
   return (
-    <div className="border-t border-gray-100">
+    <div>
       {/* Section header */}
       <div className="flex items-center gap-2 px-5 py-3">
-        <EnvelopeOpenIcon className="w-4 h-4 text-gray-500 flex-shrink-0" />
-        <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Original Email</span>
+        <EnvelopeOpenIcon className="w-4 h-4 text-slate-200 flex-shrink-0" />
+        <span className="text-xs font-semibold text-slate-200 uppercase tracking-wider">Original Email</span>
         {!emailData && !loading && task.source_subject && (
-          <span className="text-xs text-gray-400 truncate ml-1">— {task.source_subject}</span>
-        )}
+          <span className="text-xs text-slate-200 truncate ml-1">— {task.source_subject}</span>
+        )}  
       </div>
 
       <div className="px-5 pb-4">
         {loading && (
           <div className="animate-pulse space-y-2 py-2">
-            <div className="h-3 bg-gray-200 rounded w-2/3"></div>
-            <div className="h-3 bg-gray-200 rounded w-full"></div>
-            <div className="h-3 bg-gray-200 rounded w-5/6"></div>
-            <div className="h-3 bg-gray-200 rounded w-full"></div>
+            <div className="h-3 bg-slate-200 rounded w-2/3"></div>
+            <div className="h-3 bg-slate-200 rounded w-full"></div>
+            <div className="h-3 bg-slate-200 rounded w-5/6"></div>
+            <div className="h-3 bg-slate-200 rounded w-full"></div>
           </div>
         )}
 
@@ -199,25 +200,25 @@ const OriginalEmailSection = React.memo(({ task, connectedAccounts, userId, emai
         )}
 
         {emailData && (
-          <div className="rounded-lg border border-gray-200 overflow-hidden">
+          <div className="rounded-lg overflow-hidden">
             {/* Email header */}
-            <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 space-y-1">
+            <div className="px-4 py-3 bg-white/10 space-y-1">
               {senderStr && (
                 <div className="flex items-baseline gap-2">
-                  <span className="text-[10px] font-medium text-gray-400 uppercase w-12 flex-shrink-0">From</span>
-                  <span className="text-sm font-medium text-gray-800 truncate">{senderStr}</span>
+                  <span className="text-[10px] font-medium text-slate-300 uppercase w-12 flex-shrink-0">From</span>
+                  <span className="text-sm font-medium text-slate-300 truncate">{senderStr}</span>
                 </div>
               )}
               {emailData.subject && (
                 <div className="flex items-baseline gap-2">
-                  <span className="text-[10px] font-medium text-gray-400 uppercase w-12 flex-shrink-0">Subject</span>
-                  <span className="text-sm text-gray-700 truncate">{emailData.subject}</span>
+                  <span className="text-[10px] font-medium text-slate-300 uppercase w-12 flex-shrink-0">Subject</span>
+                  <span className="text-sm text-slate-300 truncate">{emailData.subject}</span>
                 </div>
               )}
               {emailData.date && (
                 <div className="flex items-baseline gap-2">
-                  <span className="text-[10px] font-medium text-gray-400 uppercase w-12 flex-shrink-0">Date</span>
-                  <span className="text-xs text-gray-500">{formatDateTime(emailData.date)}</span>
+                  <span className="text-[10px] font-medium text-slate-300 uppercase w-12 flex-shrink-0">Date</span>
+                  <span className="text-xs text-slate-300">{formatDateTime(emailData.date)}</span>
                 </div>
               )}
             </div>
@@ -233,11 +234,11 @@ const OriginalEmailSection = React.memo(({ task, connectedAccounts, userId, emai
                 style={{ minHeight: '80px', maxHeight: '600px' }}
               />
             ) : emailContent?.plainContent ? (
-              <div className="px-4 py-3 text-sm text-gray-700 whitespace-pre-wrap leading-relaxed max-h-[600px] overflow-y-auto">
+              <div className="px-4 py-3 text-sm text-slate-300 whitespace-pre-wrap leading-relaxed max-h-[600px] overflow-y-auto">
                 {emailContent.plainContent}
               </div>
             ) : (
-              <p className="px-4 py-3 text-xs text-gray-400 italic">No content available</p>
+              <p className="px-4 py-3 text-xs text-slate-300 italic">No content available</p>
             )}
           </div>
         )}
@@ -269,12 +270,22 @@ function TriageDetailPanel({ task, onAddToTasks, onDismiss, onRevert, onClose, a
   const isEmail = (task.source_type || task.source) === 'email';
 
   return (
-    <div className="h-full flex flex-col bg-white">
+         
+    <div className ="w-44 h-0 left-0 top-[20px] absolute outline outline-1 outline-white">
+        <div className="w-8 h-8 left-[180px] top-1 absolute bg-pink-600" />
+      <div className="left-[230px] top-[4px] absolute justify-start text-white text-2xl font-bold font-['Space_Mono']">Work</div>
+      
+      <div className="left-[85px] top-[134px] absolute justify-start text-white text-sm font-semibold font-['Inter']">Incoming</div>
+      <img className="w-6 h-6 left-[48px] top-[125px] absolute origin-top-left" src={inboxIcon} Alt="Incoming"/>
+      
+ 
+
+      <div className="h-full flex flex-col bg-sky-950 text-slate-300">
       {/* Toolbar */}
       <div className="flex-shrink-0 flex items-center justify-between px-3 py-2 border-b border-gray-200 bg-gray-50/50">
         <button
           onClick={onClose}
-          className="inline-flex items-center gap-1 px-2 py-1.5 text-xs font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded-md transition-colors"
+          className="inline-flex items-center gap-1 px-2 py-1.5 text-xs font-medium text-slate-300 hover:text-slate-600 hover:bg-white/10 rounded-md transition-colors"
           title="Close panel (Esc)"
         >
           <ChevronDoubleRightIcon className="w-4 h-4" />
@@ -283,14 +294,14 @@ function TriageDetailPanel({ task, onAddToTasks, onDismiss, onRevert, onClose, a
         <div className="flex items-center gap-1.5">
           {isAdded ? (
             <>
-              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-green-700 bg-green-100 border border-green-200 rounded-lg">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-green-400 hover:bg-white/10 rounded-lg">
                 <CheckCircleIcon className="w-4 h-4" />
                 Added to Backlog
               </span>
               <button
                 onClick={() => onRevert?.(task.added_todo_id, task.id)}
                 disabled={actionLoading}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-amber-600 bg-amber-50 border border-amber-200 rounded-lg hover:bg-amber-100 transition-colors disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-amber-600 rounded-lg hover:bg-white/10 transition-colors"
                 title="Undo — return to pending"
               >
                 <ArrowUturnLeftIcon className="w-4 h-4" />
@@ -301,7 +312,7 @@ function TriageDetailPanel({ task, onAddToTasks, onDismiss, onRevert, onClose, a
             <button
               onClick={() => onAddToTasks(task)}
               disabled={actionLoading}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-green-700 bg-green-50 border border-green-200 rounded-lg hover:bg-green-100 transition-colors disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-cyan-400 rounded-lg hover:bg-white/10 transition-colors"
             >
               <PlusIcon className="w-4 h-4" />
               Add to Backlog
@@ -310,7 +321,7 @@ function TriageDetailPanel({ task, onAddToTasks, onDismiss, onRevert, onClose, a
           <button
             onClick={() => onDismiss(task.id)}
             disabled={actionLoading}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-600 bg-gray-50 border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-slate-300 rounded-lg hover:bg-white/10 transition-colors"
           >
             <XMarkIcon className="w-4 h-4" />
             Dismiss
@@ -322,14 +333,14 @@ function TriageDetailPanel({ task, onAddToTasks, onDismiss, onRevert, onClose, a
       <div className="flex-1 overflow-auto">
         {/* Title */}
         <div className="px-5 pt-5 pb-4">
-          <h2 className="text-lg font-semibold text-gray-900 leading-snug">
+          <h2 className="text-lg font-semibold text-slate-400 leading-snug">
             {task.title}
           </h2>
         </div>
 
         {/* Properties table */}
-        <div className="px-5 pb-4 border-b border-gray-100">
-          <div className="divide-y divide-gray-100">
+        <div className="px-5 pb-4 bg-sky-950">
+          <div >
             {/* Source */}
             <PropertyRow icon={SourceIcon} label="Source">
               <div className="flex items-center gap-2 flex-wrap">
@@ -338,7 +349,7 @@ function TriageDetailPanel({ task, onAddToTasks, onDismiss, onRevert, onClose, a
                   {sourceConfig.label}
                 </div>
                 {task.source_account && (
-                  <span className="text-xs text-gray-500 truncate">{task.source_account}</span>
+                  <span className="text-xs text-slate-400 truncate">{task.source_account}</span>
                 )}
               </div>
             </PropertyRow>
@@ -347,7 +358,7 @@ function TriageDetailPanel({ task, onAddToTasks, onDismiss, onRevert, onClose, a
             {confidence != null && (
               <PropertyRow icon={SparklesIcon} label="Confidence">
                 <div className="flex items-center gap-2.5">
-                  <div className="w-24 h-2 bg-gray-100 rounded-full overflow-hidden">
+                  <div className="w-24 h-2 bg-sky-950 rounded-full overflow-hidden">
                     <div
                       className={`h-full rounded-full transition-all ${
                         confidence >= 80 ? 'bg-green-500' : confidence >= 50 ? 'bg-yellow-500' : 'bg-red-400'
@@ -367,14 +378,14 @@ function TriageDetailPanel({ task, onAddToTasks, onDismiss, onRevert, onClose, a
             {/* Source Date */}
             {task.source_date && (
               <PropertyRow icon={ClockIcon} label="Source Date">
-                <span className="text-sm text-gray-700">{formatDateTime(task.source_date)}</span>
+                <span className="text-sm text-slate-400">{formatDateTime(task.source_date)}</span>
               </PropertyRow>
             )}
 
             {/* Extracted At */}
             {task.extracted_at && (
               <PropertyRow icon={SparklesIcon} label="Extracted">
-                <span className="text-sm text-gray-700">{formatDateTime(task.extracted_at)}</span>
+                <span className="text-sm text-slate-400">{formatDateTime(task.extracted_at)}</span>
               </PropertyRow>
             )}
           </div>
@@ -403,7 +414,10 @@ function TriageDetailPanel({ task, onAddToTasks, onDismiss, onRevert, onClose, a
           />
         )}
       </div>
-    </div>
+      </div>
+      </div>
+  
+  
   );
 }
 
