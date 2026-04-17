@@ -28,7 +28,8 @@ import { NewLandingPage } from "./components/landing";
 import { ErrorBoundary } from "./components/ui";
 import WorkPage from "./components/work/WorkPage";
 // import TriageDetailPanel from "./components/agents/TriageDetailPanel";
-import TriageStandalone from "./components/agents/triage2";
+// import TriageStandalone from "./components/agents/triage2";
+import Dashboard from "./components/dashboard";
 
 import { LegalPage } from './components/legal';
 

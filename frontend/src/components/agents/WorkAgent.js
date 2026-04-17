@@ -130,6 +130,7 @@ import {
 } from 'lucide-react';
 import emailIcon from '../../assets/email10.png';
 import composeIcon from '../../assets/pencil1.png';
+import inboxIcon from '../../assets/mail-in1.png';
 
 // ============================================================================
 // HELPERS
@@ -7873,10 +7874,10 @@ const TasksView = ({ activeSubTab = 'backlog' }) => {
     }[task.priority] || null;
 
     const priorityLabel = {
-      urgent: { text: 'text-red-700', bg: 'bg-red-50', label: 'Urgent' },
-      high: { text: 'text-orange-700', bg: 'bg-orange-50', label: 'High' },
-      medium: { text: 'text-amber-700', bg: 'bg-amber-50', label: 'Medium' },
-      low: { text: 'text-green-700', bg: 'bg-green-50', label: 'Low' },
+      urgent: { text: 'text-red-700', bg: 'bg-red-50/15', label: 'Urgent' },
+      high: { text: 'text-orange-700', bg: 'bg-orange-50/15', label: 'High' },
+      medium: { text: 'text-amber-700', bg: 'bg-amber-50/15', label: 'Medium' },
+      low: { text: 'text-green-700', bg: 'bg-green-50/15', label: 'Low' },
     }[task.priority] || null;
 
     const taskKey = isGoogleTask
@@ -7929,19 +7930,19 @@ const TasksView = ({ activeSubTab = 'backlog' }) => {
             </span>
             <div className="flex items-center gap-1">
               {isGoogleTask && (
-                <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-green-100 text-green-700">
+                <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-white/10 text-slate-300">
                   <CheckCircleIcon className="w-3 h-3" />
                   Tasks
                 </span>
               )}
               {isAIExtracted && (
-                <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-purple-100 text-purple-700">
+                <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-white/10 text-slate-300">
                   <SparklesIcon className="w-3 h-3" />
                   AI
                 </span>
               )}
               {task.scheduled_start && (
-                <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-indigo-100 text-indigo-700">
+                <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-white/10 text-slate-300">
                   <CalendarIcon className="w-3 h-3" />
                   Scheduled
                 </span>
@@ -7956,13 +7957,13 @@ const TasksView = ({ activeSubTab = 'backlog' }) => {
           </div>
 
           {/* Title */}
-          <h3 className={`text-sm font-medium text-gray-900 mb-2 line-clamp-2 ${task.status === 'done' ? 'line-through text-gray-500' : ''}`}>
+          <h3 className={`text-sm font-medium text-slate-400 mb-2 line-clamp-2 ${task.status === 'done' ? 'line-through text-slate-500' : ''}`}>
             {task.title}
           </h3>
 
           {/* Source info for extracted tasks */}
           {isExtracted && (
-            <div className="text-xs text-purple-600 mb-2 space-y-0.5">
+            <div className="text-xs text-slate-400 mb-2 space-y-0.5">
               {task.source_subject && (
                 <p className="flex items-center gap-1 line-clamp-1">
                   {task.source === 'email' ? <EnvelopeIcon className="w-3 h-3 flex-shrink-0" /> :
@@ -7972,7 +7973,7 @@ const TasksView = ({ activeSubTab = 'backlog' }) => {
                 </p>
               )}
               {(task.source_account || task.source_date) && (
-                <p className="flex items-center gap-2 text-gray-500 text-[10px]">
+                <p className="flex items-center gap-2 text-slate-400 text-[10px]">
                   {task.source_account && (
                     <span className="truncate max-w-[120px]" title={task.source_account}>
                       {task.source_account}
@@ -7990,9 +7991,9 @@ const TasksView = ({ activeSubTab = 'backlog' }) => {
 
           {/* Scheduled Time Slot */}
           {task.scheduled_start && (
-            <div className="flex items-center gap-1.5 mb-2 px-2 py-1 rounded-md bg-indigo-50 border border-indigo-100">
-              <CalendarIcon className="w-3.5 h-3.5 text-indigo-500 flex-shrink-0" />
-              <span className="text-[11px] text-indigo-700 font-medium">
+            <div className="flex items-center gap-1.5 mb-2 px-2 py-1 rounded-md bg-sky-950">
+              <CalendarIcon className="w-3.5 h-3.5 text-slate-200 flex-shrink-0" />
+              <span className="text-[11px] text-slate-300 font-medium">
                 {new Date(task.scheduled_start).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                 {', '}
                 {new Date(task.scheduled_start).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
@@ -8008,13 +8009,13 @@ const TasksView = ({ activeSubTab = 'backlog' }) => {
             <div className="flex items-center gap-2">
               {/* Category Tag */}
               {task.category && (
-                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-600">
+                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-sky-950 text-slate-300">
                   {task.category}
                 </span>
               )}
               {/* Due Date */}
               {task.due_date && (
-                <span className={`inline-flex items-center gap-1 text-[10px] ${isOverdue && !isExtracted ? 'text-red-600 font-semibold' : 'text-gray-500'}`}>
+                <span className={`inline-flex items-center gap-1 text-[10px] ${isOverdue && !isExtracted ? 'text-red-600 font-semibold' : 'text-slate-400'}`}>
                   <ClockIcon className="w-3 h-3" />
                   {new Date(task.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                 </span>
@@ -8027,14 +8028,14 @@ const TasksView = ({ activeSubTab = 'backlog' }) => {
                 <>
                   <button
                     onClick={(e) => { e.stopPropagation(); handleAddExtractedTask(task); }}
-                    className="p-1 text-purple-500 hover:bg-purple-100 rounded transition-colors"
+                    className="p-1 text-slate-300 hover:bg-white/10 hover:text-blue-600 rounded transition-colors"
                     title="Add to Backlog"
                   >
                     <PlusIcon className="w-3.5 h-3.5" />
                   </button>
                   <button
                     onClick={(e) => { e.stopPropagation(); handleDismissExtractedTask(task.id); }}
-                    className="p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
+                    className="p-1 text-slate-300 hover:text-red-500 hover:bg-white/10 rounded transition-colors"
                     title="Dismiss"
                   >
                     <XMarkIcon className="w-3.5 h-3.5" />
@@ -8044,14 +8045,14 @@ const TasksView = ({ activeSubTab = 'backlog' }) => {
                 <>
                   <button
                     onClick={(e) => { e.stopPropagation(); handleCompleteTask(task.id); }}
-                    className={`p-1 rounded transition-colors ${task.status === 'done' ? 'text-green-600' : 'text-gray-400 hover:text-green-600'}`}
+                    className={`p-1 rounded transition-colors ${task.status === 'done' ? 'text-slate-200' : 'text-slate-300 hover:text-blue-600'}`}
                     title={task.status === 'done' ? 'Reopen' : 'Done'}
                   >
                     <CheckCircleIcon className="w-3.5 h-3.5" />
                   </button>
                   <button
                     onClick={(e) => { e.stopPropagation(); setEditingTask(task); setShowTaskModal(true); }}
-                    className="p-1 text-gray-400 hover:text-gray-600 rounded transition-colors"
+                    className="p-1 text-slate-300 hover:text-blue-600 rounded transition-colors"
                     title="Edit"
                   >
                     <PencilIcon className="w-3.5 h-3.5" />
@@ -8073,13 +8074,13 @@ const TasksView = ({ activeSubTab = 'backlog' }) => {
   // Kanban Column Component - Jira Style
   const KanbanColumn = ({ column, columnTasks }) => {
     const columnColors = {
-      none: { bg: 'bg-gray-50', header: 'bg-gray-100', border: 'border-gray-200', text: 'text-gray-500', dot: 'bg-gray-400' },
-      backlog: { bg: 'bg-gray-50', header: 'bg-gray-100', border: 'border-gray-200', text: 'text-gray-700', dot: 'bg-gray-400' },
-      todo: { bg: 'bg-blue-50/50', header: 'bg-blue-100', border: 'border-blue-200', text: 'text-blue-700', dot: 'bg-blue-500' },
-      in_progress: { bg: 'bg-amber-50/50', header: 'bg-amber-100', border: 'border-amber-200', text: 'text-amber-700', dot: 'bg-amber-500' },
-      review: { bg: 'bg-purple-50/50', header: 'bg-purple-100', border: 'border-purple-200', text: 'text-purple-700', dot: 'bg-purple-500' },
-      done: { bg: 'bg-green-50/50', header: 'bg-green-100', border: 'border-green-200', text: 'text-green-700', dot: 'bg-green-500' },
-      delayed: { bg: 'bg-gray-50/50', header: 'bg-gray-100', border: 'border-gray-200', text: 'text-gray-600', dot: 'bg-gray-400' },
+      none: { bg: 'bg-white/10', header: 'bg-slate-100', border: 'border-slate-200', text: 'text-slate-300' },
+      backlog: { bg: 'bg-white/10', header: 'bg-pink-100', border: 'border-slate-200', text: 'text-slate-300' },
+      todo: { bg: 'bg-white/10', header: 'bg-blue-100', border: 'border-slate-200', text: 'text-slate-300'},
+      in_progress: { bg: 'bg-white/10', header: 'bg-amber-100', border: 'border-slate-200', text: 'text-slate-300'},
+      review: { bg: 'bg-white/10', header: 'bg-purple-100', border: 'border-slate-200', text: 'text-slate-300'},
+      done: { bg: 'bg-white/10', header: 'bg-green-100', border: 'border-slate-200', text: 'text-slate-300'},
+      delayed: { bg: 'bg-white/10', header: 'bg-gray-100', border: 'border-slate-200', text: 'text-slate-300'},
     };
 
     const colors = columnColors[column.id];
@@ -8087,7 +8088,7 @@ const TasksView = ({ activeSubTab = 'backlog' }) => {
 
     return (
       <div
-        className="w-[280px] flex-shrink-0 flex flex-col h-full bg-gray-50/80 rounded-lg border border-gray-200"
+        className="w-[280px] flex-shrink-0 flex flex-col h-full bg-sky-950/95 rounded-lg "
         onDragEnter={(e) => handleDragEnter(e, column.id)}
         onDragOver={(e) => handleDragOver(e, column.id)}
         onDragLeave={handleDragLeave}
@@ -8096,7 +8097,6 @@ const TasksView = ({ activeSubTab = 'backlog' }) => {
         {/* Column Header - Jira Style */}
         <div className={`flex-shrink-0 flex items-center justify-between px-3 py-2.5 ${colors.header} rounded-t-lg border-b ${colors.border}`}>
           <div className="flex items-center gap-2">
-            <div className={`w-2 h-2 rounded-full ${colors.dot}`} />
             <h3 className={`text-sm font-semibold uppercase tracking-wide ${colors.text}`}>{column.name}</h3>
             <span className={`px-1.5 py-0.5 rounded text-xs font-bold ${colors.text} bg-white/60`}>
               {columnTasks.length}
@@ -8150,7 +8150,7 @@ const TasksView = ({ activeSubTab = 'backlog' }) => {
     { id: 'in_progress', label: 'In Progress', color: 'yellow', icon: ClockIcon },
     { id: 'review', label: 'Review', color: 'purple', icon: EyeIcon },
     { id: 'done', label: 'Done', color: 'green', icon: CheckCircleIcon },
-    { id: 'delayed', label: 'Delayed', color: 'gray', icon: ClockIcon },
+    { id: 'cancelled', label: 'Cancelled', color: 'red', icon: ClockIcon },
   ];
 
   // Get tasks grouped by status for Jira-style backlog
@@ -8185,11 +8185,11 @@ const TasksView = ({ activeSubTab = 'backlog' }) => {
   // Get source icon and color for Triage items
   const getSourceConfig = (sourceType) => {
     const configs = {
-      email: { icon: EnvelopeIcon, color: 'text-red-500', bg: 'bg-red-50', label: 'Email' },
-      calendar: { icon: CalendarIcon, color: 'text-blue-500', bg: 'bg-blue-50', label: 'Calendar' },
-      gtask: { icon: CheckCircleIcon, color: 'text-green-500', bg: 'bg-green-50', label: 'Google Tasks' },
-      jira: { icon: TicketIcon, color: 'text-blue-600', bg: 'bg-blue-50', label: 'Jira' },
-      slack: { icon: ChatBubbleLeftRightIcon, color: 'text-purple-500', bg: 'bg-purple-50', label: 'Slack' },
+      email: { icon: EnvelopeIcon, color: 'text-slate-300', bg: 'bg-white/10', label: 'Email' },
+      calendar: { icon: CalendarIcon, color: 'text-slate-300', bg: 'bg-white/10', label: 'Calendar' },
+      gtask: { icon: CheckCircleIcon, color: 'text-slate-300', bg: 'bg-white/10', label: 'Google Tasks' },
+      jira: { icon: TicketIcon, color: 'text-slate-300', bg: 'bg-white/10', label: 'Jira' },
+      slack: { icon: ChatBubbleLeftRightIcon, color: 'text-slate-300', bg: 'bg-white/10', label: 'Slack' },
     };
     return configs[sourceType] || configs.email;
   };
@@ -8205,14 +8205,14 @@ const TasksView = ({ activeSubTab = 'backlog' }) => {
       <div
         onClick={onClick}
         onMouseEnter={onMouseEnter}
-        className={`group flex items-center gap-4 px-4 py-3 border-b border-gray-100 cursor-pointer transition-colors ${
+        className={`group flex items-center gap-4 px-4 py-3 cursor-pointer transition-colors ${
           isSelected
             ? `bg-purple-50 border-l-2 border-l-purple-500${isAdded ? ' opacity-70' : ''}`
-            : isAdded ? 'bg-green-50/40 opacity-60' : 'hover:bg-gray-50'
+            : isAdded ? 'bg-green-50/40 opacity-60' : 'hover:bg-white/10'
         }`}
       >
         {/* Date */}
-        <span className={`text-xs font-medium w-20 flex-shrink-0 ${isAdded ? 'text-gray-400' : 'text-gray-500'}`}>
+        <span className={`text-xs font-medium w-20 flex-shrink-0 ${isAdded ? 'text-slate-200' : 'text-slate-300'}`}>
           {displayDate}
         </span>
 
@@ -8225,13 +8225,13 @@ const TasksView = ({ activeSubTab = 'backlog' }) => {
         </div>
 
         {/* Account */}
-        <span className={`text-xs truncate w-32 flex-shrink-0 ${isAdded ? 'text-gray-300' : 'text-gray-400'}`} title={task.source_account}>
+        <span className={`text-xs truncate w-32 flex-shrink-0 ${isAdded ? 'text-slate-300' : 'text-slate-400'}`} title={task.source_account}>
           {task.source_account || '-'}
         </span>
 
         {/* Task Summary + Status Badge */}
         <div className="flex-1 flex items-center gap-2 min-w-0">
-          <span className={`text-sm truncate ${isAdded ? 'text-gray-400' : 'text-gray-900'}`} title={task.title}>
+          <span className={`text-sm truncate ${isAdded ? 'text-slate-200' : 'text-slate-400'}`} title={task.title}>
             {task.title}
           </span>
           {isAdded && (
@@ -8247,7 +8247,7 @@ const TasksView = ({ activeSubTab = 'backlog' }) => {
           {isAdded ? (
             <button
               onClick={(e) => { e.stopPropagation(); handleRevertExtractedTask(task.added_todo_id, task.id); }}
-              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-amber-600 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-md transition-colors"
+              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-amber-600 bg-white/10 hover:bg-amber-100 border  rounded-md transition-colors"
               title="Undo — return to pending"
             >
               <ArrowUturnLeftIcon className="w-3.5 h-3.5" />
@@ -8257,7 +8257,7 @@ const TasksView = ({ activeSubTab = 'backlog' }) => {
             <>
               <button
                 onClick={(e) => { e.stopPropagation(); handleAddExtractedTask(task); }}
-                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-green-700 bg-green-50 hover:bg-green-100 border border-green-200 rounded-md transition-colors"
+                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-green-700 bg-white/10 hover:bg-green-100  rounded-md transition-colors"
                 title="Add to Backlog"
               >
                 <PlusIcon className="w-3.5 h-3.5" />
@@ -8265,7 +8265,7 @@ const TasksView = ({ activeSubTab = 'backlog' }) => {
               </button>
               <button
                 onClick={(e) => { e.stopPropagation(); handleDismissExtractedTask(task.id); }}
-                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-gray-500 hover:bg-gray-100 border border-gray-200 rounded-md transition-colors"
+                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-slate-300 hover:bg-slate-200  rounded-md transition-colors"
                 title="Dismiss"
               >
                 <XMarkIcon className="w-3.5 h-3.5" />
@@ -8290,11 +8290,11 @@ const TasksView = ({ activeSubTab = 'backlog' }) => {
 
     // Plane-style priority config with Lucide icons
     const priorityConfigs = {
-      urgent: { Icon: AlertCircle, color: '#ef4444', bg: 'bg-red-50', border: 'border-red-400', label: 'Urgent' },
-      high: { Icon: SignalHigh, color: '#f97316', bg: 'bg-orange-50', border: 'border-orange-400', label: 'High' },
-      medium: { Icon: SignalMedium, color: '#eab308', bg: 'bg-amber-50', border: 'border-amber-400', label: 'Medium' },
-      low: { Icon: SignalLow, color: '#22c55e', bg: 'bg-green-50', border: 'border-green-400', label: 'Low' },
-      none: { Icon: Ban, color: '#6b7280', bg: 'bg-gray-50', border: 'border-gray-300', label: 'None' },
+      urgent: { Icon: AlertCircle, color: '#ef4444', bg: 'bg-red-50', label: 'Urgent' },
+      high: { Icon: SignalHigh, color: '#f97316', bg: 'bg-orange-50', label: 'High' },
+      medium: { Icon: SignalMedium, color: '#eab308', bg: 'bg-amber-50', label: 'Medium' },
+      low: { Icon: SignalLow, color: '#22c55e', bg: 'bg-green-50', label: 'Low' },
+      none: { Icon: Ban, color: '#6b7280', bg: 'bg-gray-50', label: 'None' },
     };
     const priorityConfig = priorityConfigs[task.priority] || priorityConfigs.medium;
 
@@ -8316,7 +8316,7 @@ const TasksView = ({ activeSubTab = 'backlog' }) => {
                 prev.includes(task.id) ? prev.filter(id => id !== task.id) : [...prev, task.id]
               );
             }}
-            className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+            className="w-4 h-4 rounded text-slate-400 hover:bg-white/10"
           />
         )}
 
@@ -8329,23 +8329,23 @@ const TasksView = ({ activeSubTab = 'backlog' }) => {
 
         {/* Type Badge */}
         {isGoogleTask && (
-          <span className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-green-100 text-green-700">
+          <span className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-white/10 text-green-700">
             <CheckCircleIcon className="w-3 h-3" />
           </span>
         )}
         {isAIExtracted && (
-          <span className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-100 text-purple-700">
+          <span className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-white/10 text-pink-700">
             <SparklesIcon className="w-3 h-3" />
           </span>
         )}
 
         {/* Title + Source Info */}
         <div className="flex-1 min-w-0">
-          <span className="text-sm text-gray-900 truncate font-medium block">
+          <span className="text-sm text-slate-300 truncate font-medium block">
             {task.title}
           </span>
           {isExtracted && (task.source_account || task.source_date) && (
-            <div className="flex items-center gap-2 text-[10px] text-gray-400 mt-0.5">
+            <div className="flex items-center gap-2 text-[10px] text-slate-300 mt-0.5">
               {task.source === 'email' ? <EnvelopeIcon className="w-3 h-3 flex-shrink-0" /> :
                task.source === 'gtask' ? <CheckCircleIcon className="w-3 h-3 flex-shrink-0" /> :
                <CalendarIcon className="w-3 h-3 flex-shrink-0" />}
@@ -8373,7 +8373,7 @@ const TasksView = ({ activeSubTab = 'backlog' }) => {
                 console.error('Failed to update status:', err)
               );
             }}
-            className="text-xs px-2 py-1 rounded border border-gray-200 bg-white text-gray-600 hover:border-gray-300 focus:ring-1 focus:ring-blue-500"
+            className="text-xs px-2 py-1 rounded bg-white/10 text-slate-300"
             onClick={(e) => e.stopPropagation()}
           >
             <option value="none">No Status</option>
@@ -8381,13 +8381,13 @@ const TasksView = ({ activeSubTab = 'backlog' }) => {
             <option value="in_progress">In Progress</option>
             <option value="review">Review</option>
             <option value="done">Done</option>
-            <option value="delayed">Delayed</option>
+            <option value="cancelled">Cancelled</option>
           </select>
         )}
 
         {/* Priority - Plane-style Lucide icon */}
         <div
-          className={`flex items-center justify-center w-6 h-6 rounded border ${priorityConfig.bg} ${priorityConfig.border}`}
+          className={`flex items-center justify-center w-6 h-6 rounded border ${priorityConfig.bg}`}
           title={`Priority: ${priorityConfig.label}`}
         >
           <priorityConfig.Icon size={14} strokeWidth={2} style={{ color: priorityConfig.color }} />
@@ -8396,7 +8396,7 @@ const TasksView = ({ activeSubTab = 'backlog' }) => {
         {/* Due Date */}
         {task.due_date && (
           <span className={`text-xs w-20 text-right ${
-            new Date(task.due_date) < new Date() ? 'text-red-600 font-medium' : 'text-gray-500'
+            new Date(task.due_date) < new Date() ? 'text-red-600 font-medium' : 'text-slate-300'
           }`}>
             {new Date(task.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
           </span>
@@ -8405,7 +8405,7 @@ const TasksView = ({ activeSubTab = 'backlog' }) => {
         {/* Actions for extracted tasks */}
         {isExtracted && task.status === 'added' ? (
           <div className="flex items-center gap-1.5 flex-shrink-0">
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-white/10 text-green-400">
               <CheckCircleIcon className="w-3.5 h-3.5" />
               Added
             </span>
@@ -8417,7 +8417,7 @@ const TasksView = ({ activeSubTab = 'backlog' }) => {
                 e.stopPropagation();
                 handleAddExtractedTask(task);
               }}
-              className="p-1.5 text-green-600 hover:bg-green-100 rounded"
+              className="p-1.5 text-cyan-600 hover:bg-white/10 rounded"
               title="Add to Backlog"
             >
               <PlusIcon className="w-4 h-4" />
@@ -8427,7 +8427,7 @@ const TasksView = ({ activeSubTab = 'backlog' }) => {
                 e.stopPropagation();
                 handleDismissExtractedTask(task.id);
               }}
-              className="p-1.5 text-gray-400 hover:bg-gray-100 rounded"
+              className="p-1.5 text-slate-400 hover:bg-white/10 rounded"
               title="Dismiss"
             >
               <XMarkIcon className="w-4 h-4" />
@@ -8439,48 +8439,52 @@ const TasksView = ({ activeSubTab = 'backlog' }) => {
   };
 
   return (
-    <div className="h-full flex flex-col overflow-hidden">
+    <div className="w-[1440px] h-[1024px] relative bg-sky-950 overflow-hidden">
+      <div className="w-44 h-0 left-0 top-[25px] absolute outline outline-1 outline-white"></div>
+<div className="w-12 h-12 left-[180px] top-0 absolute bg-pink-600" />
+<div className="left-[240px] top-[3px] absolute justify-start text-white text-3xl font-bold font-['Space_Mono']">Work</div>
+
       {/* Triage View - AI Extracted Tasks */}
       {activeSubTab === 'triage' && (
         <>
           {/* Triage Header */}
-          <div className="flex-shrink-0 bg-white rounded-t-xl border border-gray-200 border-b-0 p-3">
+          <div className="flex-shrink-0 bg-sky-950 rounded-t-xl  p-3">
             <div className="flex items-center justify-between gap-4">
               {/* Title & Description */}
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-purple-100 rounded-lg">
-                  <SparklesIcon className="w-5 h-5 text-purple-600" />
+                <div className="p-2 bg-white/10 rounded-lg">
+                  <SparklesIcon className="w-5 h-5 text-slate-300" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-semibold text-gray-900">Triage</h2>
-                  <p className="text-xs text-gray-500">Review and manage AI-discovered tasks from connected sources</p>
+                  <div className="left-[85px] top-[154px] absolute justify-start text-white text-sm font-semibold font-['Inter']">Incoming</div>
+                  <img className="w-6 h-6 left-[50px] top-[150px] absolute" src={inboxIcon} alt="Inbox" />
+                  <div className="left-[50px] top-[200px] absolute justify-start text-white text-sm font-normal font-['Inter']">Review and manage AI-discovered tasks from connected sources</div>
                 </div>
               </div>
 
               <div className="flex items-center gap-2">
                 {/* Search */}
                 <div className="relative">
-                  <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                   <input
                     type="text"
                     placeholder="Search..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-48 pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-sm"
+                    className="left-[1080px] top-[190px] absolute justify-start text-white/60 text-sm font-normal font-['Inter']"
                   />
                 </div>
 
                 {/* AI Extract Button - Split Button Pattern (Linear/Notion style) */}
-                <div className="relative">
-                  <div className="inline-flex items-center rounded-lg border border-purple-200 bg-white shadow-sm overflow-hidden">
+                {/* <div className="relative"> */}
+                  <div className="inline-flex items-center rounded-lg bg-sky-950 shadow-sm overflow-hidden">
                     {/* Main Extract Button */}
                     <button
                       onClick={() => extractTasksFromSources()}
                       disabled={extractionLoading}
                       className={`group flex items-center gap-2 px-4 py-2 text-sm font-medium transition-all ${
                         extractionLoading
-                          ? 'bg-purple-50 text-purple-500'
-                          : 'bg-white text-purple-700 hover:bg-purple-50'
+                          ? 'bg-white/10 text-slate-300'
+                          : 'bg-white/10 text-slate-400 hover:bg-white/30'
                       }`}
                     >
                       {extractionLoading ? (
@@ -8489,26 +8493,26 @@ const TasksView = ({ activeSubTab = 'backlog' }) => {
                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
                             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                           </svg>
-                          <span>Extracting...</span>
+                          <span className="text-slate-200">Extracting...</span>
                         </>
                       ) : (
                         <>
-                          <SparklesIcon className="w-4 h-4 text-purple-500 group-hover:text-purple-600 transition-colors" />
-                          <span>AI Extract</span>
+                          <SparklesIcon className="w-4 h-4 text-slate-200 group-hover:text-slate-200 transition-colors" />
+                          <span className="text-slate-200">AI Extract</span>
                         </>
                       )}
                     </button>
 
                     {/* Divider */}
-                    <div className="w-px h-6 bg-purple-200" />
+                    <div className="w-px h-6 bg-slate-500" />
 
                     {/* Settings Toggle */}
                     <button
                       onClick={() => setShowExtractionSettings(!showExtractionSettings)}
                       className={`p-2 transition-all ${
                         showExtractionSettings
-                          ? 'bg-purple-100 text-purple-700'
-                          : 'bg-white text-purple-600 hover:bg-purple-50'
+                          ? 'bg-white/10 text-slate-300'
+                          : 'bg-white/10 text-slate-400 hover:bg-white/30'
                       }`}
                       title="Extraction settings"
                     >
@@ -8525,23 +8529,23 @@ const TasksView = ({ activeSubTab = 'backlog' }) => {
                         onClick={() => setShowExtractionSettings(false)}
                       />
 
-                      <div className="absolute top-full right-0 mt-2 w-96 bg-white rounded-xl shadow-xl border border-gray-200 z-50 overflow-hidden">
+                      <div className="absolute top-full right-0 mt-2 w-96 bg-sky-950 rounded-xl shadow-xl  z-50 overflow-hidden">
                         {/* Header */}
-                        <div className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-purple-50 to-white border-b border-gray-100">
+                        <div className="flex items-center justify-between px-4 py-3 bg-sky-950/95 border-b border-slate-100">
                           <div className="flex items-center gap-2">
-                            <div className="p-1.5 bg-purple-100 rounded-lg">
-                              <SparklesIcon className="w-4 h-4 text-purple-600" />
+                            <div className="p-1.5 bg-white/10 rounded-lg">
+                              <SparklesIcon className="w-4 h-4 text-slate-300" />
                             </div>
                             <div>
-                              <h4 className="font-semibold text-gray-900 text-sm">Extraction Settings</h4>
-                              <p className="text-xs text-gray-500">Configure AI task extraction</p>
+                              <h4 className="font-semibold text-slate-300 text-sm">Extraction Settings</h4>
+                              <p className="text-xs text-slate-200">Configure AI task extraction</p>
                             </div>
                           </div>
                           <button
                             onClick={() => setShowExtractionSettings(false)}
-                            className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
+                            className="p-1.5 hover:bg-white/10 rounded-lg transition-colors"
                           >
-                            <XMarkIcon className="w-4 h-4 text-gray-400" />
+                            <XMarkIcon className="w-4 h-4 text-slate-400" />
                           </button>
                         </div>
 
@@ -8549,9 +8553,9 @@ const TasksView = ({ activeSubTab = 'backlog' }) => {
                           {/* Data Sources Section */}
                           <div>
                             <div className="flex items-center justify-between mb-3">
-                              <h5 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Data Sources</h5>
+                              <h5 className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Data Sources</h5>
                               {connectedAccounts.filter(acc => acc.sourceId === 'gmail' || acc.sourceId === 'outlook').length > 0 && (
-                                <span className="text-xs text-slate-400">
+                                <span className="text-xs text-slate-300">
                                   {connectedAccounts.filter(acc => acc.sourceId === 'gmail' || acc.sourceId === 'outlook').length} connected
                                 </span>
                               )}
@@ -8561,7 +8565,7 @@ const TasksView = ({ activeSubTab = 'backlog' }) => {
                               {/* Email Source */}
                               <div className={`rounded-xl border-2 transition-all ${
                                 extractionSettings.sources.includes('email')
-                                  ? 'border-blue-300 bg-blue-600'
+                                  ? 'border-white/20 bg-white/10'
                                   : 'bg-slate-400 hover:bg-white/10'
                               }`}>
                                 <label
@@ -8576,17 +8580,17 @@ const TasksView = ({ activeSubTab = 'backlog' }) => {
                                         ? prev.sources.filter(s => s !== 'email')
                                         : [...prev.sources, 'email']
                                     }))}
-                                    className="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
+                                    className="w-4 h-4 text-slate-300 rounded focus:ring-slate-500"
                                   />
                                   <div className={`p-2 rounded-lg ${
                                     extractionSettings.sources.includes('email')
-                                      ? 'bg-purple-100'
-                                      : 'bg-gray-100'
+                                      ? 'bg-slate-200'
+                                      : 'bg-slate-400'
                                   }`}>
                                     <EnvelopeIcon className={`w-4 h-4 ${
                                       extractionSettings.sources.includes('email')
-                                        ? 'text-purple-600'
-                                        : 'text-gray-500'
+                                        ? 'text-slate-200'
+                                        : 'text-slate-400'
                                     }`} />
                                   </div>
                                   {/* <div className="flex-1 min-w-0">
@@ -8606,13 +8610,13 @@ const TasksView = ({ activeSubTab = 'backlog' }) => {
                                     )}
                                   </div> */}
                                   {extractionSettings.sources.includes('email') && connectedAccounts.filter(acc => acc.sourceId === 'gmail' || acc.sourceId === 'outlook').length > 1 && (
-                                    <ChevronDownIcon className="w-4 h-4 text-gray-400" />
+                                    <ChevronDownIcon className="w-4 h-4 text-slate-400" />
                                   )}
                                 </label>
 
                                 {/* Email Accounts - Only show when enabled and multiple accounts */}
                                 {extractionSettings.sources.includes('email') && connectedAccounts.filter(acc => acc.sourceId === 'gmail' || acc.sourceId === 'outlook').length > 1 && (
-                                  <div className="px-3 pb-3 border-t border-purple-100/50">
+                                  <div className="px-3 pb-3 ">
                                     <div className="pt-2 space-y-0.5 max-h-24 overflow-y-auto">
                                       {connectedAccounts
                                         .filter(acc => acc.sourceId === 'gmail' || acc.sourceId === 'outlook')
@@ -8622,7 +8626,7 @@ const TasksView = ({ activeSubTab = 'backlog' }) => {
                                           return (
                                             <label
                                               key={account.id}
-                                              className="flex items-center gap-2 py-1.5 px-2 cursor-pointer text-xs hover:bg-purple-100/50 rounded-lg transition-colors"
+                                              className="flex items-center gap-2 py-1.5 px-2 cursor-pointer text-xs hover:bg-white/10 rounded-lg transition-colors"
                                             >
                                               <input
                                                 type="checkbox"
@@ -8659,9 +8663,9 @@ const TasksView = ({ activeSubTab = 'backlog' }) => {
                                                     };
                                                   });
                                                 }}
-                                                className="w-3.5 h-3.5 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
+                                                className="w-3.5 h-3.5 text-slate-300 rounded focus:ring-slate-400"
                                               />
-                                              <span className="text-gray-600 truncate">{account.email}</span>
+                                              <span className="text-slate-500 truncate">{account.email}</span>
                                             </label>
                                           );
                                         })}
@@ -8800,7 +8804,7 @@ const TasksView = ({ activeSubTab = 'backlog' }) => {
                 </div>
               </div>
             </div>
-          </div>
+          {/* </div> */}
 
           {/* Warning: Accounts missing Google Tasks scope */}
           {accountsMissingTasksScope.length > 0 && (
