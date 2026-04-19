@@ -42,7 +42,7 @@ import { LegalPage } from "./components/legal";
 import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import MessageDetailPanel from "./components/agents/MessageDetailPanel";
-import Triage2 from "./components/Work Agent(Dark_Mode)/triage2";
+import Triage2 from "./components/Work Agent(Dark_Mode)/Incoming";
 
 // Placeholder components for agent routes
 const AgentPage = ({ agentName }) => (
