@@ -23,20 +23,26 @@ import {
 import { Profile } from "./components/profile";
 import { OnboardingWizard } from "./components/onboarding";
 import { UnifiedSidebar } from "./components/dashboard";
-import { CareerAgent, TravelAgent, BodyAgent, WorkAgent } from "./components/agents";
+import {
+  CareerAgent,
+  TravelAgent,
+  BodyAgent,
+  WorkAgent,
+} from "./components/agents";
 import { NewLandingPage } from "./components/landing";
 import { ErrorBoundary } from "./components/ui";
-import WorkPage from "./components/work/WorkPage";
+import WorkPage from "./components/Work Agent(Dark_Mode)/WorkPage";
 // import TriageDetailPanel from "./components/agents/TriageDetailPanel";
 // import TriageStandalone from "./components/agents/triage2";
 import Dashboard from "./components/dashboard";
 
-import { LegalPage } from './components/legal';
+import { LegalPage } from "./components/legal";
 
 // Toast notifications
-import { ToastContainer } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
+import { ToastContainer } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 import MessageDetailPanel from "./components/agents/MessageDetailPanel";
+import Triage2 from "./components/Work Agent(Dark_Mode)/triage2";
 
 // Placeholder components for agent routes
 const AgentPage = ({ agentName }) => (
@@ -101,24 +107,24 @@ function App() {
                 path="/inbox"
                 element={
                   // <PrivateRoute>
-                    <WorkAgent />
-                   // </PrivateRoute> */}
+                  <WorkAgent />
+                  // </PrivateRoute> */}
                 }
               />
               <Route
                 path="/inbox2"
                 element={
                   // <PrivateRoute>
-                    <MessageDetailPanel />  // Remove this route used for designing the message detail panel
-                   // </PrivateRoute> */}
+                  <MessageDetailPanel /> // Remove this route used for designing the message detail panel
+                  // </PrivateRoute> */}
                 }
               />
               <Route
                 path="/triage"
                 element={
                   // <PrivateRoute>
-                    <UnifiedSidebar />
-                   // </PrivateRoute> */}
+                  <Triage2 />
+                  // </PrivateRoute> */}
                 }
               />
               <Route
@@ -133,8 +139,8 @@ function App() {
                 path="/work"
                 element={
                   // <PrivateRoute>
-                    <WorkPage />
-                  // </PrivateRoute>            
+                  <WorkPage />
+                  // </PrivateRoute>
                 }
               />
               {/* Legal Routes */}
@@ -154,16 +160,86 @@ function App() {
               />
 
               {/* Agent Routes */}
-              <Route path="/agents/career" element={<PrivateRoute><CareerAgent /></PrivateRoute>} />
-              <Route path="/agents/money" element={<PrivateRoute><AgentPage agentName="Money" /></PrivateRoute>} />
-              <Route path="/agents/mind" element={<PrivateRoute><AgentPage agentName="Mind" /></PrivateRoute>} />
-              <Route path="/agents/travel" element={<PrivateRoute><TravelAgent /></PrivateRoute>} />
-              <Route path="/agents/body" element={<PrivateRoute><BodyAgent /></PrivateRoute>} />
-              <Route path="/agents/family-life" element={<PrivateRoute><AgentPage agentName="Family Life" /></PrivateRoute>} />
-              <Route path="/agents/hobby" element={<PrivateRoute><AgentPage agentName="Hobby" /></PrivateRoute>} />
-              <Route path="/agents/knowledge" element={<PrivateRoute><AgentPage agentName="Knowledge" /></PrivateRoute>} />
-              <Route path="/agents/personal-dev" element={<PrivateRoute><AgentPage agentName="Personal Development" /></PrivateRoute>} />
-              <Route path="/agents/spiritual" element={<PrivateRoute><AgentPage agentName="Spiritual" /></PrivateRoute>} />
+              <Route
+                path="/agents/career"
+                element={
+                  <PrivateRoute>
+                    <CareerAgent />
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/agents/money"
+                element={
+                  <PrivateRoute>
+                    <AgentPage agentName="Money" />
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/agents/mind"
+                element={
+                  <PrivateRoute>
+                    <AgentPage agentName="Mind" />
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/agents/travel"
+                element={
+                  <PrivateRoute>
+                    <TravelAgent />
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/agents/body"
+                element={
+                  <PrivateRoute>
+                    <BodyAgent />
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/agents/family-life"
+                element={
+                  <PrivateRoute>
+                    <AgentPage agentName="Family Life" />
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/agents/hobby"
+                element={
+                  <PrivateRoute>
+                    <AgentPage agentName="Hobby" />
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/agents/knowledge"
+                element={
+                  <PrivateRoute>
+                    <AgentPage agentName="Knowledge" />
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/agents/personal-dev"
+                element={
+                  <PrivateRoute>
+                    <AgentPage agentName="Personal Development" />
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/agents/spiritual"
+                element={
+                  <PrivateRoute>
+                    <AgentPage agentName="Spiritual" />
+                  </PrivateRoute>
+                }
+              />
             </Routes>
           </AutoLogoutProvider>
         </AuthProvider>
