@@ -31,7 +31,7 @@ const COL_HEADERS = ["DATE", "SOURCE", "ACCOUNT", "TASK", "ACTIONS"];
 // Page-level component. Owns all triage state and passes per-row handlers down
 // to <TriageRow> via props. Nothing page-level lives inside TriageRow.
 
-export default function TriageStandalone() {
+export default function Incoming() {
   const user = { id: 1, name: "Test User" };
 
   // ── Shared task list (also used by ScheduleView) ──

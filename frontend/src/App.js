@@ -31,7 +31,7 @@ import {
 } from "./components/agents";
 import { NewLandingPage } from "./components/landing";
 import { ErrorBoundary } from "./components/ui";
-import WorkPage from "./components/Work Agent(Dark_Mode)/WorkPage";
+// import WorkPage from "./components/WorkAgent(Dark_Mode)/WorkPage";
 // import TriageDetailPanel from "./components/agents/TriageDetailPanel";
 // import TriageStandalone from "./components/agents/triage2";
 import Dashboard from "./components/dashboard";
@@ -42,7 +42,8 @@ import { LegalPage } from "./components/legal";
 import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import MessageDetailPanel from "./components/agents/MessageDetailPanel";
-import Triage2 from "./components/Work Agent(Dark_Mode)/Incoming";
+import Incoming from "./components/Work Agent(Dark_Mode)/Incoming";
+import Boards from "./components/Work Agent(Dark_Mode)/Boards";
 
 // Placeholder components for agent routes
 const AgentPage = ({ agentName }) => (
@@ -120,10 +121,10 @@ function App() {
                 }
               />
               <Route
-                path="/triage"
+                path="/incoming"
                 element={
                   // <PrivateRoute>
-                  <Triage2 />
+                  <Incoming />
                   // </PrivateRoute> */}
                 }
               />
@@ -136,10 +137,10 @@ function App() {
                 }
               />
               <Route
-                path="/work"
+                path="/boards"
                 element={
                   // <PrivateRoute>
-                  <WorkPage />
+                  <Boards />
                   // </PrivateRoute>
                 }
               />
