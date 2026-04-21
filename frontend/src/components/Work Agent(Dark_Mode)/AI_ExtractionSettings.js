@@ -1,127 +1,19 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { taskExtraction, oauth } from '../../services/api';
-import { EXTRACTED_TASKS_PAGE_SIZE } from '../../services/constants';
+import React, { useState, useEffect, useRef } from 'react';
+// import { taskExtraction, oauth } from '../../services/workApi';
+// import { EXTRACTED_TASKS_PAGE_SIZE } from '../../services/constants';
 import {
   // Navigation & Layout
-  InboxIcon,
-  ClipboardDocumentListIcon,
-  CalendarDaysIcon,
-  LightBulbIcon,
-  FolderIcon,
-  CogIcon,
-  Squares2X2Icon,
-  ListBulletIcon,
-  // Actions
-  PlusIcon,
-  MagnifyingGlassIcon,
-  FunnelIcon,
-  ArrowPathIcon,
-  EllipsisHorizontalIcon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
-  ChevronDoubleLeftIcon,
-  ChevronDoubleRightIcon,
   ChevronDownIcon,
-  ChevronUpIcon,
-  SparklesIcon,
-  PlayIcon,
-  PauseIcon,
-  PaperAirplaneIcon,
-  ArrowUturnLeftIcon,
-  ArchiveBoxIcon,
-  BellSnoozeIcon,
-  DocumentDuplicateIcon,
-  PencilSquareIcon,
-  // Status & Priority
-  CheckCircleIcon,
-  ClockIcon,
+  SparklesIcon,  
   ExclamationTriangleIcon,
-  FlagIcon,
-  ExclamationCircleIcon,
-  InformationCircleIcon,
   // Sources
   EnvelopeIcon,
-  EnvelopeOpenIcon,
-  ChatBubbleLeftRightIcon,
-  TicketIcon,
-  CalendarIcon,
-  UserIcon,
-  UsersIcon,
-
-  BellIcon,
-  HashtagIcon,
-  AtSymbolIcon,
-  // Other
-  ArrowsRightLeftIcon,
-  ChartBarIcon,
-  BoltIcon,
-  DocumentTextIcon,
-  RocketLaunchIcon,
-  AdjustmentsHorizontalIcon,
-  TrashIcon,
-  PencilIcon,
-  EyeIcon,
-  ArrowTrendingUpIcon,
   ArrowRightIcon,
-  ShieldCheckIcon,
-  LinkIcon,
-  BeakerIcon,
-  CheckIcon,
   XMarkIcon,
-  PaperClipIcon,
-  PhotoIcon,
-  StarIcon,
-  TagIcon,
-  HandThumbUpIcon,
-  ArrowPathRoundedSquareIcon,
-  // AI Features
-  LanguageIcon,
-  ShieldExclamationIcon,
-  DocumentMagnifyingGlassIcon,
-  FaceSmileIcon,
-  AcademicCapIcon,
-  ScissorsIcon,
-  ChatBubbleBottomCenterTextIcon,
-  CheckBadgeIcon,
-  Cog6ToothIcon,
-  ArrowDownTrayIcon,
-  MicrophoneIcon,
-  Bars3Icon,
-} from '@heroicons/react/24/outline';
-import {
-  CheckCircleIcon as CheckCircleSolidIcon,
-  StarIcon as StarSolidIcon,
-  FlagIcon as FlagSolidIcon,
-  EnvelopeIcon as EnvelopeSolidIcon,
-  InboxIcon as InboxSolidIcon,
-} from '@heroicons/react/24/solid';
-import { oauth, gmail, calendar as calendarApi, sources as sourcesApi, emailAI, todos, taskExtraction, taskPrioritization, taskScheduler, taskSolver, solverSessions } from '../../services/workApi';
-import { useVoiceDictation } from '../../hooks/useVoiceDictation';
-import { usePressTalk } from '../../hooks/usePressTalk';
-import axios from 'axios';
-import MessageRenderer from '../chat/MessageRenderer';
-import MessageDetailPanel from './MessageDetailPanel';
-import TriageDetailPanel from './TriageDetailPanel';
-import CalendarView from './CalendarView';
-import AIPrioritizeModal from './AIPrioritizeModal';
-import { useBullets, AISummarySection } from './AISummarySection';
-import TaskPrioritizationView from './TaskPrioritizationView';
-import { NotebookView } from './notebook';
+  } from '@heroicons/react/24/outline';
+import { oauth, taskExtraction } from '../../services/workApi';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
-// Lucide icons for priority (Plane-style)
-import {
-  AlertCircle,
-  SignalHigh,
-  SignalMedium,
-  SignalLow,
-  Ban,
-  ListFilter
-} from 'lucide-react';
-import emailIcon from '../../assets/email10.png';
-import composeIcon from '../../assets/pencil1.png';
-import inboxIcon from '../../assets/mail-in1.png';
-
 
 // ============================================================================
 // HELPERS
@@ -140,6 +32,14 @@ const addDays = (date, days) => {
   return d;
 };
 
+const PRIORITIES = {
+  urgent: { label: 'Urgent', color: 'red', bg: 'bg-red-100', text: 'text-red-700', border: 'border-red-300' },
+  high: { label: 'High', color: 'orange', bg: 'bg-orange-100', text: 'text-orange-700', border: 'border-orange-300' },
+  medium: { label: 'Medium', color: 'yellow', bg: 'bg-amber-100', text: 'text-amber-700', border: 'border-amber-300' },
+  low: { label: 'Low', color: 'green', bg: 'bg-green-100', text: 'text-green-700', border: 'border-green-300' },
+  none: { label: 'None', color: 'gray', bg: 'bg-gray-100', text: 'text-gray-500', border: 'border-gray-300' },
+};
+
 // Date range preset options for extraction settings
   const DATE_RANGE_PRESETS = [
     { id: 'today', label: 'Today', getDates: () => ({ start: formatDate(new Date()), end: formatDate(new Date()) }) },
@@ -155,9 +55,12 @@ const addDays = (date, days) => {
     }},
     { id: 'custom', label: 'Custom range', getDates: () => null },
   ];
+
+  
 export default function AI_ExtractionSettings({ user, onExtractedTasksChange }) {
     const [connectedAccounts, setConnectedAccounts] = useState([]);
-    const extractionSettingsRef = useRef(extractionSettings); // for async access
+  const extractionSettingsRef = useRef(extractionSettings); // for async access
+  const [showExtractionSettings, setShowExtractionSettings] = useState(false);
     const settingsChangedSinceExtraction = useRef(false); // track unsaved changes
     const [extractedTasks, setExtractedTasks] = useState([]);
     const [loading, setLoading] = useState(false);
