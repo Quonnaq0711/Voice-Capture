@@ -7,10 +7,9 @@ import {
 } from "react";
 import DatePicker from "react-datepicker";
 import { ChevronDownIcon, XMarkIcon, ExclamationTriangleIcon, SparklesIcon, ArrowRightIcon, EnvelopeIcon } from "@heroicons/react/24/outline";
-
+import { useAuth } from "../../contexts/AuthContext";
 import TriageRow, { TRIAGE_COLUMNS } from "./IncomingRowDetail";
-// import { memoryMonitor } from "../../utils/memoryMonitor";
-// import { useEffect } from "react";
+
 import { taskExtraction } from "../../services/workApi";
 import inboxIcon from "../../assets/mail-in1.png";
 
@@ -65,8 +64,7 @@ const addDays = (date, days) => {
 // to <TriageRow> via props. Nothing page-level lives inside TriageRow.
 
 export default function Incoming() {
-  const user = { id: 1, name: "Test User" };
-
+  const user = useAuth() || { id: 1, name: "Test User" };
   const {
     tasks,
     setTasks,

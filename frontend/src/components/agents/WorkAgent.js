@@ -9394,6 +9394,7 @@ const TasksView = ({ activeSubTab = 'backlog' }) => {
                               review: { bg: 'bg-purple-100', text: 'text-purple-700', label: 'Review' },
                               done: { bg: 'bg-green-100', text: 'text-green-700', label: 'Done' },
                               delayed: { bg: 'bg-gray-200', text: 'text-gray-600', label: 'Delayed' },
+                              cancelled: {bg: 'bg-pink-200', text: 'text-pink-500', label: 'Cancelled'}
                             }[task.status] || { bg: 'bg-gray-100', text: 'text-gray-600', label: task.status };
 
                             const isOverdue = task.due_date && new Date(task.due_date) < new Date() && task.status !== 'done';

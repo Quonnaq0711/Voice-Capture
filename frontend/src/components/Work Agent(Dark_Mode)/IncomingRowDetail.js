@@ -114,7 +114,7 @@ export default function TriageRow({
           <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded
             text-[10px] font-medium bg-green-500/20 text-green-400 flex-shrink-0">
             <CheckCircleIcon className="w-3 h-3" />
-            Added
+            Added to Backlog
           </span>
         )}
       </div>
@@ -144,7 +144,7 @@ export default function TriageRow({
                 transition-colors disabled:opacity-40"
             >
               <PlusIcon className="w-3.5 h-3.5" />
-              Backlog
+               Add to Backlog
             </button>
 
             <button
