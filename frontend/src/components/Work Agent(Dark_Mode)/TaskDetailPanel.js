@@ -44,7 +44,7 @@ import { usePressTalk } from '../../hooks/usePressTalk';
 import { useAuth } from '../../contexts/AuthContext';
 import axios from 'axios';
 import MessageRenderer from '../chat/MessageRenderer';
-import { useBullets, AISummarySection } from './AISummarySection';
+import { useBullets, AISummarySection } from './AI_Summary_Section';
 import DatePicker from 'react-datepicker';
 import ReactMarkdown from 'react-markdown';
 import sanitizeDescriptionHtml from './Utils/SanitizeDescriptionHTML';

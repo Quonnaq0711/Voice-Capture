@@ -1,5 +1,7 @@
 import { ChevronDown, ChevronUp } from "lucide-react";
-import PRIORITIES from '../Configs/AI_PriorityConfigs';
+import { PRIORITIES }from '../Configs/AI_PriorityConfigs';
+
+
 // Schedule Day Card
 export default function ScheduleDayCard({ date, tasks, isExpanded, onToggle, formatDuration }) {
   // Parse YYYY-MM-DD as local date (not UTC) to avoid off-by-one timezone issues

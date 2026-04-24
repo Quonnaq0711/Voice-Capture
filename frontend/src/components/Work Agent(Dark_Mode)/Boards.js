@@ -7,6 +7,7 @@ import taskPrioritization from '../../services/workApi';
 import { useAuth } from '../../contexts/AuthContext';
 import TaskDetailPanel from './TaskDetailPanel';
 import { ArrowPathIcon } from '@heroicons/react/24/outline';
+import Refresh from '../../assets/refresh2.png';
 
 
 const KANBAN_COLUMNS = [
@@ -501,7 +502,7 @@ export default function Boards({ activeSubTab = 'backlog' }) {
               className="bg-white/5 border border-white/20 rounded-lg p-2"
               title='Refresh'
             >
-              {/* <img src={Refresh} alt="Refresh" className={`w-5 h-5 text-blue-600 ${loading ? 'animate-spin' : ""}`} /> */}
+              <img src={Refresh} alt="Refresh" className={`w-5 h-5 text-blue-600 ${loading ? 'animate-spin' : ""}`} />
             </button>
           </div>
         </div>
