@@ -14,47 +14,7 @@ import {
 import { oauth, taskExtraction } from '../../services/workApi';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
-
-// ============================================================================
-// HELPERS
-// ============================================================================
-
-// Helper to format date as YYYY-MM-DD
-const formatDate = (date) => {
-  const d = new Date(date);
-  return d.toISOString().split('T')[0];
-};
-
-// Helper to add days to a date
-const addDays = (date, days) => {
-  const d = new Date(date);
-  d.setDate(d.getDate() + days);
-  return d;
-};
-
-const PRIORITIES = {
-  urgent: { label: 'Urgent', color: 'red', bg: 'bg-red-100', text: 'text-red-700', border: 'border-red-300' },
-  high: { label: 'High', color: 'orange', bg: 'bg-orange-100', text: 'text-orange-700', border: 'border-orange-300' },
-  medium: { label: 'Medium', color: 'yellow', bg: 'bg-amber-100', text: 'text-amber-700', border: 'border-amber-300' },
-  low: { label: 'Low', color: 'green', bg: 'bg-green-100', text: 'text-green-700', border: 'border-green-300' },
-  none: { label: 'None', color: 'gray', bg: 'bg-gray-100', text: 'text-gray-500', border: 'border-gray-300' },
-};
-
-// Date range preset options for extraction settings
-  const DATE_RANGE_PRESETS = [
-    { id: 'today', label: 'Today', getDates: () => ({ start: formatDate(new Date()), end: formatDate(new Date()) }) },
-    { id: 'yesterday', label: 'Yesterday', getDates: () => ({ start: formatDate(addDays(new Date(), -1)), end: formatDate(addDays(new Date(), -1)) }) },
-    { id: 'last_7_days', label: 'Last 7 days', getDates: () => ({ start: formatDate(addDays(new Date(), -7)), end: formatDate(new Date()) }) },
-    { id: 'last_14_days', label: 'Last 14 days', getDates: () => ({ start: formatDate(addDays(new Date(), -14)), end: formatDate(new Date()) }) },
-    { id: 'last_30_days', label: 'Last 30 days', getDates: () => ({ start: formatDate(addDays(new Date(), -30)), end: formatDate(new Date()) }) },
-    { id: 'this_week', label: 'This week', getDates: () => {
-      const now = new Date();
-      const dayOfWeek = now.getDay();
-      const startOfWeek = addDays(now, -dayOfWeek);
-      return { start: formatDate(startOfWeek), end: formatDate(now) };
-    }},
-    { id: 'custom', label: 'Custom range', getDates: () => null },
-  ];
+import {formatDate, addDays, PRIORITIES, DATE_RANGE_PRESETS } from './Configs/AIExtractionSettingsConfig'
 
   
 export default function AI_ExtractionSettings({ user, onExtractedTasksChange }) {
@@ -102,22 +62,7 @@ export default function AI_ExtractionSettings({ user, onExtractedTasksChange }) 
       const [extractionSummary, setExtractionSummary] = useState(null); // For showing extraction results summary
       const [accountsMissingTasksScope, setAccountsMissingTasksScope] = useState([]); // For tracking accounts that need re-auth for Google Tasks
     
-      // Date range preset options for extraction settings
-      const DATE_RANGE_PRESETS = [
-        { id: 'today', label: 'Today', getDates: () => ({ start: formatDate(new Date()), end: formatDate(new Date()) }) },
-        { id: 'yesterday', label: 'Yesterday', getDates: () => ({ start: formatDate(addDays(new Date(), -1)), end: formatDate(addDays(new Date(), -1)) }) },
-        { id: 'last_7_days', label: 'Last 7 days', getDates: () => ({ start: formatDate(addDays(new Date(), -7)), end: formatDate(new Date()) }) },
-        { id: 'last_14_days', label: 'Last 14 days', getDates: () => ({ start: formatDate(addDays(new Date(), -14)), end: formatDate(new Date()) }) },
-        { id: 'last_30_days', label: 'Last 30 days', getDates: () => ({ start: formatDate(addDays(new Date(), -30)), end: formatDate(new Date()) }) },
-        { id: 'this_week', label: 'This week', getDates: () => {
-          const now = new Date();
-          const dayOfWeek = now.getDay();
-          const startOfWeek = addDays(now, -dayOfWeek);
-          return { start: formatDate(startOfWeek), end: formatDate(now) };
-        }},
-        { id: 'custom', label: 'Custom range', getDates: () => null },
-      ];
-
+     
     // Keep extractionSettings ref in sync for use inside async closures
     extractionSettingsRef.current = extractionSettings;
 

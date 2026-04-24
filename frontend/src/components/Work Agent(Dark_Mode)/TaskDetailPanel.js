@@ -46,7 +46,24 @@ import axios from 'axios';
 import MessageRenderer from '../chat/MessageRenderer';
 import { useBullets, AISummarySection } from './AISummarySection';
 import DatePicker from 'react-datepicker';
-import 'react-datepicker/dist/react-datepicker.css';
+import ReactMarkdown from 'react-markdown';
+import sanitizeDescriptionHtml from './Utils/SanitizeDescriptionHTML';
+import MarkdownEditor from './Utils/MarkdownEditor';
+
+
+const PRIORITIES = {
+  urgent: { label: 'Urgent', color: 'red', bg: 'bg-red-100', text: 'text-red-700', border: 'border-red-300' },
+  high: { label: 'High', color: 'orange', bg: 'bg-orange-100', text: 'text-orange-700', border: 'border-orange-300' },
+  medium: { label: 'Medium', color: 'yellow', bg: 'bg-amber-100', text: 'text-amber-700', border: 'border-amber-300' },
+  low: { label: 'Low', color: 'green', bg: 'bg-green-100', text: 'text-green-700', border: 'border-green-300' },
+  none: { label: 'None', color: 'gray', bg: 'bg-gray-100', text: 'text-gray-500', border: 'border-gray-300' },
+};
+
+// Helper to format date as YYYY-MM-DD
+const formatDate = (date) => {
+  const d = new Date(date);
+  return d.toISOString().split('T')[0];
+};
 
 
 // Task Detail Panel (Jira-style centered modal with tabs)
@@ -902,6 +919,7 @@ export default function TaskDetailPanel({ task, onClose, onUpdate, onDelete, onS
     { id: 'attachments', label: 'Attachments', icon: PaperClipIcon, count: detailDataLoaded ? attachments.length : undefined },
     { id: 'activity', label: 'Activities', icon: ClockIcon, count: detailDataLoaded ? activities.length : undefined },
   ];
+
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">

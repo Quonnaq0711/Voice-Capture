@@ -1,10 +1,11 @@
 import { useState, useContext, useCallback, createContext, useMemo, useRef } from 'react';
 import { todos } from '../../services/workApi';
+import TaskModal from './Utils/TaskModal';
+import AIPrioritizeModal from './AI_PrioritizeModal';
 import Board from '../../assets/kanbanboard2.png';
-import Refresh from '../../assets/refresh2.png';
 import taskPrioritization from '../../services/workApi';
 import { useAuth } from '../../contexts/AuthContext';
-
+import TaskDetailPanel from './TaskDetailPanel';
 import { ArrowPathIcon } from '@heroicons/react/24/outline';
 
 
@@ -126,6 +127,20 @@ export default function Boards({ activeSubTab = 'backlog' }) {
     if (succeeded.size < selectedTasks.length) fetchTasks(); // Re-sync on partial failure
     setSelectedTasks([]);
   };
+
+    // Patch ai_summary into React state after generation — eliminates redundant API calls.
+    // IMPORTANT: Only update `tasks` array (source of truth). Do NOT update `selectedTask`
+    // or `editingTask` — that would change the task prop reference, triggering child
+    // useEffects that reset local form state (formData, editedTask, isEditing).
+    // The useBullets hook already has the bullets in its own local state, so the child
+    // components don't need a prop update to display them. Next time the user opens the
+    // same task, it will be read from the updated `tasks` array with ai_summary cached.
+    const handleTaskSummaryGenerated = useCallback((taskId, bullets) => {
+      const desc = bullets.map(b => `• ${b}`).join('\n');
+      setTasks(prev => prev.map(t =>
+        t.id === taskId ? { ...t, ai_summary: bullets, description: desc } : t
+      ));
+    }, []);
     
   // Filter tasks (memoized to stabilize downstream callbacks)
   const filteredTasks = useMemo(() => tasks.filter(task => {
