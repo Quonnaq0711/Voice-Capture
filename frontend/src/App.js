@@ -43,7 +43,7 @@ import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import MessageDetailPanel from "./components/agents/MessageDetailPanel";
 import Incoming from "./components/Work Agent(Dark_Mode)/Incoming";
-import Boards from "./components/Work Agent(Dark_Mode)/Boards";
+import Communications from "./components/Work Agent(Dark_Mode)/Communications";
 
 // Placeholder components for agent routes
 const AgentPage = ({ agentName }) => (
@@ -140,7 +140,7 @@ function App() {
                 path="/boards"
                 element={
                   // <PrivateRoute>
-                  <Boards />
+                  <Communications />
                   // </PrivateRoute>
                 }
               />
