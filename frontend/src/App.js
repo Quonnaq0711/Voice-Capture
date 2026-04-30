@@ -22,7 +22,6 @@ import {
 // Feature components
 import { Profile } from "./components/profile";
 import { OnboardingWizard } from "./components/onboarding";
-import { UnifiedSidebar } from "./components/dashboard";
 import {
   CareerAgent,
   TravelAgent,
@@ -31,19 +30,16 @@ import {
 } from "./components/agents";
 import { NewLandingPage } from "./components/landing";
 import { ErrorBoundary } from "./components/ui";
-// import WorkPage from "./components/WorkAgent(Dark_Mode)/WorkPage";
-// import TriageDetailPanel from "./components/agents/TriageDetailPanel";
-// import TriageStandalone from "./components/agents/triage2";
-import Dashboard from "./components/dashboard";
+import Boards from "./components/Work Agent(Dark_Mode)/Boards";
+import MessageDetailPanel from "./components/agents/MessageDetailPanel";
+import Incoming from "./components/Work Agent(Dark_Mode)/Incoming";
+import Communications from "./components/Work Agent(Dark_Mode)/Communications";
 
 import { LegalPage } from "./components/legal";
 
 // Toast notifications
 import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
-import MessageDetailPanel from "./components/agents/MessageDetailPanel";
-import Incoming from "./components/Work Agent(Dark_Mode)/Incoming";
-import Communications from "./components/Work Agent(Dark_Mode)/Communications";
 
 // Placeholder components for agent routes
 const AgentPage = ({ agentName }) => (
@@ -138,6 +134,14 @@ function App() {
               />
               <Route
                 path="/boards"
+                element={
+                  // <PrivateRoute>
+                  <Boards />
+                  // </PrivateRoute>
+                }
+              />
+              <Route
+                path="/communications"
                 element={
                   // <PrivateRoute>
                   <Communications />
