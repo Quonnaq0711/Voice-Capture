@@ -34,6 +34,8 @@ import Boards from "./components/Work Agent(Dark_Mode)/Boards";
 import MessageDetailPanel from "./components/agents/MessageDetailPanel";
 import Incoming from "./components/Work Agent(Dark_Mode)/Incoming";
 import Communications from "./components/Work Agent(Dark_Mode)/Communications";
+import Nav from "./components/Work Agent(Dark_Mode)/Navigation";
+
 
 import { LegalPage } from "./components/legal";
 
@@ -145,6 +147,14 @@ function App() {
                 element={
                   // <PrivateRoute>
                   <Communications />
+                  // </PrivateRoute>
+                }
+              />
+              <Route
+                path="/navigation"         // Remove this route used for designing the message detail panel
+                element={
+                  // <PrivateRoute>
+                  <Nav />
                   // </PrivateRoute>
                 }
               />
