@@ -28,14 +28,14 @@ import {
   BodyAgent,
   WorkAgent,
 } from "./components/agents";
-import { NewLandingPage } from "./components/landing";
+import  NewLandingPage  from "./components/Work Agent(Dark_Mode)/NewLandingPage";
 import { ErrorBoundary } from "./components/ui";
 import Boards from "./components/Work Agent(Dark_Mode)/Boards";
 import MessageDetailPanel from "./components/agents/MessageDetailPanel";
 import Incoming from "./components/Work Agent(Dark_Mode)/Incoming";
 import Communications from "./components/Work Agent(Dark_Mode)/Communications";
 import Nav from "./components/Work Agent(Dark_Mode)/Navigation";
-
+import Demo from "./components/Work Agent(Dark_Mode)/Navigation";
 
 import { LegalPage } from "./components/legal";
 
@@ -114,7 +114,7 @@ function App() {
                 path="/inbox2"
                 element={
                   // <PrivateRoute>
-                  <MessageDetailPanel /> // Remove this route used for designing the message detail panel
+                  <MessageDetailPanel /> // Remove this route used for designing only
                   // </PrivateRoute> */}
                 }
               />
@@ -151,13 +151,14 @@ function App() {
                 }
               />
               <Route
-                path="/navigation"         // Remove this route used for designing the message detail panel
+                path="/navigation"         // Remove this route used for designing only
                 element={
                   // <PrivateRoute>
                   <Nav />
                   // </PrivateRoute>
                 }
               />
+              
               {/* Legal Routes */}
               <Route path="/legal" element={<LegalPage />} />
               <Route path="/privacy" element={<LegalPage />} />

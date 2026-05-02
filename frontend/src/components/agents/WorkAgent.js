@@ -4407,7 +4407,7 @@ const TaskFromEmailModal = ({ isOpen, onClose, taskData }) => {
 // TASKS SUBTAB - Jira-like Task Management
 // --------------------------------------------------------------------------
 
-// --- Markdown Toolbar for Notes textarea ---
+// --- Markdown ol. for Notes textarea ---
 const MD_ICONS = {
   bold: <svg className="w-4 h-4" width="16" height="16" fill="currentColor" viewBox="0 0 20 20"><path d="M3 4a1 1 0 011-1h6a4 4 0 014 4 4 4 0 01-1.5 3.12A4.5 4.5 0 0115 14.5 4.5 4.5 0 0110.5 19H4a1 1 0 01-1-1V4zm4 5h2a2 2 0 100-4H7v4zm0 2v4h3.5a2.5 2.5 0 100-5H7z" /></svg>,
   italic: <svg className="w-4 h-4" width="16" height="16" fill="currentColor" viewBox="0 0 20 20"><path d="M8 3a1 1 0 011-1h6a1 1 0 110 2h-2.268l-2 14H13a1 1 0 110 2H7a1 1 0 110-2h2.268l2-14H9a1 1 0 01-1-1z" /></svg>,

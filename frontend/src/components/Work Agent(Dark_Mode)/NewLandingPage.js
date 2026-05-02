@@ -3,7 +3,7 @@ import { ChevronDown, LogOut, Settings } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
 
-const NewLandingPage = () => {
+export default function NewLandingPage() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
   const [openDropdown, setOpenDropdown] = useState(null);
@@ -25,7 +25,7 @@ const NewLandingPage = () => {
       <div className="absolute left-[67%] top-0 w-0.5 h-full bg-gradient-to-b from-zinc-500 to-transparent opacity-20"></div>
 
       {/* Header Navigation */}
-      <header className="relative z-50 max-w-9xl  px-10 py-8 flex justify-between items-center">
+       {/*<header className="relative z-50 max-w-9xl  px-10 py-8 flex justify-between items-center">
         <div className="flex items-center gap-2">
           <h1 className="text-white text-4xl font-bold tracking-wider">Idii</h1>
         </div>
@@ -45,8 +45,8 @@ const NewLandingPage = () => {
             <LogOut size={16} />
             <span className="hidden sm:inline">Logout</span>
           </button>
-        </div>
-      </header>
+        </div> 
+      </header>*/}
 
       {/* Main Content Grid */}
       <main className="relative z-10 h-[calc(100vh-200px)] flex items-center">
@@ -56,7 +56,7 @@ const NewLandingPage = () => {
             <div className="mt-48">
               <div>
                 <div className="group relative overflow-hidden cursor-default max-w-sm mx-auto">
-                <h1 className="text-9xl font-bold text-cyan-600 leading-relaxed transition-transform duration-300 ease-in-out group-hover:-translate-y-full">
+                <h1 className="text-8xl font-bold text-cyan-600 leading-relaxed transition-transform duration-300 ease-in-out group-hover:-translate-y-full">
                   Emp
                   </h1>
                 <p className="absolute inset-0 text-lg font-semibold text-white leading-relaxed translate-y-full transition-transform duration-300 ease-in-out group-hover:translate-y-0">
@@ -101,7 +101,7 @@ const NewLandingPage = () => {
             <div className="space-y-12 -translate-y-32">
               <div className="text-center">
                 <div className="group relative overflow-hidden cursor-default max-w-sm mx-auto">
-                  <h1 className="text-9xl font-bold text-pink-600 leading-relaxed transition-transform duration-300 ease-in-out group-hover:-translate-y-full">
+                  <h1 className="text-8xl font-bold text-pink-600 leading-relaxed transition-transform duration-300 ease-in-out group-hover:-translate-y-full">
                     Pro
                   </h1>
                   <p className="absolute inset-0 text-white text-lg font-semibold leading-relaxed translate-y-full transition-transform duration-300 ease-in-out group-hover:translate-y-0">
@@ -146,7 +146,7 @@ const NewLandingPage = () => {
             <div className="mt-48 text-center">
               <div>
                 <div className="group relative overflow-hidden cursor-default max-w-lg mx-auto">
-                  <h1 className="text-9xl font-bold text-orange-500 leading-relaxed transition-transform duration-300 ease-in-out group-hover:-translate-y-full ml-12">
+                  <h1 className="text-8xl font-bold text-orange-500 leading-relaxed transition-transform duration-300 ease-in-out group-hover:-translate-y-full ml-12">
                     Thr
                   </h1>
 
@@ -197,10 +197,10 @@ const NewLandingPage = () => {
       </main>
 
       {/* Footer Branding */}
-      <footer className="relative z-10 max-w-9xl mx-auto px-6 py-8">
+      <footer className="relative z-10 max-w-9xl mx-auto mt-8 px-6 py-8">
         <div className="flex justify-between items-end text-white text-xs opacity-50">
           <div>
-            <p className="text-6xl font-bold leading-none">Idii.</p>
+            <p className="text-8xl font-bold leading-none">Idii.</p>
           </div>
           <div className="flex gap-6 text-sm">
             <button className="hover:opacity-100 transition-opacity"
@@ -223,4 +223,4 @@ const NewLandingPage = () => {
   );
 };
 
-export default NewLandingPage;
+
